@@ -1,7 +1,7 @@
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-password = "Sinthu2252"
+password = ""
 print(f"Connecting to PostgreSQL with password: '{password}'...")
 
 try:
