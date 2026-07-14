@@ -61,14 +61,6 @@ def list_trips(
 ):
     query = db.query(models.Trip).join(models.Route).join(models.Vehicle)
     
-    # Filter by origin
-    if origin:
-        query = query.filter(models.Route.origin.ilike(f"%{origin}%"))
-        
-    # Filter by destination
-    if destination:
-        query = query.filter(models.Route.destination.ilike(f"%{destination}%"))
-        
     # Filter by date
     if date:
         try:
@@ -85,15 +77,59 @@ def list_trips(
                 detail="Invalid date format. Use YYYY-MM-DD"
             )
             
-    # Include vehicle and route objects
     trips = query.all()
     
-    # Preload nested structures
+    # Preload nested structures and filter matching routes (including intermediate stops)
+    filtered_trips = []
     for trip in trips:
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
         trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
         
-    return trips
+        # Verify route match with intermediate stops
+        if trip.route:
+            match = True
+            
+            # Helper to find position of a location in route stops (-1 = origin, index = stop index, 100000 = destination)
+            def find_stop_position(search_loc: str) -> Optional[int]:
+                search_normalized = search_loc.lower().strip()
+                if search_normalized in trip.route.origin.lower():
+                    return -1
+                
+                # Check intermediate stops
+                stops = trip.route.stops or []
+                for idx, stop in enumerate(stops):
+                    if search_normalized in stop.get("name", "").lower():
+                        return idx
+                
+                if search_normalized in trip.route.destination.lower():
+                    return 100000
+                return None
+
+            if origin:
+                origin_pos = find_stop_position(origin)
+                if origin_pos is None:
+                    match = False
+                
+            if destination:
+                dest_pos = find_stop_position(destination)
+                if dest_pos is None:
+                    match = False
+                
+            # If both are specified, ensure origin comes before destination
+            if origin and destination and match:
+                o_pos = find_stop_position(origin)
+                d_pos = find_stop_position(destination)
+                if o_pos is not None and d_pos is not None and o_pos >= d_pos:
+                    match = False
+                    
+            if match:
+                filtered_trips.append(trip)
+        else:
+            # If no route exists (should not happen), keep it if no filters are specified
+            if not origin and not destination:
+                filtered_trips.append(trip)
+                
+    return filtered_trips
 
 @router.get("/{trip_id}", response_model=schemas.TripResponse)
 def get_trip(trip_id: UUID, db: Session = Depends(get_db)):

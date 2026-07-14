@@ -4,8 +4,35 @@
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Setup auth schema to mock Supabase helpers locally
+CREATE SCHEMA IF NOT EXISTS auth;
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS UUID AS $$
+    SELECT COALESCE(
+        NULLIF(current_setting('request.jwt.claim.sub', true), ''),
+        '00000000-0000-0000-0000-000000000000'
+    )::uuid;
+$$ LANGUAGE sql;
+
 -- ==========================================
--- 1. Users Table (Self-contained authentication)
+-- 1. Bus Companies Table (Transport Operators)
+-- ==========================================
+CREATE TABLE public.bus_companies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    registration_number TEXT UNIQUE,
+    contact_email TEXT,
+    contact_phone TEXT,
+    logo_url TEXT,
+    address TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.bus_companies ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- 2. Users Table (Self-contained authentication)
 -- ==========================================
 CREATE TABLE public.users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -14,6 +41,7 @@ CREATE TABLE public.users (
     full_name TEXT NOT NULL,
     phone_number TEXT,
     role TEXT NOT NULL DEFAULT 'passenger' CHECK (role IN ('passenger', 'owner', 'admin')),
+    company_id UUID REFERENCES public.bus_companies(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -22,11 +50,12 @@ CREATE TABLE public.users (
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
--- 2. Vehicles Table
+-- 3. Vehicles Table
 -- ==========================================
 CREATE TABLE public.vehicles (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     owner_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    company_id UUID REFERENCES public.bus_companies(id) ON DELETE SET NULL,
     name TEXT NOT NULL, -- e.g. "Colombo-Galle Luxury Express"
     registration_number TEXT NOT NULL UNIQUE, -- e.g. "WP-ND-1234"
     type TEXT NOT NULL DEFAULT 'bus' CHECK (type IN ('bus', 'train', 'other')),
@@ -42,7 +71,7 @@ CREATE TABLE public.vehicles (
 ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
--- 3. Routes Table
+-- 4. Routes Table
 -- ==========================================
 CREATE TABLE public.routes (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -57,7 +86,7 @@ CREATE TABLE public.routes (
 ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
--- 4. Trips Table (Instances of scheduled journeys)
+-- 5. Trips Table (Instances of scheduled journeys)
 -- ==========================================
 CREATE TABLE public.trips (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -74,7 +103,7 @@ CREATE TABLE public.trips (
 ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
--- 5. Bookings Table
+-- 6. Bookings Table
 -- ==========================================
 CREATE TABLE public.bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -82,8 +111,9 @@ CREATE TABLE public.bookings (
     passenger_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
     selected_seats TEXT[] NOT NULL, -- Array of seat labels: ['A1', 'A2']
     total_price NUMERIC(10, 2) NOT NULL,
-    payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded')),
-    booking_status TEXT NOT NULL DEFAULT 'confirmed' CHECK (booking_status IN ('confirmed', 'cancelled')),
+    platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0, -- Commission charged by Seaty
+    payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'awaiting_payment', 'paid', 'failed', 'refunded')),
+    booking_status TEXT NOT NULL DEFAULT 'pending' CHECK (booking_status IN ('pending', 'confirmed', 'cancelled')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -91,7 +121,62 @@ CREATE TABLE public.bookings (
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
--- 6. Vehicle Locations Table (For real-time GPS tracking)
+-- 7. Payments Table (Transaction records)
+-- ==========================================
+CREATE TABLE public.payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    booking_id UUID NOT NULL REFERENCES public.bookings(id) ON DELETE CASCADE,
+    payment_gateway TEXT NOT NULL DEFAULT 'sandbox', -- 'sandbox', 'payhere', 'stripe'
+    gateway_transaction_id TEXT,
+    amount NUMERIC(10, 2) NOT NULL,
+    platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'LKR',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'refunded')),
+    payment_url TEXT, -- Redirect URL for payment gateway
+    paid_at TIMESTAMPTZ,
+    refunded_at TIMESTAMPTZ,
+    gateway_response JSONB, -- Raw response from payment gateway
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- 8. Seat Holds Table (Temporary locks during payment)
+-- ==========================================
+CREATE TABLE public.seat_holds (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    trip_id UUID NOT NULL REFERENCES public.trips(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    seat_labels TEXT[] NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_released BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.seat_holds ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- 9. Platform Settings Table (Configurable parameters)
+-- ==========================================
+CREATE TABLE public.platform_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    key TEXT NOT NULL UNIQUE,
+    value TEXT NOT NULL,
+    description TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Seed default platform settings
+INSERT INTO public.platform_settings (key, value, description) VALUES
+    ('commission_percentage', '3.0', 'Percentage commission on each booking (e.g. 3.0 = 3%)'),
+    ('commission_fixed_fee', '25.00', 'Fixed fee in LKR added to each booking'),
+    ('seat_hold_duration_minutes', '10', 'How long seats are held during payment (minutes)'),
+    ('payment_gateway', 'sandbox', 'Active payment gateway: sandbox, payhere, stripe'),
+    ('currency', 'LKR', 'Default currency for all transactions');
+
+-- ==========================================
+-- 10. Vehicle Locations Table (For real-time GPS tracking)
 -- ==========================================
 CREATE TABLE public.vehicle_locations (
     vehicle_id UUID PRIMARY KEY REFERENCES public.vehicles(id) ON DELETE CASCADE,
@@ -105,6 +190,25 @@ CREATE TABLE public.vehicle_locations (
 ALTER TABLE public.vehicle_locations ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
+-- Indexes for performance
+-- ==========================================
+CREATE INDEX idx_users_company ON public.users(company_id);
+CREATE INDEX idx_users_phone ON public.users(phone_number);
+CREATE INDEX idx_vehicles_company ON public.vehicles(company_id);
+CREATE INDEX idx_vehicles_owner ON public.vehicles(owner_id);
+CREATE INDEX idx_trips_vehicle ON public.trips(vehicle_id);
+CREATE INDEX idx_trips_route ON public.trips(route_id);
+CREATE INDEX idx_trips_departure ON public.trips(departure_time);
+CREATE INDEX idx_trips_status ON public.trips(status);
+CREATE INDEX idx_bookings_trip ON public.bookings(trip_id);
+CREATE INDEX idx_bookings_passenger ON public.bookings(passenger_id);
+CREATE INDEX idx_bookings_status ON public.bookings(booking_status);
+CREATE INDEX idx_payments_booking ON public.payments(booking_id);
+CREATE INDEX idx_payments_status ON public.payments(status);
+CREATE INDEX idx_seat_holds_trip ON public.seat_holds(trip_id);
+CREATE INDEX idx_seat_holds_expires ON public.seat_holds(expires_at);
+
+-- ==========================================
 -- Trigger Functions for automatic `updated_at`
 -- ==========================================
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
@@ -115,6 +219,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE TRIGGER update_bus_companies_updated_at BEFORE UPDATE ON public.bus_companies FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_vehicles_updated_at BEFORE UPDATE ON public.vehicles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 CREATE TRIGGER update_trips_updated_at BEFORE UPDATE ON public.trips FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -130,6 +235,18 @@ CREATE POLICY "Public profiles are viewable by everyone" ON public.users
 
 CREATE POLICY "Users can update their own profile" ON public.users
     FOR UPDATE USING (auth.uid() = id);
+
+-- Bus Companies policies
+CREATE POLICY "Anyone can view active companies" ON public.bus_companies
+    FOR SELECT USING (is_active = true);
+
+CREATE POLICY "Admins can manage companies" ON public.bus_companies
+    FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.users
+            WHERE users.id = auth.uid() AND users.role = 'admin'
+        )
+    );
 
 -- Vehicles policies
 CREATE POLICY "Anyone can view verified vehicles" ON public.vehicles
@@ -183,6 +300,19 @@ CREATE POLICY "Passengers can create their own bookings" ON public.bookings
 
 CREATE POLICY "Passengers can update/cancel their own bookings" ON public.bookings
     FOR UPDATE USING (auth.uid() = passenger_id);
+
+-- Payments policies
+CREATE POLICY "Users can view their own payments" ON public.payments
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.bookings
+            WHERE bookings.id = booking_id AND bookings.passenger_id = auth.uid()
+        )
+    );
+
+-- Seat Holds policies
+CREATE POLICY "Users can view their own holds" ON public.seat_holds
+    FOR SELECT USING (auth.uid() = user_id);
 
 -- Vehicle Locations policies (GPS tracking)
 CREATE POLICY "Anyone can view live vehicle locations" ON public.vehicle_locations

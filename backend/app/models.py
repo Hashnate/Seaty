@@ -1,9 +1,29 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Interval, Table
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Interval, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import relationship
 import datetime
 import uuid
 from app.database import Base
+
+
+class BusCompany(Base):
+    __tablename__ = "bus_companies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    name = Column(String, nullable=False)
+    registration_number = Column(String, unique=True, nullable=True)
+    contact_email = Column(String, nullable=True)
+    contact_phone = Column(String, nullable=True)
+    logo_url = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    users = relationship("User", back_populates="company")
+    vehicles = relationship("Vehicle", back_populates="company")
+
 
 class User(Base):
     __tablename__ = "users"
@@ -14,12 +34,15 @@ class User(Base):
     full_name = Column(String, nullable=False)
     phone_number = Column(String, nullable=True)
     role = Column(String, nullable=False, default="passenger")
+    company_id = Column(UUID(as_uuid=True), ForeignKey("bus_companies.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
     # Relationships
+    company = relationship("BusCompany", back_populates="users")
     vehicles = relationship("Vehicle", back_populates="owner")
     bookings = relationship("Booking", back_populates="passenger")
+    seat_holds = relationship("SeatHold", back_populates="user")
 
 
 class Vehicle(Base):
@@ -27,6 +50,7 @@ class Vehicle(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(UUID(as_uuid=True), ForeignKey("bus_companies.id", ondelete="SET NULL"), nullable=True)
     name = Column(String, nullable=False)
     registration_number = Column(String, unique=True, nullable=False)
     type = Column(String, nullable=False, default="bus")  # 'bus', 'train', 'other'
@@ -40,6 +64,7 @@ class Vehicle(Base):
 
     # Relationships
     owner = relationship("User", back_populates="vehicles")
+    company = relationship("BusCompany", back_populates="vehicles")
     trips = relationship("Trip", back_populates="vehicle")
     location = relationship("VehicleLocation", back_populates="vehicle", uselist=False)
 
@@ -76,6 +101,7 @@ class Trip(Base):
     vehicle = relationship("Vehicle", back_populates="trips")
     route = relationship("Route", back_populates="trips")
     bookings = relationship("Booking", back_populates="trip")
+    seat_holds = relationship("SeatHold", back_populates="trip")
 
 
 class Booking(Base):
@@ -86,14 +112,63 @@ class Booking(Base):
     passenger_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     selected_seats = Column(ARRAY(String), nullable=False)
     total_price = Column(Numeric(10, 2), nullable=False)
-    payment_status = Column(String, default="pending")  # 'pending', 'paid', 'failed', 'refunded'
-    booking_status = Column(String, default="confirmed")  # 'confirmed', 'cancelled'
+    platform_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    payment_status = Column(String, default="pending")  # 'pending', 'awaiting_payment', 'paid', 'failed', 'refunded'
+    booking_status = Column(String, default="pending")  # 'pending', 'confirmed', 'cancelled'
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
     # Relationships
     trip = relationship("Trip", back_populates="bookings")
     passenger = relationship("User", back_populates="bookings")
+    payments = relationship("Payment", back_populates="booking")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False)
+    payment_gateway = Column(String, nullable=False, default="sandbox")
+    gateway_transaction_id = Column(String, nullable=True)
+    amount = Column(Numeric(10, 2), nullable=False)
+    platform_fee = Column(Numeric(10, 2), nullable=False, default=0)
+    currency = Column(String, nullable=False, default="LKR")
+    status = Column(String, default="pending")  # 'pending', 'processing', 'completed', 'failed', 'refunded'
+    payment_url = Column(String, nullable=True)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    refunded_at = Column(DateTime(timezone=True), nullable=True)
+    gateway_response = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    booking = relationship("Booking", back_populates="payments")
+
+
+class SeatHold(Base):
+    __tablename__ = "seat_holds"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    trip_id = Column(UUID(as_uuid=True), ForeignKey("trips.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    seat_labels = Column(ARRAY(String), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_released = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    trip = relationship("Trip", back_populates="seat_holds")
+    user = relationship("User", back_populates="seat_holds")
+
+
+class PlatformSetting(Base):
+    __tablename__ = "platform_settings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    key = Column(String, unique=True, nullable=False)
+    value = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 
 class VehicleLocation(Base):

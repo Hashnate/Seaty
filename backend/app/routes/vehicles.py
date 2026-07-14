@@ -18,6 +18,7 @@ def create_vehicle(
     db_vehicle = models.Vehicle(
         id=uuid.uuid4(),
         owner_id=current_user.id,
+        company_id=current_user.company_id,  # Auto-assign to owner's company
         name=vehicle_in.name,
         registration_number=vehicle_in.registration_number,
         type=vehicle_in.type,
@@ -74,6 +75,22 @@ def approve_vehicle(
         raise HTTPException(status_code=404, detail="Vehicle not found")
     
     vehicle.is_verified = True
+    db.commit()
+    db.refresh(vehicle)
+    return vehicle
+
+@router.post("/{vehicle_id}/reject", response_model=schemas.VehicleResponse)
+def reject_vehicle(
+    vehicle_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Reject/unverify a vehicle (admin only)."""
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    
+    vehicle.is_verified = False
     db.commit()
     db.refresh(vehicle)
     return vehicle

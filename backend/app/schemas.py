@@ -20,6 +20,7 @@ class UserRegister(BaseModel):
     full_name: str
     phone_number: Optional[str] = None
     role: str = Field(default="passenger", description="passenger, owner, or admin")
+    company_id: Optional[UUID] = None
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -34,11 +35,53 @@ class UserResponse(BaseModel):
     full_name: str
     phone_number: Optional[str] = None
     role: str
+    company_id: Optional[UUID] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
     class Config:
         from_attributes = True
+
+# ==========================================
+# Bus Company Schemas
+# ==========================================
+class BusCompanyCreate(BaseModel):
+    name: str
+    registration_number: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    logo_url: Optional[str] = None
+    address: Optional[str] = None
+
+class BusCompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    registration_number: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    logo_url: Optional[str] = None
+    address: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class BusCompanyResponse(BaseModel):
+    id: UUID
+    name: str
+    registration_number: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    logo_url: Optional[str] = None
+    address: Optional[str] = None
+    is_active: bool
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class BusCompanyDetailResponse(BusCompanyResponse):
+    vehicle_count: int = 0
+    owner_count: int = 0
+    total_bookings: int = 0
+    total_revenue: float = 0.0
 
 # ==========================================
 # Vehicle Schemas
@@ -55,6 +98,7 @@ class VehicleCreate(BaseModel):
 class VehicleResponse(BaseModel):
     id: UUID
     owner_id: UUID
+    company_id: Optional[UUID] = None
     name: str
     registration_number: str
     type: str
@@ -118,6 +162,14 @@ class TripResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TripSeatsResponse(BaseModel):
+    """Response showing seat availability for a trip"""
+    trip_id: UUID
+    total_seats: int
+    booked_seats: List[str]
+    held_seats: List[str]
+    available_seats: List[str]
+
 # ==========================================
 # Booking Schemas
 # ==========================================
@@ -131,6 +183,7 @@ class BookingResponse(BaseModel):
     passenger_id: UUID
     selected_seats: List[str]
     total_price: float
+    platform_fee: float
     payment_status: str
     booking_status: str
     created_at: datetime.datetime
@@ -140,6 +193,94 @@ class BookingResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ==========================================
+# Payment Schemas
+# ==========================================
+class PaymentInitiateRequest(BaseModel):
+    booking_id: UUID
+
+class PaymentResponse(BaseModel):
+    id: UUID
+    booking_id: UUID
+    payment_gateway: str
+    gateway_transaction_id: Optional[str] = None
+    amount: float
+    platform_fee: float
+    currency: str
+    status: str
+    payment_url: Optional[str] = None
+    paid_at: Optional[datetime.datetime] = None
+    refunded_at: Optional[datetime.datetime] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class PaymentWebhookPayload(BaseModel):
+    """Payload from payment gateway webhook callback"""
+    transaction_id: str
+    status: str  # 'completed', 'failed'
+    amount: Optional[float] = None
+    gateway_data: Optional[dict] = None
+
+# ==========================================
+# Seat Hold Schemas
+# ==========================================
+class SeatHoldCreate(BaseModel):
+    trip_id: UUID
+    seat_labels: List[str]
+
+class SeatHoldResponse(BaseModel):
+    id: UUID
+    trip_id: UUID
+    user_id: UUID
+    seat_labels: List[str]
+    expires_at: datetime.datetime
+    is_released: bool
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+# ==========================================
+# Platform Settings Schemas
+# ==========================================
+class PlatformSettingResponse(BaseModel):
+    id: UUID
+    key: str
+    value: str
+    description: Optional[str] = None
+    updated_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class PlatformSettingUpdate(BaseModel):
+    value: str
+
+# ==========================================
+# Admin Dashboard Schemas
+# ==========================================
+class AdminDashboardStats(BaseModel):
+    total_companies: int
+    active_companies: int
+    total_vehicles: int
+    verified_vehicles: int
+    pending_approvals: int
+    total_bookings: int
+    confirmed_bookings: int
+    total_revenue: float
+    platform_fees_earned: float
+    total_passengers: int
+    total_owners: int
+    active_trips: int
+
+class RevenueDataPoint(BaseModel):
+    date: str
+    revenue: float
+    bookings: int
+    platform_fee: float
 
 # ==========================================
 # Live Location Schemas (GPS Telemetry)
