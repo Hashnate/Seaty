@@ -13,48 +13,97 @@ router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 @router.get("/dashboard", response_model=schemas.AdminDashboardStats)
 def get_dashboard_stats(
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+    current_user: models.User = Depends(auth.RoleChecker(["admin", "owner"]))
 ):
-    """Get aggregated dashboard statistics for the Seaty admin."""
-    total_companies = db.query(models.BusCompany).count()
-    active_companies = db.query(models.BusCompany).filter(
-        models.BusCompany.is_active == True
-    ).count()
+    """Get aggregated dashboard statistics for the Seaty admin or bus owner."""
+    if current_user.role == "owner":
+        company_id = current_user.company_id
+        
+        total_companies = 1
+        active_companies = 1 if db.query(models.BusCompany).filter(
+            models.BusCompany.id == company_id, 
+            models.BusCompany.is_active == True
+        ).first() else 0
+        
+        total_vehicles = db.query(models.Vehicle).filter(models.Vehicle.company_id == company_id).count()
+        verified_vehicles = db.query(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id,
+            models.Vehicle.is_verified == True
+        ).count()
+        pending_approvals = total_vehicles - verified_vehicles
+        
+        total_bookings = db.query(models.Booking).join(models.Trip).join(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id
+        ).count()
+        confirmed_bookings = db.query(models.Booking).join(models.Trip).join(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id,
+            models.Booking.booking_status == "confirmed"
+        ).count()
+        
+        revenue_result = db.query(
+            func.coalesce(func.sum(models.Booking.total_price), 0)
+        ).join(models.Trip).join(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id,
+            models.Booking.payment_status == "paid"
+        ).scalar()
+        
+        platform_fee_result = db.query(
+            func.coalesce(func.sum(models.Booking.platform_fee), 0)
+        ).join(models.Trip).join(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id,
+            models.Booking.payment_status == "paid"
+        ).scalar()
+        
+        total_passengers = db.query(models.Booking.passenger_id).join(models.Trip).join(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id
+        ).distinct().count()
+        
+        total_owners = 1
+        
+        active_trips = db.query(models.Trip).join(models.Vehicle).filter(
+            models.Vehicle.company_id == company_id,
+            models.Trip.status.in_(["scheduled", "ongoing"])
+        ).count()
+    else:
+        total_companies = db.query(models.BusCompany).count()
+        active_companies = db.query(models.BusCompany).filter(
+            models.BusCompany.is_active == True
+        ).count()
 
-    total_vehicles = db.query(models.Vehicle).count()
-    verified_vehicles = db.query(models.Vehicle).filter(
-        models.Vehicle.is_verified == True
-    ).count()
-    pending_approvals = total_vehicles - verified_vehicles
+        total_vehicles = db.query(models.Vehicle).count()
+        verified_vehicles = db.query(models.Vehicle).filter(
+            models.Vehicle.is_verified == True
+        ).count()
+        pending_approvals = total_vehicles - verified_vehicles
 
-    total_bookings = db.query(models.Booking).count()
-    confirmed_bookings = db.query(models.Booking).filter(
-        models.Booking.booking_status == "confirmed"
-    ).count()
+        total_bookings = db.query(models.Booking).count()
+        confirmed_bookings = db.query(models.Booking).filter(
+            models.Booking.booking_status == "confirmed"
+        ).count()
 
-    revenue_result = db.query(
-        func.coalesce(func.sum(models.Booking.total_price), 0)
-    ).filter(
-        models.Booking.payment_status == "paid"
-    ).scalar()
+        revenue_result = db.query(
+            func.coalesce(func.sum(models.Booking.total_price), 0)
+        ).filter(
+            models.Booking.payment_status == "paid"
+        ).scalar()
 
-    platform_fee_result = db.query(
-        func.coalesce(func.sum(models.Booking.platform_fee), 0)
-    ).filter(
-        models.Booking.payment_status == "paid"
-    ).scalar()
+        platform_fee_result = db.query(
+            func.coalesce(func.sum(models.Booking.platform_fee), 0)
+        ).filter(
+            models.Booking.payment_status == "paid"
+        ).scalar()
 
-    total_passengers = db.query(models.User).filter(
-        models.User.role == "passenger"
-    ).count()
+        total_passengers = db.query(models.User).filter(
+            models.User.role == "passenger"
+        ).count()
 
-    total_owners = db.query(models.User).filter(
-        models.User.role == "owner"
-    ).count()
+        total_owners = db.query(models.User).filter(
+            models.User.role == "owner"
+        ).count()
 
-    active_trips = db.query(models.Trip).filter(
-        models.Trip.status.in_(["scheduled", "ongoing"])
-    ).count()
+        active_trips = db.query(models.Trip).filter(
+            models.Trip.status.in_(["scheduled", "ongoing"])
+        ).count()
 
     return schemas.AdminDashboardStats(
         total_companies=total_companies,

@@ -17,6 +17,19 @@ interface BookingRecord {
     route?: { origin: string; destination: string };
   };
   passenger?: { full_name: string; phone_number: string };
+  passenger_details?: {
+    primary?: {
+      name: string;
+      nic: string;
+      gender: string;
+      phone: string;
+      booking_type: string;
+    };
+    guests?: Array<{
+      seat: string;
+      gender: string;
+    }>;
+  };
 }
 
 export default function BookingsPage() {
@@ -24,6 +37,8 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'cancelled'>('all');
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -34,11 +49,19 @@ export default function BookingsPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const filtered = bookings.filter(b =>
-    (b.passenger?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (b.trip?.route?.origin || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (b.trip?.route?.destination || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filtered = bookings.filter(b => {
+    const matchesSearch = 
+      (b.passenger?.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (b.trip?.route?.origin || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (b.trip?.route?.destination || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (b.passenger_details?.primary?.nic || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = 
+      statusFilter === 'all' || 
+      b.booking_status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div>
@@ -55,13 +78,24 @@ export default function BookingsPage() {
             <Search size={18} style={{ position: 'absolute', left: '12px', top: '13px', color: '#9ca3af' }} />
             <input
               type="text"
-              placeholder="Search by Passenger Name or Route..."
+              placeholder="Search by Passenger Name, Route or NIC..."
               className="form-input"
               style={{ paddingLeft: '40px' }}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="form-input"
+            style={{ width: '180px', backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <option value="all">All Booking Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         </div>
 
         {loading ? (
@@ -70,7 +104,7 @@ export default function BookingsPage() {
           <table className="custom-table">
             <thead>
               <tr>
-                <th>Passenger</th>
+                <th>Passenger / NIC</th>
                 <th>Ticket Code</th>
                 <th>Bus / Route</th>
                 <th>Seats</th>
@@ -89,41 +123,102 @@ export default function BookingsPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map(b => (
-                  <tr key={b.id}>
-                    <td>
-                      <div><strong>{b.passenger?.full_name || 'Unknown'}</strong></div>
-                      <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{b.passenger?.phone_number}</div>
-                    </td>
-                    <td>
-                      <span style={{ fontFamily: 'monospace', color: '#e65100', fontWeight: 'bold', fontSize: '12px' }}>
-                        TKT-{b.id.substring(0, 8).toUpperCase()}
-                      </span>
-                    </td>
-                    <td>
-                      <div>{b.trip?.vehicle?.name || '—'}</div>
-                      <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
-                        {b.trip?.route ? `${b.trip.route.origin} → ${b.trip.route.destination}` : '—'}
-                      </div>
-                    </td>
-                    <td>{b.selected_seats.join(', ')}</td>
-                    <td>Rs. {b.total_price.toLocaleString()}</td>
-                    <td>Rs. {b.platform_fee.toLocaleString()}</td>
-                    <td>
-                      <span className={`badge ${b.payment_status === 'paid' ? 'badge-success' : b.payment_status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>
-                        {b.payment_status}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${b.booking_status === 'confirmed' ? 'badge-success' : b.booking_status === 'cancelled' ? 'badge-danger' : 'badge-warning'}`}>
-                        {b.booking_status}
-                      </span>
-                    </td>
-                    <td style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
-                      {new Date(b.created_at).toLocaleDateString('en-LK')}
-                    </td>
-                  </tr>
-                ))
+                filtered.map(b => {
+                  const isExpanded = expandedBookingId === b.id;
+                  return (
+                    <React.Fragment key={b.id}>
+                      <tr 
+                        onClick={() => setExpandedBookingId(isExpanded ? null : b.id)}
+                        style={{ cursor: 'pointer', transition: 'background-color 0.2s' }}
+                        className={isExpanded ? 'expanded-row-active' : ''}
+                      >
+                        <td>
+                          <div>
+                            <strong>{b.passenger_details?.primary?.name || b.passenger?.full_name || 'Unknown'}</strong>
+                            {b.passenger_details?.primary?.booking_type === 'other' && (
+                              <span style={{ fontSize: '10px', marginLeft: '6px', backgroundColor: 'rgba(230,81,0,0.15)', color: '#e65100', padding: '2px 6px', borderRadius: '4px' }}>For Others</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                            {b.passenger_details?.primary?.phone || b.passenger?.phone_number}
+                          </div>
+                          {b.passenger_details?.primary?.nic && (
+                            <div style={{ fontSize: '11px', color: '#e65100', marginTop: '2px', fontWeight: '500' }}>
+                              NIC: {b.passenger_details.primary.nic}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', color: '#e65100', fontWeight: 'bold', fontSize: '12px' }}>
+                            TKT-{b.id.substring(0, 8).toUpperCase()}
+                          </span>
+                        </td>
+                        <td>
+                          <div>{b.trip?.vehicle?.name || '—'}</div>
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                            {b.trip?.route ? `${b.trip.route.origin} → ${b.trip.route.destination}` : '—'}
+                          </div>
+                        </td>
+                        <td>{b.selected_seats.join(', ')}</td>
+                        <td>Rs. {b.total_price.toLocaleString()}</td>
+                        <td>Rs. {b.platform_fee.toLocaleString()}</td>
+                        <td>
+                          <span className={`badge ${b.payment_status === 'paid' ? 'badge-success' : b.payment_status === 'failed' ? 'badge-danger' : 'badge-warning'}`}>
+                            {b.payment_status}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge ${b.booking_status === 'confirmed' ? 'badge-success' : b.booking_status === 'cancelled' ? 'badge-danger' : 'badge-warning'}`}>
+                            {b.booking_status}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', whiteSpace: 'nowrap' }}>
+                          {new Date(b.created_at).toLocaleDateString('en-LK')}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={9} style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                              <div>
+                                <h4 style={{ margin: '0 0 12px 0', color: '#e65100', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Primary Passenger Info</h4>
+                                {b.passenger_details?.primary ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                                    <div><span style={{ color: '#9ca3af' }}>Name:</span> <strong>{b.passenger_details.primary.name}</strong></div>
+                                    <div><span style={{ color: '#9ca3af' }}>NIC Number:</span> <strong>{b.passenger_details.primary.nic}</strong></div>
+                                    <div><span style={{ color: '#9ca3af' }}>Gender:</span> <strong>{b.passenger_details.primary.gender}</strong></div>
+                                    <div><span style={{ color: '#9ca3af' }}>Contact Phone:</span> <strong>{b.passenger_details.primary.phone}</strong></div>
+                                    <div><span style={{ color: '#9ca3af' }}>Type:</span> <strong>{b.passenger_details.primary.booking_type === 'self' ? 'Self Booking' : 'Booked for Someone Else'}</strong></div>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                                    <div><span style={{ color: '#9ca3af' }}>Account Holder:</span> <strong>{b.passenger?.full_name || 'Guest User'}</strong></div>
+                                    <div><span style={{ color: '#9ca3af' }}>Phone:</span> <strong>{b.passenger?.phone_number || '—'}</strong></div>
+                                    <div style={{ fontStyle: 'italic', marginTop: '4px', color: '#f59e0b', fontSize: '12px' }}>Legacy booking (Detailed passenger profile was not captured during checkout).</div>
+                                  </div>
+                                )}
+                              </div>
+                              <div>
+                                <h4 style={{ margin: '0 0 12px 0', color: '#e65100', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Additional Seat Genders</h4>
+                                {b.passenger_details?.guests && b.passenger_details.guests.length > 0 ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                                    {b.passenger_details.guests.map((g, idx) => (
+                                      <div key={idx}><span style={{ color: '#9ca3af' }}>Seat {g.seat}:</span> <strong>{g.gender}</strong></div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic' }}>
+                                    No guest seats (Single seat booking, or legacy transaction).
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>

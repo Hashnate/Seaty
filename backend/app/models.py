@@ -33,6 +33,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
     phone_number = Column(String, nullable=True)
+    nic_number = Column(String, nullable=True)
+    gender = Column(String, nullable=True)
     role = Column(String, nullable=False, default="passenger")
     company_id = Column(UUID(as_uuid=True), ForeignKey("bus_companies.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
@@ -115,6 +117,7 @@ class Booking(Base):
     platform_fee = Column(Numeric(10, 2), nullable=False, default=0)
     payment_status = Column(String, default="pending")  # 'pending', 'awaiting_payment', 'paid', 'failed', 'refunded'
     booking_status = Column(String, default="pending")  # 'pending', 'confirmed', 'cancelled'
+    passenger_details = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 

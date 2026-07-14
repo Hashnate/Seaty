@@ -16,11 +16,11 @@ def create_trip(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
 ):
-    # If owner, verify they own the vehicle
+    # If owner, verify the vehicle belongs to their company
     if current_user.role == "owner":
         vehicle = db.query(models.Vehicle).filter(
             models.Vehicle.id == trip_in.vehicle_id,
-            models.Vehicle.owner_id == current_user.id
+            models.Vehicle.company_id == current_user.company_id
         ).first()
         if not vehicle:
             raise HTTPException(
@@ -57,9 +57,13 @@ def list_trips(
     origin: Optional[str] = Query(None, description="Start terminal location"),
     destination: Optional[str] = Query(None, description="End terminal location"),
     date: Optional[str] = Query(None, description="Trip date in YYYY-MM-DD format"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(auth.get_optional_current_user)
 ):
     query = db.query(models.Trip).join(models.Route).join(models.Vehicle)
+    
+    if current_user and current_user.role == "owner":
+        query = query.filter(models.Vehicle.company_id == current_user.company_id)
     
     # Filter by date
     if date:
@@ -156,7 +160,7 @@ def update_trip_status(
     if current_user.role == "owner":
         vehicle = db.query(models.Vehicle).filter(
             models.Vehicle.id == trip.vehicle_id,
-            models.Vehicle.owner_id == current_user.id
+            models.Vehicle.company_id == current_user.company_id
         ).first()
         if not vehicle:
             raise HTTPException(
@@ -177,3 +181,21 @@ def update_trip_status(
     trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
     trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
     return trip
+
+@router.delete("/{trip_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_trip(
+    trip_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Scheduled trip not found")
+        
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+    if current_user.role != "admin" and (current_user.role != "owner" or not vehicle or vehicle.company_id != current_user.company_id):
+        raise HTTPException(status_code=403, detail="Unauthorized to delete this scheduled trip")
+        
+    db.delete(trip)
+    db.commit()
+    return {}

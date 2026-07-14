@@ -35,7 +35,8 @@ interface BookingRecord {
 }
 
 export default function OverviewPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const userRole = (user as { role?: string })?.role || 'admin';
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,8 +73,12 @@ export default function OverviewPage() {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Operational Dashboard</h1>
-          <p className="page-subtitle">Real-time stats of luxury buses, companies, and booking revenue.</p>
+          <h1 className="page-title">{userRole === 'owner' ? 'Company Operational Dashboard' : 'Operational Dashboard'}</h1>
+          <p className="page-subtitle">
+            {userRole === 'owner' 
+              ? 'Real-time stats of your company fleet, bookings, and ticket revenue.' 
+              : 'Real-time stats of luxury buses, companies, and booking revenue.'}
+          </p>
         </div>
         <div className="badge badge-info">
           <Clock size={14} style={{ marginRight: '6px' }} />
@@ -84,22 +89,25 @@ export default function OverviewPage() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-header">
-            <span>Gross Ticket Revenue</span>
+            <span>{userRole === 'owner' ? 'Gross Ticket Revenue' : 'Gross Ticket Revenue'}</span>
             <DollarSign size={18} style={{ color: '#e65100' }} />
           </div>
           <div className="stat-value">Rs. {s.total_revenue.toLocaleString()}</div>
           <div className="stat-trend up">
-            <TrendingUp size={14} /> Platform Fees: Rs. {s.platform_fees_earned.toLocaleString()}
+            <TrendingUp size={14} /> {userRole === 'owner' ? 'Platform Fees Paid: Rs. ' : 'Platform Fees: Rs. '}{s.platform_fees_earned.toLocaleString()}
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-header">
-            <span>Bus Companies</span>
+            <span>{userRole === 'owner' ? 'Company Fleet' : 'Bus Companies'}</span>
             <Bus size={18} style={{ color: '#e65100' }} />
           </div>
-          <div className="stat-value">{s.total_companies}</div>
+          <div className="stat-value">{userRole === 'owner' ? s.total_vehicles : s.total_companies}</div>
           <div className="stat-trend up">
-            <TrendingUp size={14} /> {s.active_companies} active • {s.total_vehicles} vehicles
+            <TrendingUp size={14} /> 
+            {userRole === 'owner' 
+              ? `${s.verified_vehicles} verified • ${s.pending_approvals} pending` 
+              : `${s.active_companies} active • ${s.total_vehicles} vehicles`}
           </div>
         </div>
         <div className="stat-card">
@@ -114,12 +122,12 @@ export default function OverviewPage() {
         </div>
         <div className="stat-card">
           <div className="stat-header">
-            <span>Pending Approvals</span>
+            <span>{userRole === 'owner' ? 'Pending Approvals' : 'Pending Approvals'}</span>
             <Clock size={18} style={{ color: '#f59e0b' }} />
           </div>
           <div className="stat-value">{s.pending_approvals}</div>
           <div className="stat-trend">
-            Vehicles pending verification
+            {userRole === 'owner' ? 'Your vehicles pending verification' : 'Vehicles pending verification'}
           </div>
         </div>
       </div>
@@ -176,26 +184,38 @@ export default function OverviewPage() {
         </div>
 
         <div className="table-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <h3 className="table-title">Platform Metrics</h3>
+          <h3 className="table-title">{userRole === 'owner' ? 'Company Metrics' : 'Platform Metrics'}</h3>
           <div style={{ display: 'flex', gap: '12px', background: 'rgba(230, 81, 0, 0.06)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(230, 81, 0, 0.15)' }}>
             <DollarSign size={18} style={{ color: '#e65100', flexShrink: 0, marginTop: '2px' }} />
             <div style={{ fontSize: '13px' }}>
-              <strong>Platform Revenue</strong>
-              <div style={{ color: '#9ca3af', marginTop: '4px' }}>Commission earned: Rs. {s.platform_fees_earned.toLocaleString()}</div>
+              <strong>{userRole === 'owner' ? 'Gross Revenue' : 'Platform Revenue'}</strong>
+              <div style={{ color: '#9ca3af', marginTop: '4px' }}>
+                {userRole === 'owner' 
+                  ? `Commission paid: Rs. ${s.platform_fees_earned.toLocaleString()}` 
+                  : `Commission earned: Rs. ${s.platform_fees_earned.toLocaleString()}`}
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', background: 'rgba(16, 185, 129, 0.08)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
             <Users size={18} style={{ color: '#10b981', flexShrink: 0, marginTop: '2px' }} />
             <div style={{ fontSize: '13px' }}>
-              <strong>User Base</strong>
-              <div style={{ color: '#9ca3af', marginTop: '4px' }}>{s.total_passengers} passengers • {s.total_owners} owners</div>
+              <strong>{userRole === 'owner' ? 'Passengers Handled' : 'User Base'}</strong>
+              <div style={{ color: '#9ca3af', marginTop: '4px' }}>
+                {userRole === 'owner' 
+                  ? `${s.total_passengers} distinct passengers` 
+                  : `${s.total_passengers} passengers • ${s.total_owners} owners`}
+              </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', background: 'rgba(245, 158, 11, 0.08)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
             <Clock size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
             <div style={{ fontSize: '13px' }}>
-              <strong>{s.pending_approvals} Vehicles Pending</strong>
-              <div style={{ color: '#9ca3af', marginTop: '4px' }}>Review documentation & permits</div>
+              <strong>{s.pending_approvals} Buses Pending</strong>
+              <div style={{ color: '#9ca3af', marginTop: '4px' }}>
+                {userRole === 'owner' 
+                  ? 'Buses awaiting verification by admin' 
+                  : 'Review documentation & permits'}
+              </div>
             </div>
           </div>
           {s.active_trips > 0 && (

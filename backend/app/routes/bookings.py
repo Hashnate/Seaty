@@ -84,7 +84,8 @@ def create_booking(
         total_price=subtotal,
         platform_fee=platform_fee,
         payment_status="pending",
-        booking_status="pending"  # Starts as pending until payment
+        booking_status="pending",  # Starts as pending until payment
+        passenger_details=booking_in.passenger_details
     )
     db.add(db_booking)
     db.commit()
@@ -106,9 +107,9 @@ def list_bookings(
     if current_user.role == "admin":
         bookings = db.query(models.Booking).all()
     elif current_user.role == "owner":
-        # Get bookings for trips scheduled on vehicles they own
+        # Get bookings for trips scheduled on vehicles belonging to their company
         bookings = db.query(models.Booking).join(models.Trip).join(models.Vehicle).filter(
-            models.Vehicle.owner_id == current_user.id
+            models.Vehicle.company_id == current_user.company_id
         ).all()
     else:
         # Passengers get their own bookings
@@ -141,8 +142,8 @@ def get_booking(
     elif current_user.role == "owner":
         trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
         vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
-        if vehicle.owner_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Unauthorized to view this vehicle's booking")
+        if vehicle.company_id != current_user.company_id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this company's booking")
 
     booking.trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
     booking.passenger = db.query(models.User).filter(models.User.id == booking.passenger_id).first()
