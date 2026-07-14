@@ -173,3 +173,40 @@ export async function createRoute(token: string, data: Record<string, unknown>) 
 export async function deleteRoute(token: string, routeId: string) {
   return request(`/routes/${routeId}`, { method: 'DELETE', token });
 }
+
+// ==========================================
+// Vehicle Management (Owner/Admin)
+// ==========================================
+export async function createVehicle(token: string, data: Record<string, unknown>) {
+  return request('/vehicles', { method: 'POST', body: data, token });
+}
+
+export async function deleteVehicle(token: string, vehicleId: string) {
+  return request(`/vehicles/${vehicleId}`, { method: 'DELETE', token });
+}
+
+// ==========================================
+// Trip Management (Owner/Admin)
+// ==========================================
+export async function createTrip(token: string, data: Record<string, unknown>) {
+  return request('/trips', { method: 'POST', body: data, token });
+}
+
+export async function deleteTrip(token: string, tripId: string) {
+  return request(`/trips/${tripId}`, { method: 'DELETE', token });
+}
+
+// ==========================================
+// Contractor/Staff Management (Owner)
+// ==========================================
+export async function getContractors(token: string) {
+  return request('/contractors', { token });
+}
+
+export async function createContractor(token: string, data: Record<string, unknown>) {
+  return request('/contractors', { method: 'POST', body: data, token });
+}
+
+export async function deleteContractor(token: string, contractorId: string) {
+  return request(`/contractors/${contractorId}`, { method: 'DELETE', token });
+}

@@ -10,6 +10,9 @@ import {
   Settings as SettingsIcon,
   Route as RouteIcon,
   LogOut,
+  Bus,
+  Calendar,
+  Contact,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -17,6 +20,9 @@ const NAV_ITEMS = [
   { path: '/approvals', icon: CheckCircle, label: 'Pending Approvals' },
   { path: '/companies', icon: Building2, label: 'Bus Companies' },
   { path: '/routes', icon: RouteIcon, label: 'Route Templates' },
+  { path: '/fleet', icon: Bus, label: 'My Fleet' },
+  { path: '/trips', icon: Calendar, label: 'Trip Scheduling' },
+  { path: '/contractors', icon: Contact, label: 'My Contractors' },
   { path: '/map', icon: MapIcon, label: 'Live Fleet Map', badge: 'Live' },
   { path: '/bookings', icon: Users, label: 'Bookings Log' },
   { path: '/settings', icon: SettingsIcon, label: 'Console Settings' },
@@ -35,6 +41,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const userName = (user as { full_name?: string })?.full_name || 'Sys Admin';
   const userRole = (user as { role?: string })?.role || 'admin';
 
+  const visibleNavItems = NAV_ITEMS.filter(item => {
+    if (userRole === 'owner') {
+      return ['/', '/fleet', '/trips', '/contractors', '/bookings', '/map'].includes(item.path);
+    }
+    return ['/', '/approvals', '/companies', '/routes', '/map', '/bookings', '/settings'].includes(item.path);
+  });
+
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
@@ -42,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <img src="/app_logo.png" alt="Seaty Logo" style={{ height: '28px', objectFit: 'contain' }} />
         </div>
         <ul className="sidebar-menu">
-          {NAV_ITEMS.map(item => {
+          {visibleNavItems.map(item => {
             const isActive = location.pathname === item.path;
             return (
               <li

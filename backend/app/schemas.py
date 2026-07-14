@@ -26,6 +26,12 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class ContractorCreate(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    phone_number: str
+
 # ==========================================
 # User/Profile Schemas
 # ==========================================
@@ -34,6 +40,8 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str
     phone_number: Optional[str] = None
+    nic_number: Optional[str] = None
+    gender: Optional[str] = None
     role: str
     company_id: Optional[UUID] = None
     created_at: datetime.datetime
@@ -41,6 +49,12 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    nic_number: Optional[str] = None
+    gender: Optional[str] = None
+    phone_number: Optional[str] = None
 
 # ==========================================
 # Bus Company Schemas
@@ -176,6 +190,7 @@ class TripSeatsResponse(BaseModel):
 class BookingCreate(BaseModel):
     trip_id: UUID
     selected_seats: List[str]
+    passenger_details: Optional[dict] = None
 
 class BookingResponse(BaseModel):
     id: UUID
@@ -186,6 +201,7 @@ class BookingResponse(BaseModel):
     platform_fee: float
     payment_status: str
     booking_status: str
+    passenger_details: Optional[dict] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
     trip: Optional[TripResponse] = None

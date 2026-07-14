@@ -18,6 +18,14 @@ class AppState extends ChangeNotifier {
   bool _isAuthenticated = false;
   String _userName = 'Guest User';
   String _token = '';
+  String _userNic = '';
+  String _userGender = '';
+  String _userPhone = '';
+  
+  String get token => _token;
+  String get userNic => _userNic;
+  String get userGender => _userGender;
+  String get userPhone => _userPhone;
   
   // API URL Config
   String apiBaseUrl = 'http://localhost:8000/api/v1';
@@ -30,6 +38,7 @@ class AppState extends ChangeNotifier {
     if (_isAuthenticated) {
       loadVehicles();
       loadBookings();
+      loadProfile();
     }
   }
 
@@ -38,6 +47,9 @@ class AppState extends ChangeNotifier {
     _role = _prefs.getString('role') ?? 'passenger';
     _userName = _prefs.getString('userName') ?? 'Guest User';
     _token = _prefs.getString('token') ?? '';
+    _userNic = _prefs.getString('userNic') ?? '';
+    _userGender = _prefs.getString('userGender') ?? '';
+    _userPhone = _prefs.getString('userPhone') ?? '';
     apiBaseUrl = _prefs.getString('apiBaseUrl') ?? 'http://localhost:8000/api/v1';
     wsBaseUrl = _prefs.getString('wsBaseUrl') ?? 'ws://localhost:8000/api/v1/ws';
     
@@ -54,6 +66,9 @@ class AppState extends ChangeNotifier {
     _prefs.setString('role', _role);
     _prefs.setString('userName', _userName);
     _prefs.setString('token', _token);
+    _prefs.setString('userNic', _userNic);
+    _prefs.setString('userGender', _userGender);
+    _prefs.setString('userPhone', _userPhone);
     _prefs.setString('apiBaseUrl', apiBaseUrl);
     _prefs.setString('wsBaseUrl', wsBaseUrl);
   }
@@ -224,7 +239,73 @@ class AppState extends ChangeNotifier {
     loadVehicles();
     loadTrips();
     loadBookings();
+    loadProfile();
     notifyListeners();
+  }
+
+  Future<void> loadProfile() async {
+    if (_token.isEmpty || _token.startsWith('simulated')) return;
+    try {
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/auth/me'),
+        headers: {'Authorization': 'Bearer $_token'},
+      ).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _userName = data['full_name'] ?? _userName;
+        _userPhone = data['phone_number'] ?? _userPhone;
+        _userNic = data['nic_number'] ?? '';
+        _userGender = data['gender'] ?? '';
+        _saveSession();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+    }
+  }
+
+  Future<bool> updateProfile(String name, String nic, String gender, String phone) async {
+    // Local updates
+    _userName = name;
+    _userNic = nic;
+    _userGender = gender;
+    _userPhone = phone;
+    _saveSession();
+    notifyListeners();
+
+    if (_token.isEmpty || _token.startsWith('simulated')) return true;
+    try {
+      final response = await http.put(
+        Uri.parse('$apiBaseUrl/auth/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: json.encode({
+          'full_name': name,
+          'nic_number': nic,
+          'gender': gender,
+          'phone_number': phone,
+        }),
+      ).timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        _userName = data['full_name'] ?? _userName;
+        _userNic = data['nic_number'] ?? _userNic;
+        _userGender = data['gender'] ?? _userGender;
+        _userPhone = data['phone_number'] ?? _userPhone;
+        _saveSession();
+        notifyListeners();
+        return true;
+      } else if (response.statusCode == 401) {
+        logout();
+      }
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+    }
+    return false;
   }
 
   void logout() {
@@ -358,7 +439,7 @@ class AppState extends ChangeNotifier {
   }
 
   // Initiate Booking (creates pending booking and holds seats)
-  Future<Map<String, dynamic>?> initiateBooking(String tripId) async {
+  Future<Map<String, dynamic>?> initiateBooking(String tripId, Map<String, dynamic> passengerDetails) async {
     if (_selectedSeats.isEmpty) return null;
     
     try {
@@ -371,6 +452,7 @@ class AppState extends ChangeNotifier {
         body: json.encode({
           'trip_id': tripId,
           'selected_seats': _selectedSeats,
+          'passenger_details': passengerDetails,
         }),
       );
 
@@ -1796,20 +1878,28 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                               ),
                             ],
                           ),
-                          Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white.withOpacity(0.15), width: 2),
-                              boxShadow: [
-                                BoxShadow(color: const Color(0xFFE65100).withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
-                              ],
-                            ),
-                            child: CircleAvatar(
-                              radius: 24,
-                              backgroundColor: const Color(0xFFE65100),
-                              child: Text(
-                                state.userName.isNotEmpty ? state.userName[0].toUpperCase() : 'U',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
+                              );
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white.withOpacity(0.15), width: 2),
+                                boxShadow: [
+                                  BoxShadow(color: const Color(0xFFE65100).withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: const Color(0xFFE65100),
+                                child: Text(
+                                  state.userName.isNotEmpty ? state.userName[0].toUpperCase() : 'U',
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                                ),
                               ),
                             ),
                           ),
@@ -2235,11 +2325,11 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
     }
   }
 
-  void _handleConfirmAndBook(AppState state) async {
+  void _handleConfirmAndBook(AppState state, Map<String, dynamic> passengerDetails) async {
     setState(() => _isBookingInProgress = true);
     
     // 1. Create booking (Pending)
-    final booking = await state.initiateBooking(widget.trip['id'].toString());
+    final booking = await state.initiateBooking(widget.trip['id'].toString(), passengerDetails);
     if (booking == null) {
       if (mounted) {
         setState(() => _isBookingInProgress = false);
@@ -2276,6 +2366,335 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
         ),
       );
     }
+  }
+
+  void _showPassengerDetailsSheet(BuildContext context, AppState state) {
+    final selectedSeats = state.selectedSeats.toList();
+    if (selectedSeats.isEmpty) return;
+
+    String bookingFor = 'self'; // 'self' or 'other'
+    
+    final nameController = TextEditingController(text: state.userName);
+    final phoneController = TextEditingController(text: state.userPhone);
+    final nicController = TextEditingController(text: state.userNic);
+    String primaryGender = state.userGender.isEmpty ? 'Male' : state.userGender;
+
+    final Map<String, String> guestGenders = {};
+    for (int i = 1; i < selectedSeats.length; i++) {
+      guestGenders[selectedSeats[i]] = 'Female';
+    }
+
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final isSelf = bookingFor == 'self';
+            
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 24,
+                right: 24,
+                top: 24,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+              ),
+              child: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      
+                      const Text(
+                        'Passenger Details',
+                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Confirm details for your seat: ${selectedSeats.first}',
+                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+                      ),
+                      const SizedBox(height: 20),
+
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withOpacity(0.1)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setModalState(() {
+                                    bookingFor = 'self';
+                                    nameController.text = state.userName;
+                                    phoneController.text = state.userPhone;
+                                    nicController.text = state.userNic;
+                                    primaryGender = state.userGender.isEmpty ? 'Male' : state.userGender;
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: isSelf ? const Color(0xFFE65100) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    'For Me',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  setModalState(() {
+                                    bookingFor = 'other';
+                                    nameController.clear();
+                                    phoneController.clear();
+                                    nicController.clear();
+                                    primaryGender = 'Male';
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: !isSelf ? const Color(0xFFE65100) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: const Text(
+                                    'For Others',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      _buildLabel('Passenger Name'),
+                      TextFormField(
+                        controller: nameController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _buildInputDec('Enter passenger\'s full name', Icons.person_outline),
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('Phone Number'),
+                      TextFormField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _buildInputDec('Enter phone number', Icons.phone_android_outlined),
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Phone number is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('NIC Number'),
+                      TextFormField(
+                        controller: nicController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _buildInputDec('e.g. 199912345678 or 991234567V', Icons.badge_outlined),
+                        validator: (val) => val == null || val.trim().isEmpty ? 'NIC is required' : null,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('Gender'),
+                      DropdownButtonFormField<String>(
+                        value: primaryGender,
+                        dropdownColor: const Color(0xFF1E293B),
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        decoration: _buildInputDec('Select Gender', Icons.face_outlined),
+                        items: ['Male', 'Female'].map((g) => DropdownMenuItem(
+                          value: g,
+                          child: Text(g, style: const TextStyle(color: Colors.white)),
+                        )).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setModalState(() => primaryGender = val);
+                          }
+                        },
+                      ),
+                      
+                      if (selectedSeats.length > 1) ...[
+                        const SizedBox(height: 24),
+                        const Divider(color: Colors.white24, height: 32),
+                        const Text(
+                          'Additional Passenger Genders',
+                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Select genders for other seats',
+                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        ...selectedSeats.skip(1).map((seat) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16.0),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.05),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                  ),
+                                  child: Text(
+                                    'Seat $seat',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    value: guestGenders[seat],
+                                    dropdownColor: const Color(0xFF1E293B),
+                                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Colors.white.withOpacity(0.05),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                                      ),
+                                    ),
+                                    items: ['Male', 'Female'].map((g) => DropdownMenuItem(
+                                      value: g,
+                                      child: Text(g, style: const TextStyle(color: Colors.white)),
+                                    )).toList(),
+                                    onChanged: (val) {
+                                      if (val != null) {
+                                        setModalState(() => guestGenders[seat] = val);
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ],
+                      
+                      const SizedBox(height: 32),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 54,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            if (!formKey.currentState!.validate()) return;
+                            
+                            Navigator.pop(context);
+
+                            final Map<String, dynamic> primaryDetails = {
+                              'name': nameController.text.trim(),
+                              'phone': phoneController.text.trim(),
+                              'nic': nicController.text.trim(),
+                              'gender': primaryGender,
+                              'booking_type': bookingFor,
+                            };
+
+                            final List<Map<String, String>> guests = [];
+                            guestGenders.forEach((seat, gender) {
+                              guests.add({
+                                'seat': seat,
+                                'gender': gender,
+                              });
+                            });
+
+                            final Map<String, dynamic> fullDetails = {
+                              'primary': primaryDetails,
+                              'guests': guests,
+                            };
+
+                            _handleConfirmAndBook(state, fullDetails);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE65100),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Continue to Payment', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6.0, left: 4.0),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDec(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 13),
+      prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.5), size: 20),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.05),
+      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFE65100), width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.redAccent),
+      ),
+    );
   }
 
   @override
@@ -2419,7 +2838,7 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
                       ElevatedButton(
                         onPressed: (state.selectedSeats.isEmpty || _isBookingInProgress)
                             ? null
-                            : () => _handleConfirmAndBook(state),
+                            : () => _showPassengerDetailsSheet(context, state),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFE65100),
                           foregroundColor: Colors.white,
@@ -3851,6 +4270,218 @@ class _OwnerStreamingTabState extends State<OwnerStreamingTab> {
             ),
           )
         ],
+      ),
+    );
+  }
+}
+
+// Profile Edit Screen
+class ProfileEditScreen extends StatefulWidget {
+  const ProfileEditScreen({super.key});
+
+  @override
+  State<ProfileEditScreen> createState() => _ProfileEditScreenState();
+}
+
+class _ProfileEditScreenState extends State<ProfileEditScreen> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nameController;
+  late TextEditingController _nicController;
+  late TextEditingController _phoneController;
+  String _gender = 'Male';
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = Provider.of<AppState>(context, listen: false);
+    _nameController = TextEditingController(text: state.userName);
+    _nicController = TextEditingController(text: state.userNic);
+    _phoneController = TextEditingController(
+      text: state.userPhone.isEmpty 
+          ? (state.role == 'passenger' ? '0771234567' : '0777654321') 
+          : state.userPhone
+    );
+    _gender = state.userGender.isEmpty ? 'Male' : state.userGender;
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _nicController.dispose();
+    _phoneController.dispose();
+    super.dispose();
+  }
+
+  void _saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSaving = true);
+    
+    final state = Provider.of<AppState>(context, listen: false);
+    final success = await state.updateProfile(
+      _nameController.text.trim(),
+      _nicController.text.trim(),
+      _gender,
+      _phoneController.text.trim(),
+    );
+
+    if (mounted) {
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Profile updated successfully!' : 'Failed to update profile. Please try again.'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+      if (success) {
+        Navigator.pop(context);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        title: const Text('Edit Profile'),
+        backgroundColor: const Color(0xFF0F172A),
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Personal Information',
+                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Manage your identity details for booking tickets.',
+                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+                ),
+                const SizedBox(height: 24),
+                
+                // Name Field
+                _buildFieldLabel('Full Name'),
+                TextFormField(
+                  controller: _nameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _buildInputDecoration('Enter your full name', Icons.person_outline),
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
+                ),
+                const SizedBox(height: 20),
+
+                // Phone Field
+                _buildFieldLabel('Phone Number'),
+                TextFormField(
+                  controller: _phoneController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _buildInputDecoration('Enter phone number', Icons.phone_android_outlined),
+                  validator: (val) => val == null || val.trim().isEmpty ? 'Phone number is required' : null,
+                ),
+                const SizedBox(height: 20),
+
+                // NIC Field
+                _buildFieldLabel('NIC Number'),
+                TextFormField(
+                  controller: _nicController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: _buildInputDecoration('e.g. 199912345678 or 991234567V', Icons.badge_outlined),
+                  validator: (val) => val == null || val.trim().isEmpty ? 'NIC number is required' : null,
+                ),
+                const SizedBox(height: 20),
+
+                // Gender Field
+                _buildFieldLabel('Gender'),
+                DropdownButtonFormField<String>(
+                  value: _gender,
+                  dropdownColor: const Color(0xFF1E293B),
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  decoration: _buildInputDecoration('Select Gender', Icons.face_outlined),
+                  items: ['Male', 'Female'].map((g) => DropdownMenuItem(
+                    value: g,
+                    child: Text(g, style: const TextStyle(color: Colors.white)),
+                  )).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _gender = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 40),
+
+                // Save Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _saveProfile,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE65100),
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFE65100).withOpacity(0.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 4,
+                    ),
+                    child: _isSaving
+                        ? const Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                            ),
+                          )
+                        : const Text('Save Profile Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
+      child: Text(
+        label,
+        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+      prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.5)),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.05),
+      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFFE65100), width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Colors.redAccent),
       ),
     );
   }
