@@ -42,3 +42,16 @@ def get_route(route_id: UUID, db: Session = Depends(get_db)):
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
     return route
+
+@router.delete("/{route_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_route(
+    route_id: UUID, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    route = db.query(models.Route).filter(models.Route.id == route_id).first()
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    db.delete(route)
+    db.commit()
+    return {}

@@ -18,6 +18,7 @@ def create_vehicle(
     db_vehicle = models.Vehicle(
         id=uuid.uuid4(),
         owner_id=current_user.id,
+        company_id=current_user.company_id,  # Auto-assign to owner's company
         name=vehicle_in.name,
         registration_number=vehicle_in.registration_number,
         type=vehicle_in.type,
@@ -41,8 +42,8 @@ def list_vehicles(
         # Admins see everything
         return db.query(models.Vehicle).all()
     elif current_user.role == "owner":
-        # Owners see their own vehicles (verified or not)
-        return db.query(models.Vehicle).filter(models.Vehicle.owner_id == current_user.id).all()
+        # Owners see vehicles belonging to their company
+        return db.query(models.Vehicle).filter(models.Vehicle.company_id == current_user.company_id).all()
     else:
         # Passengers only see verified vehicles
         return db.query(models.Vehicle).filter(models.Vehicle.is_verified == True).all()
@@ -77,3 +78,36 @@ def approve_vehicle(
     db.commit()
     db.refresh(vehicle)
     return vehicle
+
+@router.post("/{vehicle_id}/reject", response_model=schemas.VehicleResponse)
+def reject_vehicle(
+    vehicle_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Reject/unverify a vehicle (admin only)."""
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+    
+    vehicle.is_verified = False
+    db.commit()
+    db.refresh(vehicle)
+    return vehicle
+
+@router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_vehicle(
+    vehicle_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found")
+        
+    if current_user.role != "admin" and (current_user.role != "owner" or vehicle.company_id != current_user.company_id):
+        raise HTTPException(status_code=403, detail="Unauthorized to delete this vehicle")
+        
+    db.delete(vehicle)
+    db.commit()
+    return {}

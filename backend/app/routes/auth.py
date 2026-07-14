@@ -113,3 +113,32 @@ def login_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db
         data={"sub": user.email, "role": user.role}
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.put("/profile", response_model=schemas.UserResponse)
+def update_profile(
+    payload: schemas.ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    if payload.full_name is not None:
+        current_user.full_name = payload.full_name
+    if payload.nic_number is not None:
+        current_user.nic_number = payload.nic_number
+    if payload.gender is not None:
+        current_user.gender = payload.gender
+    if payload.phone_number is not None:
+        existing = db.query(models.User).filter(
+            models.User.phone_number == payload.phone_number,
+            models.User.role == current_user.role,
+            models.User.id != current_user.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A user with this mobile number is already registered under this role."
+            )
+        current_user.phone_number = payload.phone_number
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
