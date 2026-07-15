@@ -14,7 +14,8 @@ import {
   toggleSchedule,
   getScheduleOverrides,
   createScheduleOverride,
-  deleteScheduleOverride
+  deleteScheduleOverride,
+  getConductors
 } from '../api/client';
 import { 
   Plus, 
@@ -130,6 +131,7 @@ export default function MyTripsPage() {
   const [schedules, setSchedules] = useState<ScheduleRecord[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
   const [routes, setRoutes] = useState<RouteRecord[]>([]);
+  const [conductors, setConductors] = useState<any[]>([]);
   
   // Loading & Modals
   const [loading, setLoading] = useState(true);
@@ -157,6 +159,7 @@ export default function MyTripsPage() {
   const [customDays, setCustomDays] = useState<number[]>([]);
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().split('T')[0]);
   const [effectiveUntil, setEffectiveUntil] = useState('');
+  const [selectedConductor, setSelectedConductor] = useState('');
   
   // Override Form State
   const [overrideDate, setOverrideDate] = useState(() => {
@@ -201,6 +204,10 @@ export default function MyTripsPage() {
     getRoutes(token)
       .then(data => setRoutes((data as RouteRecord[]) || []))
       .catch(() => setRoutes([]));
+      
+    getConductors(token)
+      .then(data => setConductors((data as any[]) || []))
+      .catch(() => setConductors([]));
   }, [token]);
 
   useEffect(() => {
@@ -249,6 +256,7 @@ export default function MyTripsPage() {
     setCustomDays(s.custom_days || []);
     setEffectiveFrom(s.effective_from);
     setEffectiveUntil(s.effective_until || '');
+    setSelectedConductor((s as any).conductor_id || '');
     
     setError('');
     setShowScheduleModal(true);
@@ -286,7 +294,8 @@ export default function MyTripsPage() {
         schedule_type: scheduleType,
         custom_days: scheduleType === 'custom' ? customDays : [],
         effective_from: effectiveFrom,
-        effective_until: effectiveUntil || null
+        effective_until: effectiveUntil || null,
+        conductor_id: selectedConductor || null
       };
 
       if (editingScheduleId) {
@@ -414,6 +423,7 @@ export default function MyTripsPage() {
               setCustomDays([]);
               setEffectiveFrom(new Date().toISOString().split('T')[0]);
               setEffectiveUntil('');
+              setSelectedConductor('');
               setError('');
               setShowScheduleModal(true);
             }}
@@ -483,6 +493,7 @@ export default function MyTripsPage() {
                   setCustomDays([]);
                   setEffectiveFrom(new Date().toISOString().split('T')[0]);
                   setEffectiveUntil('');
+                  setSelectedConductor('');
                   setError('');
                   setShowScheduleModal(true);
                 }}
@@ -521,6 +532,11 @@ export default function MyTripsPage() {
                         <div style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace', marginTop: '2px' }}>
                           {s.vehicle?.registration_number}
                         </div>
+                        {(s as any).conductor && (
+                          <div style={{ fontSize: '11px', color: '#e65100', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2.5px' }}>
+                            <span>👤 {(s as any).conductor.full_name}</span>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
@@ -728,6 +744,11 @@ export default function MyTripsPage() {
                         <div style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace', marginTop: '2px' }}>
                           {t.vehicle?.registration_number}
                         </div>
+                        {(t as any).conductor && (
+                          <div style={{ fontSize: '11px', color: '#e65100', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2.5px' }}>
+                            <span>👤 {(t as any).conductor.full_name}</span>
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
@@ -800,6 +821,16 @@ export default function MyTripsPage() {
                   value={selectedRoute}
                   onChange={setSelectedRoute}
                   placeholder="-- Choose Route --"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" style={{ color: '#9ca3af' }}>Assign Conductor</label>
+                <CustomSelect
+                  options={conductors.map(c => ({ value: c.id, label: `${c.full_name} (${c.phone_number})` }))}
+                  value={selectedConductor}
+                  onChange={setSelectedConductor}
+                  placeholder="-- No Conductor Assigned --"
                 />
               </div>
 

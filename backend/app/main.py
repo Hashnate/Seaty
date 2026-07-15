@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.database import engine, Base
-from app.routes import auth, vehicles, trips, bookings, tracking, routes_router, companies, payments, seat_holds, admin, contractors, notifications, schedules
+from app.routes import auth, vehicles, trips, bookings, tracking, routes_router, companies, payments, seat_holds, admin, conductors, notifications, schedules
 
 # Create database tables at startup (Convenient for initial setups)
 Base.metadata.create_all(bind=engine)
@@ -33,7 +33,7 @@ app.include_router(payments.router, prefix="/api/v1")
 app.include_router(seat_holds.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(tracking.router, prefix="/api/v1")
-app.include_router(contractors.router, prefix="/api/v1")
+app.include_router(conductors.router, prefix="/api/v1")
 app.include_router(notifications.router, prefix="/api/v1")
 app.include_router(schedules.router, prefix="/api/v1")
 
@@ -45,3 +45,66 @@ def read_root():
         "docs_url": "/docs",
         "version": "1.0.0"
     }
+
+import asyncio
+import datetime
+from app.database import SessionLocal
+from app import models
+
+async def trip_reminder_scheduler():
+    """Background task to send reminders 30 minutes before a trip starts."""
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                now = datetime.datetime.now()
+                thirty_mins_from_now = now + datetime.timedelta(minutes=30)
+                
+                # Fetch confirmed bookings for scheduled trips starting in the next 30 minutes
+                upcoming_bookings = db.query(models.Booking).join(models.Trip).filter(
+                    models.Booking.booking_status == "confirmed",
+                    models.Trip.departure_time > now,
+                    models.Trip.departure_time <= thirty_mins_from_now
+                ).all()
+                
+                for booking in upcoming_bookings:
+                    # Check if reminder already sent for this booking
+                    sent_check = db.query(models.Notification).filter(
+                        models.Notification.user_id == booking.passenger_id,
+                        models.Notification.type == "trip_reminder",
+                        models.Notification.message.like(f"%Booking ID: {booking.id}%")
+                    ).first()
+                    
+                    if not sent_check:
+                        from app.routes.notifications import create_and_send_notification
+                        
+                        trip = booking.trip
+                        origin = trip.route.origin if (trip and trip.route) else "Colombo"
+                        dest = trip.route.destination if (trip and trip.route) else "Galle"
+                        departure = trip.departure_time.strftime("%I:%M %p")
+                        
+                        title = "Trip Reminder - 30 Mins to Departure"
+                        message = (
+                            f"Friendly reminder: Your trip from {origin} to {dest} starts at {departure}. "
+                            f"Please make sure to be on your pickup point at least 15-30 minutes before departure. "
+                            f"Booking ID: {booking.id}"
+                        )
+                        
+                        await create_and_send_notification(
+                            db=db,
+                            user_id=booking.passenger_id,
+                            title=title,
+                            message=message,
+                            noti_type="trip_reminder"
+                        )
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Error in trip_reminder_scheduler: {e}")
+            
+        # Run every 30 seconds
+        await asyncio.sleep(30)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(trip_reminder_scheduler())

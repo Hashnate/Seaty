@@ -103,11 +103,14 @@ class TripSchedule(Base):
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
+    conductor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
     # Relationships
     vehicle = relationship("Vehicle")
     route = relationship("Route")
     trips = relationship("Trip", back_populates="schedule", cascade="all, delete-orphan")
     overrides = relationship("BusOverride", back_populates="schedule", cascade="all, delete-orphan")
+    conductor = relationship("User", foreign_keys=[conductor_id])
 
 
 class BusOverride(Base):
@@ -136,8 +139,11 @@ class Trip(Base):
     arrival_time = Column(DateTime(timezone=True), nullable=False)
     price_per_seat = Column(Numeric(10, 2), nullable=False)
     status = Column(String, default="scheduled")  # 'scheduled', 'ongoing', 'completed', 'cancelled'
+    boarded_seats = Column(ARRAY(String), default=list, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    conductor_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     vehicle = relationship("Vehicle", back_populates="trips")
@@ -145,6 +151,7 @@ class Trip(Base):
     schedule = relationship("TripSchedule", back_populates="trips")
     bookings = relationship("Booking", back_populates="trip")
     seat_holds = relationship("SeatHold", back_populates="trip")
+    conductor = relationship("User", foreign_keys=[conductor_id])
 
 
 

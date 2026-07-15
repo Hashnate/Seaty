@@ -25,7 +25,8 @@ def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
         hashed_password=auth.get_password_hash(user_in.password),
         full_name=user_in.full_name,
         phone_number=user_in.phone_number,
-        role=user_in.role
+        role=user_in.role,
+        company_id=user_in.company_id
     )
     db.add(db_user)
     db.commit()
@@ -55,9 +56,10 @@ def get_current_user_profile(current_user: models.User = Depends(auth.get_curren
 
 @router.post("/phone/check", response_model=schemas.PhoneCheckResponse)
 def check_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
+    roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
     user = db.query(models.User).filter(
         models.User.phone_number == payload.phone_number,
-        models.User.role == payload.role
+        models.User.role.in_(roles)
     ).first()
     if user:
         return {"exists": True, "name": user.full_name}
@@ -99,9 +101,10 @@ def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(
 
 @router.post("/phone/login", response_model=schemas.Token)
 def login_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
+    roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
     user = db.query(models.User).filter(
         models.User.phone_number == payload.phone_number,
-        models.User.role == payload.role
+        models.User.role.in_(roles)
     ).first()
     if not user:
         raise HTTPException(
