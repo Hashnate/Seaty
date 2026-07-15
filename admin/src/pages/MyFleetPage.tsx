@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { getVehicles, createVehicle, deleteVehicle } from '../api/client';
-import { Plus, Trash2, ShieldCheck, ShieldAlert, Bus } from 'lucide-react';
+import CustomSelect from '../components/CustomSelect';
+import { getVehicles, createVehicle, deleteVehicle, updateVehicle } from '../api/client';
+import { Plus, ShieldCheck, ShieldAlert, Bus, Wifi, Plug, Tv, Armchair, Users, Briefcase, Snowflake, Settings } from 'lucide-react';
 
 interface VehicleRecord {
   id: string;
@@ -13,6 +14,18 @@ interface VehicleRecord {
   amenities: string[];
 }
 
+const getAmenityIcon = (name: string, size = 14) => {
+  const n = name.toLowerCase();
+  if (n.includes('wifi')) return <Wifi size={size} />;
+  if (n.includes('charge') || n.includes('charging') || n.includes('plug') || n.includes('outlet')) return <Plug size={size} />;
+  if (n.includes('tv') || n.includes('screen') || n.includes('video') || n.includes('hd tv')) return <Tv size={size} />;
+  if (n.includes('seat') || n.includes('recline') || n.includes('reclining')) return <Armchair size={size} />;
+  if (n.includes('restroom') || n.includes('toilet') || n.includes('wc')) return <Users size={size} />;
+  if (n.includes('luggage') || n.includes('baggage') || n.includes('bag') || n.includes('space')) return <Briefcase size={size} />;
+  if (n.includes('ac') || n.includes('air') || n.includes('cool') || n.includes('snowflake')) return <Snowflake size={size} />;
+  return null;
+};
+
 export default function MyFleetPage() {
   const { token } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
@@ -21,9 +34,76 @@ export default function MyFleetPage() {
   const [name, setName] = useState('');
   const [reg, setReg] = useState('');
   const [seats, setSeats] = useState(40);
+  const [columns, setColumns] = useState(4);
+  const [aisleAfter, setAisleAfter] = useState(2);
+  const [rows, setRows] = useState(10);
+  const [customSeats, setCustomSeats] = useState<{ row: number; col: number; label: string }[]>([]);
   const [amenities, setAmenities] = useState<string[]>(['AC', 'WiFi']);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const [preset, setPreset] = useState('expressway');
+  const [isOpenPreset, setIsOpenPreset] = useState(false);
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+
+  const applyPreset = (presetType: string) => {
+    setPreset(presetType);
+    if (presetType === 'custom') {
+      setCustomSeats([]);
+      return;
+    }
+
+    let newRows = 12;
+    let newCols = 4;
+    let newAisle = 2;
+
+    if (presetType === 'expressway') {
+      newRows = 12;
+      newCols = 4;
+      newAisle = 2;
+    } else if (presetType === 'semiluxury') {
+      newRows = 12;
+      newCols = 5;
+      newAisle = 2;
+    } else if (presetType === 'rosa') {
+      newRows = 10;
+      newCols = 3;
+      newAisle = 2;
+    }
+
+    setRows(newRows);
+    setColumns(newCols);
+    setAisleAfter(newAisle);
+
+    const newSeats = [];
+    const gridColumnsCount = newAisle > 0 ? newCols + 1 : newCols;
+    for (let r = 1; r <= newRows; r++) {
+      for (let c = 0; c < gridColumnsCount; c++) {
+        if (newAisle > 0 && c === newAisle && r < newRows) {
+          continue; // Skip aisle except for last row
+        }
+        const colLetter = String.fromCharCode(65 + c);
+        newSeats.push({ row: r, col: c, label: `${colLetter}${r}` });
+      }
+    }
+    setCustomSeats(newSeats);
+  };
+
+  useEffect(() => {
+    if (showAddModal && !editingVehicleId) {
+      setName('');
+      setReg('');
+      setAmenities(['AC', 'WiFi']);
+      setIsOpenPreset(false);
+      applyPreset('expressway');
+    }
+  }, [showAddModal, editingVehicleId]);
+
+  // Sync total seat count state with actual custom layout length
+  useEffect(() => {
+    setSeats(customSeats.length);
+  }, [customSeats]);
 
   const fetchFleet = () => {
     if (!token) return;
@@ -38,29 +118,59 @@ export default function MyFleetPage() {
     fetchFleet();
   }, [token]);
 
+  const handleEditClick = (v: VehicleRecord) => {
+    setEditingVehicleId(v.id);
+    setName(v.name);
+    setReg(v.registration_number);
+    setSeats(v.total_seats);
+    
+    const layout = (v as any).seat_layout || {};
+    setRows(layout.rows || 10);
+    setColumns(layout.columns || 4);
+    setAisleAfter(layout.aisle_after_column ?? 2);
+    setCustomSeats(layout.seats || []);
+    setAmenities(v.amenities || []);
+    setPreset('custom');
+    setShowAddModal(true);
+  };
+
   const handleAddBus = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
     setError('');
     setSubmitting(true);
 
+    const vehicleData = {
+      name,
+      registration_number: reg,
+      type: 'bus',
+      seat_layout: { 
+        rows: Number(rows), 
+        columns: Number(columns), 
+        aisle_after_column: Number(aisleAfter),
+        seats: customSeats 
+      },
+      total_seats: Number(seats),
+      amenities,
+      document_urls: []
+    };
+
     try {
-      await createVehicle(token, {
-        name,
-        registration_number: reg,
-        type: 'bus',
-        seat_layout: { rows: Math.ceil(seats / 4), columns: 4, aisle_after_column: 2 },
-        total_seats: Number(seats),
-        amenities,
-        document_urls: []
-      });
+      if (editingVehicleId) {
+        await updateVehicle(token, editingVehicleId, vehicleData);
+      } else {
+        await createVehicle(token, vehicleData);
+      }
       setShowAddModal(false);
+      setEditingVehicleId(null);
       setName('');
       setReg('');
       setSeats(40);
+      setColumns(4);
+      setAisleAfter(2);
       fetchFleet();
     } catch (err: any) {
-      setError(err.message || 'Failed to register bus');
+      setError(err.message || (editingVehicleId ? 'Failed to update bus' : 'Failed to register bus'));
     } finally {
       setSubmitting(false);
     }
@@ -84,12 +194,12 @@ export default function MyFleetPage() {
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'between', alignItems: 'center' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">My Fleet Directory</h1>
           <p className="page-subtitle">Add, inspect, and manage luxury passenger transport buses linked to your company.</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px' }}>
+        <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', width: 'auto' }}>
           <Plus size={16} /> Add Bus
         </button>
       </div>
@@ -101,7 +211,7 @@ export default function MyFleetPage() {
           <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>
             <Bus size={48} style={{ marginBottom: '16px', color: 'rgba(255,255,255,0.1)' }} />
             <div>No vehicles registered under your company yet.</div>
-            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '16px' }}>Register First Bus</button>
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '16px', width: 'auto' }}>Register First Bus</button>
           </div>
         ) : (
           <table className="custom-table">
@@ -128,7 +238,8 @@ export default function MyFleetPage() {
                   <td>
                     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       {v.amenities.map(ame => (
-                        <span key={ame} style={{ fontSize: '10px', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
+                        <span key={ame} style={{ fontSize: '11px', background: 'rgba(10, 37, 64, 0.06)', padding: '4px 8px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: 'var(--text-main)' }}>
+                          {getAmenityIcon(ame, 12)}
                           {ame}
                         </span>
                       ))}
@@ -145,10 +256,94 @@ export default function MyFleetPage() {
                       </span>
                     )}
                   </td>
-                  <td>
-                    <button onClick={() => handleDeleteBus(v.id)} className="btn-danger" style={{ padding: '6px 12px', background: 'transparent', border: 'none', color: '#ef4444' }}>
-                      <Trash2 size={16} />
+                  <td style={{ position: 'relative' }}>
+                    <button
+                      className="btn-action"
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: activeActionMenuId === v.id ? 'rgba(10,37,64,0.1)' : 'rgba(0,0,0,0.03)',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        color: 'var(--text-main)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => setActiveActionMenuId(activeActionMenuId === v.id ? null : v.id)}
+                    >
+                      <Settings size={15} style={{ marginRight: '4px' }} /> Actions
                     </button>
+                    
+                    {activeActionMenuId === v.id && (
+                      <>
+                        <div
+                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                          onClick={() => setActiveActionMenuId(null)}
+                        />
+                        
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: '100%',
+                            marginTop: '4px',
+                            background: 'white',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                            zIndex: 999,
+                            minWidth: '130px',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: 'var(--text-main)',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onClick={() => {
+                              handleEditClick(v);
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            Edit Layout
+                          </div>
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: '#ef4444',
+                              borderTop: '1px solid rgba(0,0,0,0.04)',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onClick={() => {
+                              handleDeleteBus(v.id);
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            Remove Bus
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -158,59 +353,360 @@ export default function MyFleetPage() {
       </div>
 
       {showAddModal && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="table-card" style={{ width: '450px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'white' }}>Register New Bus</h3>
-            {error && <div style={{ color: '#ef4444', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+          <div className="table-card" style={{ width: '960px', maxWidth: '95vw', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.08)', padding: '28px', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Bus style={{ color: '#e65100' }} /> {editingVehicleId ? 'Edit Bus & Design Layout' : 'Register New Bus & Design Layout'}
+            </h3>
+            {error && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '13px', background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{error}</div>}
             
-            <form onSubmit={handleAddBus}>
-              <div className="form-group">
-                <label className="form-label">Bus Model Name</label>
-                <input type="text" className="form-input" placeholder="e.g. Lanka Express Super VIP" value={name} onChange={(e) => setName(e.target.value)} required />
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Registration Number</label>
-                <input type="text" className="form-input" placeholder="e.g. WP-ND-9999" value={reg} onChange={(e) => setReg(e.target.value)} required />
-              </div>
-              
-              <div className="form-group">
-                <label className="form-label">Total Seat Count</label>
-                <input type="number" className="form-input" min="10" max="60" value={seats} onChange={(e) => setSeats(Number(e.target.value))} required />
-              </div>
+            <form onSubmit={handleAddBus} style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '28px' }}>
+              {/* Left Panel: Inputs */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Bus Model Name</label>
+                  <input type="text" className="form-input" placeholder="e.g. Lanka Express Super VIP" value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
+                
+                <div className="form-group">
+                  <label className="form-label">Registration Number</label>
+                  <input type="text" className="form-input" placeholder="e.g. WP-ND-9999" value={reg} onChange={(e) => setReg(e.target.value)} required />
+                </div>
 
-              <div className="form-group">
-                <label className="form-label">Amenities</label>
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '6px' }}>
-                  {['AC', 'WiFi', 'Charging Ports', 'Reclining Seats'].map(ame => {
-                    const active = amenities.includes(ame);
-                    return (
-                      <button
-                        type="button"
-                        key={ame}
-                        onClick={() => toggleAmenity(ame)}
-                        style={{
-                          background: active ? '#e65100' : 'rgba(255,255,255,0.05)',
-                          color: 'white',
-                          border: 'none',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        {ame}
-                      </button>
-                    );
-                  })}
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="form-label">Grid Rows</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      min="3"
+                      max="15"
+                      value={rows}
+                      onChange={(e) => {
+                        const newRows = Math.max(3, Math.min(15, Number(e.target.value)));
+                        setRows(newRows);
+                        // Filter out seats that are beyond the new rows limit
+                        setCustomSeats(prev => prev.filter(s => s.row <= newRows));
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Total Seats (Read-only)</label>
+                    <input type="text" className="form-input" style={{ background: 'rgba(255,255,255,0.02)', cursor: 'not-allowed', color: '#e65100', fontWeight: 'bold' }} value={`${seats} Seats`} readOnly />
+                  </div>
+                </div>
+                
+                <div className="form-group" style={{ display: 'flex', gap: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Seat Columns</label>
+                    <CustomSelect
+                      options={[2, 3, 4, 5].map(c => ({ value: c, label: `${c} Columns` }))}
+                      value={columns}
+                      onChange={(val) => {
+                        const cols = Number(val);
+                        setColumns(cols);
+                        if (aisleAfter >= cols) {
+                          setAisleAfter(cols - 1);
+                        }
+                        // Filter out seats beyond columns limit
+                        setCustomSeats(prev => prev.filter(s => s.col < cols));
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label">Aisle Position</label>
+                    <CustomSelect
+                      options={[
+                        { value: 0, label: 'No Aisle' },
+                        ...Array.from({ length: columns - 1 }, (_, i) => i + 1).map(pos => ({
+                          value: pos,
+                          label: `After Col ${pos}`
+                        }))
+                      ]}
+                      value={aisleAfter}
+                      onChange={(val) => setAisleAfter(Number(val))}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Amenities</label>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                    {['AC', 'WiFi', 'Charging Ports', 'Reclining Seats', 'HD TV Screens', 'Restrooms', 'Luggage Space'].map(ame => {
+                      const active = amenities.includes(ame);
+                      return (
+                        <button
+                          type="button"
+                          key={ame}
+                          onClick={() => toggleAmenity(ame)}
+                          style={{
+                            background: active ? '#e65100' : 'rgba(255,255,255,0.04)',
+                            color: active ? 'white' : 'rgba(255,255,255,0.6)',
+                            border: active ? '1px solid #e65100' : '1px solid rgba(255,255,255,0.1)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                        >
+                          {getAmenityIcon(ame, 14)}
+                          {ame}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', marginTop: 'auto', paddingTop: '20px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => { setShowAddModal(false); setEditingVehicleId(null); }} style={{ flex: 1, padding: '12px 16px' }}>Cancel</button>
+                  <button type="submit" className="btn-primary" disabled={submitting || seats === 0} style={{ flex: 1.5, padding: '12px 20px' }}>
+                    {submitting ? (editingVehicleId ? 'Saving...' : 'Registering...') : (editingVehicleId ? 'Save Changes' : 'Register Bus')}
+                  </button>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)} style={{ padding: '8px 16px' }}>Cancel</button>
-                <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: '8px 20px' }}>
-                  {submitting ? 'Registering...' : 'Register Bus'}
-                </button>
+              {/* Right Panel: Interactive Layout Simulator */}
+              <div style={{ display: 'flex', flexDirection: 'column', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div>
+                    <h4 style={{ margin: 0, color: 'white', fontSize: '15px', fontWeight: 600 }}>Visual Cabin Layout Builder</h4>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
+                      Drag the template to grid cells, or click cells to toggle seats.
+                    </p>
+                  </div>
+                  <div style={{ padding: '6px 12px', background: 'rgba(230, 81, 0, 0.1)', border: '1px solid rgba(230, 81, 0, 0.2)', borderRadius: '8px', color: '#ff7043', fontSize: '12px', fontWeight: 600 }}>
+                    Seats placed: {seats}
+                  </div>
+                </div>
+
+                {/* Predefined Templates */}
+                <div className="form-group" style={{ marginBottom: '16px', position: 'relative' }}>
+                  <label className="form-label">Load Layout Template</label>
+                  
+                  {/* Selector Box */}
+                  <div
+                    onClick={() => setIsOpenPreset(!isOpenPreset)}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      background: '#1e293b',
+                      border: isOpenPreset ? '1.5px solid #e65100' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      fontSize: '15px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      userSelect: 'none',
+                      boxShadow: isOpenPreset ? '0 0 12px rgba(230, 81, 0, 0.25)' : 'none',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <span>
+                      {preset === 'expressway' && 'Expressway Coach (2x2 Layout - 49 Seats)'}
+                      {preset === 'semiluxury' && 'Ashok Leyland Semi-Luxury (2x3 Layout - 61 Seats)'}
+                      {preset === 'rosa' && 'Toyota Rosa Mini Bus (2x1 Layout - 31 Seats)'}
+                      {preset === 'custom' && 'Blank Custom Layout (Start Empty)'}
+                    </span>
+                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', transition: 'transform 0.2s', transform: isOpenPreset ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                      ▼
+                    </span>
+                  </div>
+
+                  {/* Dropdown Options List */}
+                  {isOpenPreset && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        right: 0,
+                        marginTop: '6px',
+                        background: '#0b0f19',
+                        border: '1px solid rgba(255,255,255,0.12)',
+                        borderRadius: '10px',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+                        zIndex: 1010,
+                        overflow: 'hidden'
+                      }}
+                    >
+                      {[
+                        { value: 'expressway', label: 'Expressway Coach (2x2 Layout - 49 Seats)' },
+                        { value: 'semiluxury', label: 'Ashok Leyland Semi-Luxury (2x3 Layout - 61 Seats)' },
+                        { value: 'rosa', label: 'Toyota Rosa Mini Bus (2x1 Layout - 31 Seats)' },
+                        { value: 'custom', label: 'Blank Custom Layout (Start Empty)' }
+                      ].map(opt => {
+                        const isSelected = preset === opt.value;
+                        return (
+                          <div
+                            key={opt.value}
+                            onClick={() => {
+                              applyPreset(opt.value);
+                              setIsOpenPreset(false);
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isSelected) {
+                                e.currentTarget.style.background = 'rgba(230, 81, 0, 0.08)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isSelected) {
+                                e.currentTarget.style.background = 'transparent';
+                              }
+                            }}
+                            style={{
+                              padding: '12px 16px',
+                              background: isSelected ? '#e65100' : 'transparent',
+                              color: isSelected ? 'white' : 'rgba(255,255,255,0.8)',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: isSelected ? 600 : 400,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            {opt.label}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Toolbox */}
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', marginBottom: '16px' }}>
+                  <div
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('drag-type', 'new-seat');
+                    }}
+                    style={{
+                      padding: '8px 14px',
+                      background: '#e65100',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontWeight: 700,
+                      cursor: 'grab',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '12px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+                    }}
+                  >
+                    <Bus size={14} /> Drag Standard Seat
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
+                    💡 Tip: Dragging existing seats lets you rearrange them.
+                  </div>
+                </div>
+
+                {/* Bus Body Simulator */}
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', padding: '20px 40px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {/* Bus Front Cap (Steering wheel and Driver section) */}
+                  <div style={{ width: '100%', maxWidth: '320px', height: '50px', background: 'rgba(255,255,255,0.03)', border: '2px solid rgba(255,255,255,0.08)', borderBottom: 'none', borderRadius: '40px 40px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 28px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600 }}>
+                      <span style={{ width: '8px', height: '8px', background: '#22c55e', borderRadius: '50%' }}></span> Front / Driver
+                    </div>
+                    {/* Visual steering wheel */}
+                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: '4px double rgba(255,255,255,0.3)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ width: '4px', height: '4px', background: 'rgba(255,255,255,0.3)', borderRadius: '50%' }}></div>
+                    </div>
+                  </div>
+
+                  {/* Grid Canvas */}
+                  {(() => {
+                    const gridColumnsCount = aisleAfter > 0 ? columns + 1 : columns;
+                    return (
+                      <div
+                        style={{
+                          width: '100%',
+                          maxWidth: '320px',
+                          display: 'grid',
+                          gridTemplateColumns: `repeat(${gridColumnsCount}, 1fr)`,
+                          gap: '8px',
+                          padding: '16px',
+                          background: '#090d16',
+                          border: '2px solid rgba(255,255,255,0.08)',
+                          borderRadius: '0 0 20px 20px',
+                          minHeight: '280px'
+                        }}
+                      >
+                        {Array.from({ length: rows }).map((_, rIdx) => {
+                          const r = rIdx + 1;
+                          return Array.from({ length: gridColumnsCount }).map((_, cIdx) => {
+                            const isAisle = aisleAfter > 0 && cIdx === aisleAfter;
+                            const seat = customSeats.find(s => s.row === r && s.col === cIdx);
+                            
+                            return (
+                              <div
+                                key={`cell-${r}-${cIdx}`}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  const dragType = e.dataTransfer.getData('drag-type');
+                                  if (dragType === 'new-seat') {
+                                    if (!seat) {
+                                      const colLetter = String.fromCharCode(65 + cIdx);
+                                      setCustomSeats(prev => [...prev, { row: r, col: cIdx, label: `${colLetter}${r}` }]);
+                                    }
+                                  } else if (dragType === 'move-seat') {
+                                    const fromRow = Number(e.dataTransfer.getData('from-row'));
+                                    const fromCol = Number(e.dataTransfer.getData('from-col'));
+                                    if (fromRow !== r || fromCol !== cIdx) {
+                                      setCustomSeats(prev => {
+                                        const filtered = prev.filter(s => !(s.row === fromRow && s.col === fromCol));
+                                        const colLetter = String.fromCharCode(65 + cIdx);
+                                        return [...filtered, { row: r, col: cIdx, label: `${colLetter}${r}` }];
+                                      });
+                                    }
+                                  }
+                                }}
+                                onClick={() => {
+                                  if (seat) {
+                                    setCustomSeats(prev => prev.filter(s => !(s.row === r && s.col === cIdx)));
+                                  } else {
+                                    const colLetter = String.fromCharCode(65 + cIdx);
+                                    setCustomSeats(prev => [...prev, { row: r, col: cIdx, label: `${colLetter}${r}` }]);
+                                  }
+                                }}
+                                style={{
+                                  height: '36px',
+                                  border: seat ? 'none' : isAisle ? '1px dashed rgba(255,255,255,0.05)' : '1px dashed rgba(255,255,255,0.12)',
+                                  borderRadius: '6px',
+                                  background: seat ? '#e65100' : isAisle ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                  boxShadow: seat ? 'inset 0 -2px 0 rgba(0,0,0,0.2), 0 2px 4px rgba(230,81,0,0.15)' : 'none',
+                                  display: 'flex',
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  cursor: 'pointer',
+                                  color: seat ? 'white' : isAisle ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.15)',
+                                  fontWeight: 700,
+                                  fontSize: '10px',
+                                  transition: 'all 0.15s ease',
+                                  userSelect: 'none'
+                                }}
+                                draggable={!!seat}
+                                onDragStart={(e) => {
+                                  e.dataTransfer.setData('drag-type', 'move-seat');
+                                  e.dataTransfer.setData('from-row', String(r));
+                                  e.dataTransfer.setData('from-col', String(cIdx));
+                                }}
+                              >
+                                {seat ? seat.label : isAisle ? '|' : '+'}
+                              </div>
+                            );
+                          });
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </form>
           </div>

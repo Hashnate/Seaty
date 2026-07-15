@@ -190,6 +190,27 @@ CREATE TABLE public.vehicle_locations (
 ALTER TABLE public.vehicle_locations ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
+-- 11. Notifications Table
+-- ==========================================
+CREATE TABLE public.notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own notifications" ON public.notifications
+    FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own notifications" ON public.notifications
+    FOR UPDATE USING (auth.uid() = user_id);
+
+-- ==========================================
 -- Indexes for performance
 -- ==========================================
 CREATE INDEX idx_users_company ON public.users(company_id);

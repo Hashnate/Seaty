@@ -26,6 +26,43 @@ def _calculate_platform_fee(db: Session, subtotal: float) -> float:
     return round((subtotal * pct / 100) + fixed, 2)
 
 
+async def _send_booking_notifications(db: Session, booking: models.Booking):
+    try:
+        from app.routes.notifications import create_and_send_notification
+        trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
+        if trip:
+            route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
+            vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+            passenger = db.query(models.User).filter(models.User.id == booking.passenger_id).first()
+            
+            origin = route.origin if route else "Origin"
+            destination = route.destination if route else "Destination"
+            seats_str = ", ".join(booking.selected_seats)
+            
+            # 1. Notify Passenger
+            await create_and_send_notification(
+                db=db,
+                user_id=booking.passenger_id,
+                title="Booking Confirmed!",
+                message=f"Your seat(s) {seats_str} on trip {vehicle.registration_number if vehicle else ''} ({origin} ➔ {destination}) are confirmed!",
+                noti_type="booking"
+            )
+            
+            # 2. Notify Owner
+            if vehicle and vehicle.owner_id:
+                pass_name = passenger.full_name if passenger else "A passenger"
+                reg_num = vehicle.registration_number
+                await create_and_send_notification(
+                    db=db,
+                    user_id=vehicle.owner_id,
+                    title="New Booking Received",
+                    message=f"{pass_name} booked seat(s) {seats_str} on your vehicle {reg_num}.",
+                    noti_type="booking"
+                )
+    except Exception as noti_err:
+        print(f"Notification Error: {noti_err}")
+
+
 @router.post("/initiate", response_model=schemas.PaymentResponse, status_code=status.HTTP_201_CREATED)
 def initiate_payment(
     payload: schemas.PaymentInitiateRequest,
@@ -149,7 +186,7 @@ def get_payments_for_booking(
 
 
 @router.post("/sandbox/complete/{transaction_id}", response_model=schemas.PaymentResponse)
-def sandbox_complete_payment(
+async def sandbox_complete_payment(
     transaction_id: str,
     db: Session = Depends(get_db)
 ):
@@ -188,6 +225,9 @@ def sandbox_complete_payment(
             models.SeatHold.user_id == booking.passenger_id,
             models.SeatHold.is_released == False
         ).update({"is_released": True})
+
+        # Trigger notifications
+        await _send_booking_notifications(db, booking)
 
     db.commit()
     db.refresh(payment)
@@ -235,7 +275,7 @@ def sandbox_fail_payment(
 
 
 @router.post("/webhook", status_code=status.HTTP_200_OK)
-def payment_webhook(
+async def payment_webhook(
     payload: schemas.PaymentWebhookPayload,
     db: Session = Depends(get_db)
 ):
@@ -264,6 +304,9 @@ def payment_webhook(
                 models.SeatHold.user_id == booking.passenger_id,
                 models.SeatHold.is_released == False
             ).update({"is_released": True})
+
+            # Trigger notifications
+            await _send_booking_notifications(db, booking)
 
     elif payload.status == "failed":
         payment.status = "failed"

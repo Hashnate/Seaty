@@ -72,7 +72,7 @@ export default function App() {
                     <Route 
                       path="/fleet" 
                       element={
-                        <RoleProtectedRoute allowed={['owner']}>
+                        <RoleProtectedRoute allowed={['owner', 'admin']}>
                           <MyFleetPage />
                         </RoleProtectedRoute>
                       } 
@@ -80,7 +80,7 @@ export default function App() {
                     <Route 
                       path="/trips" 
                       element={
-                        <RoleProtectedRoute allowed={['owner']}>
+                        <RoleProtectedRoute allowed={['owner', 'admin']}>
                           <MyTripsPage />
                         </RoleProtectedRoute>
                       } 
@@ -88,7 +88,7 @@ export default function App() {
                     <Route 
                       path="/contractors" 
                       element={
-                        <RoleProtectedRoute allowed={['owner']}>
+                        <RoleProtectedRoute allowed={['owner', 'admin']}>
                           <ContractorsPage />
                         </RoleProtectedRoute>
                       } 
