@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getVehicles, approveVehicle, rejectVehicle } from '../api/client';
-import { CheckCircle, FileText } from 'lucide-react';
+import { CheckCircle, FileText, Settings } from 'lucide-react';
 
 interface Vehicle {
   id: string;
@@ -19,6 +19,7 @@ export default function ApprovalsPage() {
   const { token } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
 
   const fetchVehicles = async () => {
     if (!token) return;
@@ -112,9 +113,94 @@ export default function ApprovalsPage() {
                       {v.document_urls.length === 0 && <span style={{ fontSize: '12px', color: '#9ca3af' }}>No docs</span>}
                     </div>
                   </td>
-                  <td>
-                    <button className="btn-action btn-action-success" onClick={() => handleApprove(v.id)}>Approve</button>
-                    <button className="btn-action btn-action-danger" onClick={() => handleReject(v.id)}>Reject</button>
+                  <td style={{ position: 'relative' }}>
+                    <button
+                      className="btn-action"
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: activeActionMenuId === v.id ? 'rgba(10,37,64,0.1)' : 'rgba(0,0,0,0.03)',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        color: 'var(--text-main)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => setActiveActionMenuId(activeActionMenuId === v.id ? null : v.id)}
+                    >
+                      <Settings size={15} style={{ marginRight: '4px' }} /> Actions
+                    </button>
+                    
+                    {activeActionMenuId === v.id && (
+                      <>
+                        <div
+                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                          onClick={() => setActiveActionMenuId(null)}
+                        />
+                        
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: '100%',
+                            marginTop: '4px',
+                            background: 'white',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                            zIndex: 999,
+                            minWidth: '130px',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: '#10b981',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onClick={() => {
+                              handleApprove(v.id);
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#ecfdf5'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            Approve Vehicle
+                          </div>
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: '#ef4444',
+                              borderTop: '1px solid rgba(0,0,0,0.04)',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onClick={() => {
+                              handleReject(v.id);
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            Reject Vehicle
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

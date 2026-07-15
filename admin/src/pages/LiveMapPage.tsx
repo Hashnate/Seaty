@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bus } from 'lucide-react';
 
 // Simulated live bus data (same as original — will be replaced with real WebSocket data in production)

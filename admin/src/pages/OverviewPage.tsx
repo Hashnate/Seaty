@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getDashboardStats, getBookings } from '../api/client';
 import { DollarSign, Bus, Users, Clock, TrendingUp, CheckCircle } from 'lucide-react';

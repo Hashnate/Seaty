@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = 'http://127.0.0.1:8000/api/v1';
 
 interface RequestOptions {
   method?: string;
@@ -140,8 +140,9 @@ export async function getBooking(token: string, bookingId: string) {
 // ==========================================
 // Trips
 // ==========================================
-export async function getTrips(token: string) {
-  return request('/trips', { token });
+export async function getTrips(token: string, date?: string) {
+  const query = date ? `?date=${date}` : '';
+  return request(`/trips${query}`, { token });
 }
 
 // ==========================================
@@ -185,6 +186,10 @@ export async function deleteVehicle(token: string, vehicleId: string) {
   return request(`/vehicles/${vehicleId}`, { method: 'DELETE', token });
 }
 
+export async function updateVehicle(token: string, vehicleId: string, data: Record<string, unknown>) {
+  return request(`/vehicles/${vehicleId}`, { method: 'PUT', body: data, token });
+}
+
 // ==========================================
 // Trip Management (Owner/Admin)
 // ==========================================
@@ -194,6 +199,10 @@ export async function createTrip(token: string, data: Record<string, unknown>) {
 
 export async function deleteTrip(token: string, tripId: string) {
   return request(`/trips/${tripId}`, { method: 'DELETE', token });
+}
+
+export async function updateTrip(token: string, tripId: string, data: Record<string, unknown>) {
+  return request(`/trips/${tripId}`, { method: 'PUT', body: data, token });
 }
 
 // ==========================================
@@ -210,3 +219,57 @@ export async function createContractor(token: string, data: Record<string, unkno
 export async function deleteContractor(token: string, contractorId: string) {
   return request(`/contractors/${contractorId}`, { method: 'DELETE', token });
 }
+
+// ==========================================
+// Notifications
+// ==========================================
+export async function getNotifications(token: string) {
+  return request('/notifications', { token });
+}
+
+export async function markNotificationRead(token: string, id: string) {
+  return request(`/notifications/${id}/read`, { method: 'POST', token });
+}
+
+export async function markAllNotificationsRead(token: string) {
+  return request('/notifications/read-all', { method: 'POST', token });
+}
+
+// ==========================================
+// Recurring Trip Schedules (Owner/Admin)
+// ==========================================
+export async function getSchedules(token: string) {
+  return request('/schedules', { token });
+}
+
+export async function createSchedule(token: string, data: Record<string, unknown>) {
+  return request('/schedules', { method: 'POST', body: data, token });
+}
+
+export async function updateSchedule(token: string, scheduleId: string, data: Record<string, unknown>) {
+  return request(`/schedules/${scheduleId}`, { method: 'PUT', body: data, token });
+}
+
+export async function deleteSchedule(token: string, scheduleId: string) {
+  return request(`/schedules/${scheduleId}`, { method: 'DELETE', token });
+}
+
+export async function toggleSchedule(token: string, scheduleId: string) {
+  return request(`/schedules/${scheduleId}/toggle`, { method: 'PATCH', token });
+}
+
+// ==========================================
+// Bus Overrides
+// ==========================================
+export async function getScheduleOverrides(token: string, scheduleId: string) {
+  return request(`/schedules/${scheduleId}/overrides`, { token });
+}
+
+export async function createScheduleOverride(token: string, scheduleId: string, data: Record<string, unknown>) {
+  return request(`/schedules/${scheduleId}/overrides`, { method: 'POST', body: data, token });
+}
+
+export async function deleteScheduleOverride(token: string, overrideId: string) {
+  return request(`/schedules/overrides/${overrideId}`, { method: 'DELETE', token });
+}
+

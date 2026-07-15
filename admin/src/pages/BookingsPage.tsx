@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import CustomSelect from '../components/CustomSelect';
 import { getBookings } from '../api/client';
 import { Search } from 'lucide-react';
 
@@ -85,17 +86,17 @@ export default function BookingsPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <select
+          <CustomSelect
+            options={[
+              { value: 'all', label: 'All Booking Statuses' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'confirmed', label: 'Confirmed' },
+              { value: 'cancelled', label: 'Cancelled' }
+            ]}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-            className="form-input"
-            style={{ width: '180px', backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
-          >
-            <option value="all">All Booking Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+            onChange={(val) => setStatusFilter(val as any)}
+            style={{ width: '220px' }}
+          />
         </div>
 
         {loading ? (
