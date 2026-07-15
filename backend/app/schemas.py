@@ -163,6 +163,7 @@ class TripResponse(BaseModel):
     id: UUID
     vehicle_id: UUID
     route_id: UUID
+    schedule_id: Optional[UUID] = None
     departure_time: datetime.datetime
     arrival_time: datetime.datetime
     price_per_seat: float
@@ -176,6 +177,73 @@ class TripResponse(BaseModel):
     class Config:
         from_attributes = True
 
+# ==========================================
+# Trip Schedule Schemas
+# ==========================================
+class TripScheduleCreate(BaseModel):
+    vehicle_id: UUID
+    route_id: UUID
+    departure_time: datetime.time
+    arrival_time: datetime.time
+    price_per_seat: float
+    schedule_type: str = Field(default="daily", description="daily, weekdays, weekends, custom")
+    custom_days: Optional[List[int]] = []
+    effective_from: datetime.date
+    effective_until: Optional[datetime.date] = None
+
+class TripScheduleUpdate(BaseModel):
+    vehicle_id: Optional[UUID] = None
+    route_id: Optional[UUID] = None
+    departure_time: Optional[datetime.time] = None
+    arrival_time: Optional[datetime.time] = None
+    price_per_seat: Optional[float] = None
+    schedule_type: Optional[str] = None
+    custom_days: Optional[List[int]] = None
+    effective_from: Optional[datetime.date] = None
+    effective_until: Optional[datetime.date] = None
+    is_active: Optional[bool] = None
+
+class TripScheduleResponse(BaseModel):
+    id: UUID
+    vehicle_id: UUID
+    route_id: UUID
+    departure_time: datetime.time
+    arrival_time: datetime.time
+    price_per_seat: float
+    schedule_type: str
+    custom_days: List[int]
+    effective_from: datetime.date
+    effective_until: Optional[datetime.date] = None
+    is_active: bool
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+    vehicle: Optional[VehicleResponse] = None
+    route: Optional[RouteResponse] = None
+
+    class Config:
+        from_attributes = True
+
+# ==========================================
+# Bus Override Schemas
+# ==========================================
+class BusOverrideCreate(BaseModel):
+    override_date: datetime.date
+    replacement_vehicle_id: UUID
+    reason: Optional[str] = None
+
+class BusOverrideResponse(BaseModel):
+    id: UUID
+    schedule_id: UUID
+    override_date: datetime.date
+    replacement_vehicle_id: UUID
+    reason: Optional[str] = None
+    created_at: datetime.datetime
+    replacement_vehicle: Optional[VehicleResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
 class TripSeatsResponse(BaseModel):
     """Response showing seat availability for a trip"""
     trip_id: UUID
@@ -183,6 +251,7 @@ class TripSeatsResponse(BaseModel):
     booked_seats: List[str]
     held_seats: List[str]
     available_seats: List[str]
+    seat_genders: Optional[dict] = None
 
 # ==========================================
 # Booking Schemas
@@ -333,3 +402,19 @@ class PhoneRegisterRequest(BaseModel):
     phone_number: str
     full_name: str
     role: str
+
+
+# ==========================================
+# Notification Schemas
+# ==========================================
+class NotificationResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    title: str
+    message: str
+    type: str
+    is_read: bool
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True

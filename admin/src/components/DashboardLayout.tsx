@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import NotificationDrawer from './NotificationDrawer';
 import {
   Activity,
   CheckCircle,
@@ -38,14 +39,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     navigate('/login');
   };
 
-  const userName = (user as { full_name?: string })?.full_name || 'Sys Admin';
   const userRole = (user as { role?: string })?.role || 'admin';
 
   const visibleNavItems = NAV_ITEMS.filter(item => {
     if (userRole === 'owner') {
       return ['/', '/fleet', '/trips', '/contractors', '/bookings', '/map'].includes(item.path);
     }
-    return ['/', '/approvals', '/companies', '/routes', '/map', '/bookings', '/settings'].includes(item.path);
+    // Admins can see all views
+    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/contractors', '/map', '/bookings', '/settings'].includes(item.path);
   });
 
   return (
@@ -75,21 +76,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </ul>
         <div className="sidebar-footer">
-          <div className="user-profile-badge" style={{ marginBottom: '20px' }}>
-            <div className="user-avatar">{userName.substring(0, 2).toUpperCase()}</div>
-            <div className="user-info">
-              <span className="user-name">{userName}</span>
-              <span className="user-role">{userRole}</span>
-            </div>
-          </div>
           <div className="sidebar-item" onClick={handleLogout} style={{ color: '#ef4444' }}>
             <LogOut size={18} />
             Sign Out
           </div>
         </div>
       </aside>
-      <main className="main-content">
-        {children}
+      <main className="main-content" style={{ display: 'flex', flexDirection: 'column' }}>
+        <header className="admin-navbar" style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 24px',
+          background: 'var(--bg-card)',
+          borderBottom: '1px solid var(--border-color)',
+          borderRadius: '12px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+        }}>
+          <div className="navbar-left">
+            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Console Control / </span>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dark)' }}>
+              {location.pathname === '/' ? 'Dashboard Overview' : visibleNavItems.find(item => item.path === location.pathname)?.label || 'Console'}
+            </span>
+          </div>
+
+          <div className="navbar-right" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <NotificationDrawer />
+          </div>
+        </header>
+        <div style={{ flexGrow: 1 }}>
+          {children}
+        </div>
       </main>
     </div>
   );

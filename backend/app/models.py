@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Interval, Text
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Numeric, Interval, Text, Time, Date
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import relationship
 import datetime
@@ -86,12 +86,52 @@ class Route(Base):
     trips = relationship("Trip", back_populates="route")
 
 
+class TripSchedule(Base):
+    __tablename__ = "trip_schedules"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False)
+    route_id = Column(UUID(as_uuid=True), ForeignKey("routes.id", ondelete="CASCADE"), nullable=False)
+    departure_time = Column(Time, nullable=False)
+    arrival_time = Column(Time, nullable=False)
+    price_per_seat = Column(Numeric(10, 2), nullable=False)
+    schedule_type = Column(String, nullable=False, default="daily")  # 'daily', 'weekdays', 'weekends', 'custom'
+    custom_days = Column(ARRAY(Integer), default=[])  # 0=Monday, 6=Sunday
+    effective_from = Column(Date, nullable=False, default=lambda: datetime.date.today())
+    effective_until = Column(Date, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    vehicle = relationship("Vehicle")
+    route = relationship("Route")
+    trips = relationship("Trip", back_populates="schedule", cascade="all, delete-orphan")
+    overrides = relationship("BusOverride", back_populates="schedule", cascade="all, delete-orphan")
+
+
+class BusOverride(Base):
+    __tablename__ = "bus_overrides"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    schedule_id = Column(UUID(as_uuid=True), ForeignKey("trip_schedules.id", ondelete="CASCADE"), nullable=False)
+    override_date = Column(Date, nullable=False)
+    replacement_vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False)
+    reason = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    schedule = relationship("TripSchedule", back_populates="overrides")
+    replacement_vehicle = relationship("Vehicle")
+
+
 class Trip(Base):
     __tablename__ = "trips"
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True)
     vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False)
     route_id = Column(UUID(as_uuid=True), ForeignKey("routes.id", ondelete="CASCADE"), nullable=False)
+    schedule_id = Column(UUID(as_uuid=True), ForeignKey("trip_schedules.id", ondelete="SET NULL"), nullable=True)
     departure_time = Column(DateTime(timezone=True), nullable=False)
     arrival_time = Column(DateTime(timezone=True), nullable=False)
     price_per_seat = Column(Numeric(10, 2), nullable=False)
@@ -102,8 +142,10 @@ class Trip(Base):
     # Relationships
     vehicle = relationship("Vehicle", back_populates="trips")
     route = relationship("Route", back_populates="trips")
+    schedule = relationship("TripSchedule", back_populates="trips")
     bookings = relationship("Booking", back_populates="trip")
     seat_holds = relationship("SeatHold", back_populates="trip")
+
 
 
 class Booking(Base):
@@ -162,6 +204,21 @@ class SeatHold(Base):
     # Relationships
     trip = relationship("Trip", back_populates="seat_holds")
     user = relationship("User", back_populates="seat_holds")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    type = Column(String, nullable=False)  # 'booking', 'trip_update', 'verification', 'system'
+    is_read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="notifications")
 
 
 class PlatformSetting(Base):

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -39,6 +39,8 @@ class AppState extends ChangeNotifier {
       loadVehicles();
       loadBookings();
       loadProfile();
+      fetchNotifications();
+      startNotificationsListener();
     }
   }
 
@@ -119,6 +121,7 @@ class AppState extends ChangeNotifier {
   final List<String> _selectedSeats = [];
   List<String> _bookedSeats = [];
   List<String> _heldSeats = [];
+  Map<String, String> _seatGenders = {};
 
   // Tracking bus variables
   Map<String, dynamic>? _trackedBusLocation;
@@ -130,6 +133,11 @@ class AppState extends ChangeNotifier {
   bool _isStreamingGPS = false;
   StreamSubscription<Position>? _positionStreamSubscription;
 
+  // Notifications variables
+  WebSocketChannel? _notificationsChannel;
+  List<Map<String, dynamic>> _notifications = [];
+  bool _isNotiListenerConnected = false;
+
   // Getters
   String get role => _role;
   bool get isAuthenticated => _isAuthenticated;
@@ -140,9 +148,12 @@ class AppState extends ChangeNotifier {
   List<String> get selectedSeats => _selectedSeats;
   List<String> get bookedSeats => _bookedSeats;
   List<String> get heldSeats => _heldSeats;
+  Map<String, String> get seatGenders => _seatGenders;
   Map<String, dynamic>? get trackedBusLocation => _trackedBusLocation;
   bool get isTracking => _isTracking;
   bool get isStreamingGPS => _isStreamingGPS;
+  List<Map<String, dynamic>> get notifications => _notifications;
+  int get unreadNotificationsCount => _notifications.where((n) => n['is_read'] == false || n['is_read'] == 0).length;
 
   // Simulated registered users database
   final List<Map<String, String>> _registeredUsers = [
@@ -240,7 +251,135 @@ class AppState extends ChangeNotifier {
     loadTrips();
     loadBookings();
     loadProfile();
+    fetchNotifications();
+    startNotificationsListener();
     notifyListeners();
+  }
+
+  Future<void> fetchNotifications() async {
+    if (_token.isEmpty || _token.startsWith('simulated')) return;
+    try {
+      final response = await http.get(
+        Uri.parse('$apiBaseUrl/notifications'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(const Duration(seconds: 2));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        _notifications = List<Map<String, dynamic>>.from(data);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error fetching notifications: $e');
+    }
+  }
+
+  Future<void> markNotificationAsRead(String notificationId) async {
+    if (_token.isEmpty || _token.startsWith('simulated')) {
+      final notiIndex = _notifications.indexWhere((n) => n['id'] == notificationId);
+      if (notiIndex != -1) {
+        _notifications[notiIndex]['is_read'] = true;
+        notifyListeners();
+      }
+      return;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/notifications/$notificationId/read'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final notiIndex = _notifications.indexWhere((n) => n['id'] == notificationId);
+        if (notiIndex != -1) {
+          _notifications[notiIndex]['is_read'] = true;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error marking notification as read: $e');
+    }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    if (_token.isEmpty || _token.startsWith('simulated')) {
+      for (var n in _notifications) {
+        n['is_read'] = true;
+      }
+      notifyListeners();
+      return;
+    }
+    try {
+      final response = await http.post(
+        Uri.parse('$apiBaseUrl/notifications/read-all'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        for (var n in _notifications) {
+          n['is_read'] = true;
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error marking all notifications as read: $e');
+    }
+  }
+
+  void startNotificationsListener() {
+    stopNotificationsListener();
+    if (_token.isEmpty) return;
+    
+    _isNotiListenerConnected = true;
+    try {
+      final cleanWsBase = wsBaseUrl.endsWith('/ws')
+          ? wsBaseUrl.substring(0, wsBaseUrl.length - 3)
+          : wsBaseUrl;
+      final wsUrl = '$cleanWsBase/notifications/ws?token=$_token';
+      _notificationsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      
+      _notificationsChannel!.stream.listen((message) {
+        try {
+          final data = json.decode(message);
+          _notifications.insert(0, data);
+          notifyListeners();
+
+          final context = navigatorKey.currentContext;
+          if (context != null) {
+            SeatyNotifications.show(
+              context,
+              data['message'] ?? '',
+              isError: data['type'] == 'error' || data['type'] == 'failure',
+              isWarning: data['type'] == 'warning',
+            );
+          }
+        } catch (e) {
+          debugPrint('Error parsing notification message: $e');
+        }
+      }, onError: (err) {
+        debugPrint('Notification WS error: $err');
+      }, onDone: () {
+        _isNotiListenerConnected = false;
+      });
+    } catch (e) {
+      debugPrint('Notification WS connection failed: $e');
+      _isNotiListenerConnected = false;
+    }
+  }
+
+  void stopNotificationsListener() {
+    _notificationsChannel?.sink.close();
+    _notificationsChannel = null;
+    _isNotiListenerConnected = false;
   }
 
   Future<void> loadProfile() async {
@@ -314,8 +453,10 @@ class AppState extends ChangeNotifier {
     _selectedSeats.clear();
     _bookedSeats.clear();
     _heldSeats.clear();
+    _notifications.clear();
     stopTracking();
     stopStreamingGPS();
+    stopNotificationsListener();
     _saveSession();
     notifyListeners();
   }
@@ -366,6 +507,9 @@ class AppState extends ChangeNotifier {
             'price': double.tryParse(tripMap['price_per_seat'].toString()) ?? 1600.0,
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
+            'total_seats': vehicle['total_seats'] ?? 40,
+            'seat_layout': vehicle['seat_layout'],
+            'amenities': List<String>.from(vehicle['amenities'] ?? []),
           });
         }
         notifyListeners();
@@ -420,6 +564,7 @@ class AppState extends ChangeNotifier {
   Future<void> loadSeatAvailability(String tripId) async {
     _bookedSeats.clear();
     _heldSeats.clear();
+    _seatGenders.clear();
     notifyListeners();
 
     try {
@@ -431,6 +576,9 @@ class AppState extends ChangeNotifier {
         final data = json.decode(response.body);
         _bookedSeats = List<String>.from(data['booked_seats'] ?? []);
         _heldSeats = List<String>.from(data['held_seats'] ?? []);
+        if (data['seat_genders'] != null) {
+          _seatGenders = Map<String, String>.from(data['seat_genders']);
+        }
         notifyListeners();
       }
     } catch (e) {
@@ -621,7 +769,8 @@ class AppState extends ChangeNotifier {
       'departure': time,
       'price': price,
       'bus_name': v['name'],
-      'reg': v['reg']
+      'reg': v['reg'],
+      'amenities': List<String>.from(v['amenities'] ?? ['AC', 'WiFi', 'Charging Ports', 'Reclining Seats']),
     });
     notifyListeners();
   }
@@ -793,15 +942,76 @@ class AppState extends ChangeNotifier {
 }
 
 // =====================================================================
+// CUSTOM NOTIFICATION MANAGER (Toast / SnackBar Replacement)
+// =====================================================================
+class SeatyNotifications {
+  static void show(
+    BuildContext context, 
+    String message, {
+    bool isError = false, 
+    bool isWarning = false,
+    Duration duration = const Duration(seconds: 3),
+  }) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    
+    final Color bgColor = isError 
+        ? const Color(0xFFEF4444) // Soft Red
+        : isWarning 
+            ? const Color(0xFFF59E0B) // Amber/Orange
+            : const Color(0xFF10B981); // Emerald Green
+            
+    final IconData icon = isError 
+        ? Icons.error_outline_rounded 
+        : isWarning 
+            ? Icons.warning_amber_rounded 
+            : Icons.check_circle_outline_rounded;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  fontFamily: 'Inter',
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: bgColor,
+        behavior: SnackBarBehavior.floating,
+        elevation: 6,
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        duration: duration,
+      ),
+    );
+  }
+}
+
+// =====================================================================
 // 2. MAIN APPLICATION SETUP
 // =====================================================================
+late final SharedPreferences globalPrefs;
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+final appStateProvider = ChangeNotifierProvider<AppState>((ref) {
+  return AppState(globalPrefs);
+});
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
+  globalPrefs = await SharedPreferences.getInstance();
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => AppState(prefs),
-      child: const SeatyApp(),
+    const ProviderScope(
+      child: SeatyApp(),
     ),
   );
 }
@@ -812,6 +1022,7 @@ class SeatyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Seaty Luxury Transport',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -916,12 +1127,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 // =====================================================================
 // 3. AUTHENTICATION & WRAPPER SCREEN (Role Selection Screen)
 // =====================================================================
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends ConsumerWidget {
   const AuthWrapper({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(appStateProvider);
     if (!state.isAuthenticated) {
       return const AuthScreen();
     }
@@ -1085,14 +1296,14 @@ class AuthScreen extends StatelessWidget {
   }
 }
 
-class _ServerIpConfigPanel extends StatefulWidget {
+class _ServerIpConfigPanel extends ConsumerStatefulWidget {
   const _ServerIpConfigPanel();
 
   @override
-  State<_ServerIpConfigPanel> createState() => _ServerIpConfigPanelState();
+  ConsumerState<_ServerIpConfigPanel> createState() => _ServerIpConfigPanelState();
 }
 
-class _ServerIpConfigPanelState extends State<_ServerIpConfigPanel> {
+class _ServerIpConfigPanelState extends ConsumerState<_ServerIpConfigPanel> {
   bool _expanded = false;
   late TextEditingController _ipController;
 
@@ -1110,7 +1321,7 @@ class _ServerIpConfigPanelState extends State<_ServerIpConfigPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     final uri = Uri.tryParse(state.apiBaseUrl);
     final currentIp = uri?.host ?? '192.168.1.195';
 
@@ -1168,9 +1379,7 @@ class _ServerIpConfigPanelState extends State<_ServerIpConfigPanel> {
                     if (ip.isNotEmpty) {
                       state.updateServerIp(ip);
                       setState(() => _expanded = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('API address updated to $ip')),
-                      );
+                      SeatyNotifications.show(context, 'API address updated to $ip');
                     }
                   },
                   style: ElevatedButton.styleFrom(
@@ -1195,15 +1404,15 @@ class _ServerIpConfigPanelState extends State<_ServerIpConfigPanel> {
 // =====================================================================
 enum PhoneAuthState { enterPhone, register, verifyOtp }
 
-class PhoneAuthScreen extends StatefulWidget {
+class PhoneAuthScreen extends ConsumerStatefulWidget {
   final String role;
   const PhoneAuthScreen({super.key, required this.role});
 
   @override
-  State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
+  ConsumerState<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
 }
 
-class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
+class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   PhoneAuthState _authState = PhoneAuthState.enterPhone;
   final _phoneController = TextEditingController();
   final _nameController = TextEditingController();
@@ -1250,7 +1459,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -1344,16 +1553,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               onPressed: () async {
                 final phone = _phoneController.text.trim();
                 if (phone.length < 9) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a valid mobile number.')),
-                  );
+                  SeatyNotifications.show(context, 'Please enter a valid mobile number.', isError: true);
                   return;
                 }
 
                 // Show loading SnackBar or call API
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Verifying number...'), duration: Duration(milliseconds: 600)),
-                );
+                SeatyNotifications.show(context, 'Verifying number...', duration: const Duration(milliseconds: 600));
 
                 final checkResult = await state.checkPhoneDB(phone, widget.role);
                 final bool exists = checkResult['exists'] ?? false;
@@ -1366,12 +1571,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   setState(() => _authState = PhoneAuthState.verifyOtp);
                 } else {
                   if (widget.role == 'owner') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('This number is not registered as an Owner. Please contact the administrator.'),
-                        backgroundColor: Colors.redAccent,
-                      ),
-                    );
+                    SeatyNotifications.show(context, 'This number is not registered as an Owner. Please contact the administrator.', isError: true);
                   } else {
                     FocusScope.of(context).unfocus();
                     setState(() {
@@ -1494,23 +1694,17 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 final name = _nameController.text.trim();
                 final phone = _phoneController.text.trim();
                 if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter your full name.')),
-                  );
+                  SeatyNotifications.show(context, 'Please enter your full name.', isError: true);
                   return;
                 }
                 if (phone.length < 9) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a valid mobile number.')),
-                  );
+                  SeatyNotifications.show(context, 'Please enter a valid mobile number.', isError: true);
                   return;
                 }
 
                 FocusScope.of(context).unfocus();
                 // Show loading SnackBar or call API
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Creating account...'), duration: Duration(milliseconds: 600)),
-                );
+                SeatyNotifications.show(context, 'Creating account...', duration: const Duration(milliseconds: 600));
 
                 await state.registerPhoneDB(name, phone, widget.role);
                 _isNewUser = true;
@@ -1608,9 +1802,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               onPressed: () {
                 final otp = _otpController.text.trim();
                 if (otp != _generatedOtp) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Invalid verification code. Please check the SMS.')),
-                  );
+                  SeatyNotifications.show(context, 'Invalid verification code. Please check the SMS.', isError: true);
                   return;
                 }
 
@@ -1637,9 +1829,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 final phone = _phoneController.text.trim();
                 final name = _currentUserName.isNotEmpty ? _currentUserName : 'User';
                 _generateAndSendOtp(context, name, phone);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('A new OTP has been sent.')),
-                );
+                SeatyNotifications.show(context, 'A new OTP has been sent.');
               },
               child: const Text(
                 'Resend Code',
@@ -1655,44 +1845,31 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 // =====================================================================
 // 4. PASSENGER MAIN SCREEN
 // =====================================================================
-class PassengerMainScreen extends StatefulWidget {
+class PassengerMainScreen extends ConsumerStatefulWidget {
   const PassengerMainScreen({super.key});
 
   @override
-  State<PassengerMainScreen> createState() => _PassengerMainScreenState();
+  ConsumerState<PassengerMainScreen> createState() => _PassengerMainScreenState();
 }
 
-class _PassengerMainScreenState extends State<PassengerMainScreen> {
+class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _tabs = [
     const PassengerTripsTab(),
     const PassengerTrackingTab(),
     const PassengerBookingsTab(),
+    const ProfileEditScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Scaffold(
       backgroundColor: Colors.white,
       extendBody: true, // Let content scroll behind the floating capsule
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
-        title: const Text(
-          'Seaty',
-          style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: Color(0xFF0A2540), letterSpacing: 0.5),
-        ),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1.0),
-          child: Container(
-            color: Colors.black.withOpacity(0.05),
-            height: 1.0,
-          ),
-        ),
-      ),
+      extendBodyBehindAppBar: true,
       body: _tabs[_currentIndex],
       bottomNavigationBar: _buildTelegramBottomNavBar(context),
     );
@@ -1703,7 +1880,7 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
       margin: const EdgeInsets.only(left: 32, right: 32, bottom: 24),
       height: 60,
       decoration: BoxDecoration(
-        color: const Color(0xEE0A2540), // Dark Navy (93% Opacity)
+        color: const Color(0xFF0A2540), // Solid Dark Navy
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
@@ -1719,6 +1896,7 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
           _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
           _buildNavItem(1, Icons.near_me_outlined, Icons.near_me_rounded, 'Tracker'),
           _buildNavItem(2, Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Tickets'),
+          _buildNavItem(3, Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
         ],
       ),
     );
@@ -1763,33 +1941,139 @@ class _PassengerMainScreenState extends State<PassengerMainScreen> {
 }
 
 // Sub-Tab 1: Passenger Trips & Booking Flow
-class PassengerTripsTab extends StatefulWidget {
+class PassengerTripsTab extends ConsumerStatefulWidget {
   const PassengerTripsTab({super.key});
 
   @override
-  State<PassengerTripsTab> createState() => _PassengerTripsTabState();
+  ConsumerState<PassengerTripsTab> createState() => _PassengerTripsTabState();
 }
 
-class _PassengerTripsTabState extends State<PassengerTripsTab> {
+class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
   String _selectedFrom = 'All';
   String _selectedTo = 'All';
+  DateTime? _selectedDate;
 
-  final List<Map<String, dynamic>> _destinations = [
-    {'name': 'Colombo', 'color1': 0xFF0A2540, 'color2': 0xFF0E3A5E},
-    {'name': 'Kandy', 'color1': 0xFFE65100, 'color2': 0xFFFF8A50},
-    {'name': 'Galle', 'color1': 0xFF1E293B, 'color2': 0xFF475569},
+  late final TextEditingController _fromController;
+  late final TextEditingController _toController;
+  late final TextEditingController _dateController;
+  final FocusNode _fromFocusNode = FocusNode();
+  final FocusNode _toFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _fromController = TextEditingController(text: _selectedFrom);
+    _toController = TextEditingController(text: _selectedTo);
+    _dateController = TextEditingController(text: 'All Dates');
+    _fromFocusNode.addListener(_onFocusChange);
+    _toFocusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _fromController.dispose();
+    _toController.dispose();
+    _dateController.dispose();
+    _fromFocusNode.removeListener(_onFocusChange);
+    _toFocusNode.removeListener(_onFocusChange);
+    _fromFocusNode.dispose();
+    _toFocusNode.dispose();
+    super.dispose();
+  }
+
+  // Palette pool for dynamic destination cards
+  static const List<List<int>> _colorPalette = [
+    [0xFF0A2540, 0xFF0E3A5E],
+    [0xFFE65100, 0xFFFF8A50],
+    [0xFF1E293B, 0xFF475569],
+    [0xFF7C3AED, 0xFF9F6FFF],
+    [0xFF0F766E, 0xFF14B8A6],
+    [0xFFB45309, 0xFFD97706],
+    [0xFF1D4ED8, 0xFF3B82F6],
+    [0xFF9D174D, 0xFFEC4899],
   ];
+
+  static const List<IconData> _iconPool = [
+    Icons.location_city_rounded,
+    Icons.temple_buddhist_rounded,
+    Icons.beach_access_rounded,
+    Icons.landscape_rounded,
+    Icons.forest_rounded,
+    Icons.train_rounded,
+    Icons.directions_bus_rounded,
+    Icons.place_rounded,
+  ];
+
+  List<Map<String, dynamic>> _getDestinations(List<Map<String, dynamic>> trips) {
+    final seen = <String>{};
+    final result = <Map<String, dynamic>>[];
+
+    for (final trip in trips) {
+      final locs = <String>[];
+      if (trip['origin'] != null) locs.add(trip['origin'].toString());
+      if (trip['destination'] != null) locs.add(trip['destination'].toString());
+      // Also collect route stop names
+      final routeObj = trip['route'];
+      if (routeObj != null && routeObj['stops'] != null) {
+        for (final stop in routeObj['stops'] as List<dynamic>) {
+          final stopName = stop['name']?.toString();
+          if (stopName != null) locs.add(stopName);
+        }
+      }
+      for (final loc in locs) {
+        final key = loc.trim().toLowerCase();
+        if (key.isNotEmpty && !seen.contains(key)) {
+          seen.add(key);
+          final idx = result.length % _colorPalette.length;
+          result.add({
+            'name': loc.trim(),
+            'color1': _colorPalette[idx][0],
+            'color2': _colorPalette[idx][1],
+            'icon': _iconPool[idx % _iconPool.length],
+          });
+        }
+      }
+    }
+    return result;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
+
+    final allTrips = state.trips;
+    final Set<String> placesSet = {'All'};
+    for (final trip in allTrips) {
+      if (trip['origin'] != null) placesSet.add(trip['origin'].toString());
+      if (trip['destination'] != null) placesSet.add(trip['destination'].toString());
+      final routeObj = trip['route'];
+      if (routeObj != null && routeObj['stops'] != null) {
+        for (final stop in routeObj['stops'] as List<dynamic>) {
+          final stopName = stop['name']?.toString();
+          if (stopName != null) placesSet.add(stopName);
+        }
+      }
+    }
+    final List<String> allPlaces = placesSet.toList()..sort((a, b) {
+      if (a == 'All') return -1;
+      if (b == 'All') return 1;
+      return a.compareTo(b);
+    });
 
     final filteredTrips = state.trips.where((trip) {
-      if (_selectedFrom == 'All' && _selectedTo == 'All') return true;
+      final hasFrom = _selectedFrom.isNotEmpty && _selectedFrom.toLowerCase() != 'all';
+      final hasTo = _selectedTo.isNotEmpty && _selectedTo.toLowerCase() != 'all';
+      final hasDate = _selectedDate != null;
+      if (!hasFrom && !hasTo && !hasDate) return true;
 
       // Helper to find position of a location (-1 = origin, index = stop index, 100000 = destination)
       int? findStopPos(String searchLoc) {
         final normSearch = searchLoc.toLowerCase().trim();
+        if (normSearch.isEmpty) return null;
         final normOrigin = trip['origin']?.toString().toLowerCase() ?? '';
         final normDest = trip['destination']?.toString().toLowerCase() ?? '';
 
@@ -1815,19 +2099,37 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
       int? fromPos;
       int? toPos;
 
-      if (_selectedFrom != 'All') {
+      if (hasFrom) {
         fromPos = findStopPos(_selectedFrom);
         if (fromPos == null) match = false;
       }
 
-      if (_selectedTo != 'All') {
+      if (hasTo) {
         toPos = findStopPos(_selectedTo);
         if (toPos == null) match = false;
       }
 
       // Ensure origin comes before destination
-      if (match && _selectedFrom != 'All' && _selectedTo != 'All') {
+      if (match && hasFrom && hasTo) {
         if (fromPos != null && toPos != null && fromPos >= toPos) {
+          match = false;
+        }
+      }
+
+      // Filter by date if specified
+      if (match && hasDate) {
+        final departureStr = trip['departure']?.toString() ?? '';
+        if (departureStr.isNotEmpty) {
+          try {
+            final datePart = departureStr.split(' ')[0].trim(); // e.g., '2026-07-13'
+            final selectedDateStr = "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
+            if (datePart != selectedDateStr) {
+              match = false;
+            }
+          } catch (e) {
+            match = false;
+          }
+        } else {
           match = false;
         }
       }
@@ -1861,54 +2163,92 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Greeting row
+                      // ─── Logo + Profile Row ───
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
                             children: [
-                              Text(
-                                'Good Morning,',
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.7)),
+                              Image.asset(
+                                'assets/images/app_icon.png',
+                                width: 32,
+                                height: 32,
+                                color: Colors.white,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE65100),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 20),
+                                ),
                               ),
-                              Text(
-                                state.userName,
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: -0.5),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Seaty',
+                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
                               ),
                             ],
                           ),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
-                              );
-                            },
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white.withOpacity(0.15), width: 2),
-                                boxShadow: [
-                                  BoxShadow(color: const Color(0xFFE65100).withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4)),
+                          Row(
+                            children: [
+                              Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  IconButton(
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    icon: const Icon(Icons.notifications_outlined, color: Colors.white, size: 28),
+                                    onPressed: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                                      );
+                                    },
+                                  ),
+                                  if (state.unreadNotificationsCount > 0)
+                                    Positioned(
+                                      right: -4,
+                                      top: -4,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFFEF4444),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 16,
+                                          minHeight: 16,
+                                        ),
+                                        child: Text(
+                                          '${state.unreadNotificationsCount}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
-                              child: CircleAvatar(
-                                radius: 24,
-                                backgroundColor: const Color(0xFFE65100),
-                                child: Text(
-                                  state.userName.isNotEmpty ? state.userName[0].toUpperCase() : 'U',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                                ),
-                              ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
+                      // Greeting + Search prompt
+                      Text(
+                        'Hello, ${state.userName} 👋',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.7)),
+                      ),
+                      const SizedBox(height: 4),
                       const Text(
                         'Where are you\ntraveling today?',
-                        style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white, height: 1.1, letterSpacing: -1),
+                        style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, height: 1.1, letterSpacing: -1),
                       ),
                       const SizedBox(height: 32),
                       
@@ -1928,10 +2268,27 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                               children: [
                                 _buildGlassField(
                                   icon: Icons.my_location_rounded,
-                                  label: 'Current Location',
-                                  value: _selectedFrom,
-                                  isFrom: true,
+                                  label: 'From',
+                                  controller: _fromController,
+                                  focusNode: _fromFocusNode,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _selectedFrom = val;
+                                    });
+                                  },
                                 ),
+                                if (_fromFocusNode.hasFocus)
+                                  _buildSuggestionsList(
+                                    query: _selectedFrom,
+                                    places: allPlaces,
+                                    onSelected: (val) {
+                                      setState(() {
+                                        _selectedFrom = val;
+                                        _fromController.text = val;
+                                        _fromFocusNode.unfocus();
+                                      });
+                                    },
+                                  ),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(vertical: 12),
                                   child: Row(
@@ -1946,6 +2303,8 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                                             final temp = _selectedFrom;
                                             _selectedFrom = _selectedTo;
                                             _selectedTo = temp;
+                                            _fromController.text = _selectedFrom;
+                                            _toController.text = _selectedTo;
                                           });
                                         },
                                         child: Container(
@@ -1969,9 +2328,69 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                                 ),
                                 _buildGlassField(
                                   icon: Icons.location_on_rounded,
-                                  label: 'Destination',
-                                  value: _selectedTo,
-                                  isFrom: false,
+                                  label: 'To',
+                                  controller: _toController,
+                                  focusNode: _toFocusNode,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _selectedTo = val;
+                                    });
+                                  },
+                                ),
+                                if (_toFocusNode.hasFocus)
+                                  _buildSuggestionsList(
+                                    query: _selectedTo,
+                                    places: allPlaces,
+                                    onSelected: (val) {
+                                      setState(() {
+                                        _selectedTo = val;
+                                        _toController.text = val;
+                                        _toFocusNode.unfocus();
+                                      });
+                                    },
+                                  ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  child: Container(height: 1, color: Colors.white.withOpacity(0.1)),
+                                ),
+                                _buildGlassDateField(
+                                  icon: Icons.calendar_today_rounded,
+                                  label: 'Departure Date',
+                                  controller: _dateController,
+                                  onTap: () async {
+                                    final DateTime? picked = await showDatePicker(
+                                      context: context,
+                                      initialDate: _selectedDate ?? DateTime.now(),
+                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                                      builder: (context, child) {
+                                        return Theme(
+                                          data: Theme.of(context).copyWith(
+                                            colorScheme: const ColorScheme.dark(
+                                              primary: Color(0xFFE65100),
+                                              onPrimary: Colors.white,
+                                              surface: Color(0xFF0F172A),
+                                              onSurface: Colors.white,
+                                            ),
+                                            dialogBackgroundColor: const Color(0xFF0F172A),
+                                          ),
+                                          child: child!,
+                                        );
+                                      },
+                                    );
+                                    if (picked != null) {
+                                      setState(() {
+                                        _selectedDate = picked;
+                                        _dateController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                      });
+                                    }
+                                  },
+                                  onClear: () {
+                                    setState(() {
+                                      _selectedDate = null;
+                                      _dateController.text = 'All Dates';
+                                    });
+                                  },
                                 ),
                               ],
                             ),
@@ -2003,21 +2422,31 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                 const SizedBox(height: 16),
                 SizedBox(
                   height: 140,
-                  child: ListView.builder(
-                    physics: const BouncingScrollPhysics(),
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _destinations.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == 0) {
-                        // "All" Card
-                        final isSelected = _selectedTo == 'All';
-                        return _buildDestinationCard('All', 'Everywhere', 0xFFF1F5F9, 0xFFE2E8F0, isSelected, true);
-                      }
-                      final dest = _destinations[index - 1];
-                      final isSelected = _selectedTo == dest['name'];
-                      return _buildDestinationCard(dest['name'] as String, 'Explore', dest['color1'] as int, dest['color2'] as int, isSelected, false);
-                    },
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(
+                      dragDevices: {
+                        PointerDeviceKind.touch,
+                        PointerDeviceKind.mouse,
+                        PointerDeviceKind.trackpad,
+                      },
+                    ),
+                    child: ListView.builder(
+                      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemBuilder: (context, index) {
+                        final destinations = _getDestinations(state.trips);
+                        if (index == 0) {
+                          final isSelected = _selectedTo == 'All';
+                          return _buildDestinationCard('All', 'Everywhere', 0xFFF1F5F9, 0xFFE2E8F0, isSelected, true);
+                        }
+                        if (destinations.isEmpty) return const SizedBox.shrink();
+                        final dest = destinations[index - 1];
+                        final isSelected = _selectedTo == dest['name'];
+                        return _buildDestinationCard(dest['name'] as String, 'Explore', dest['color1'] as int, dest['color2'] as int, isSelected, false, icon: dest['icon'] as IconData);
+                      },
+                      itemCount: _getDestinations(state.trips).length + 1,
+                    ),
                   ),
                 ),
               ],
@@ -2082,7 +2511,13 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
     );
   }
 
-  Widget _buildGlassField({required IconData icon, required String label, required String value, required bool isFrom}) {
+  Widget _buildGlassField({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required ValueChanged<String> onChanged,
+  }) {
     return Row(
       children: [
         Icon(icon, color: Colors.white.withOpacity(0.9), size: 22),
@@ -2092,24 +2527,18 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.6))),
-              DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: value,
-                  isExpanded: true,
+              const SizedBox(height: 4),
+              TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: onChanged,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
+                  border: InputBorder.none,
                   isDense: true,
-                  dropdownColor: const Color(0xFF1E293B),
-                  icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5)),
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  items: ['All', 'Colombo', 'Kandy', 'Galle'].map((loc) => DropdownMenuItem(
-                    value: loc,
-                    child: Text(loc, style: const TextStyle(color: Colors.white)),
-                  )).toList(),
-                  onChanged: (val) {
-                    setState(() {
-                      if (isFrom) _selectedFrom = val ?? 'All';
-                      else _selectedTo = val ?? 'All';
-                    });
-                  },
+                  contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                  hintText: 'Type place...',
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -2119,14 +2548,122 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
     );
   }
 
-  Widget _buildDestinationCard(String name, String subtitle, int color1, int color2, bool isSelected, bool isLight) {
+  Widget _buildGlassDateField({
+    required IconData icon,
+    required String label,
+    required TextEditingController controller,
+    required VoidCallback onTap,
+    required VoidCallback onClear,
+  }) {
     return GestureDetector(
-      onTap: () => setState(() => _selectedTo = name),
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white.withOpacity(0.9), size: 22),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.6))),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        controller.text,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    if (controller.text != 'All Dates')
+                      GestureDetector(
+                        onTap: () {
+                          onClear();
+                        },
+                        child: Icon(Icons.close_rounded, color: Colors.white.withOpacity(0.6), size: 18),
+                      )
+                    else
+                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5), size: 20),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionsList({
+    required String query,
+    required List<String> places,
+    required ValueChanged<String> onSelected,
+  }) {
+    final filtered = places.where((p) {
+      if (query.isEmpty || query.toLowerCase() == 'all') return true;
+      return p.toLowerCase().contains(query.toLowerCase());
+    }).toList();
+
+    if (filtered.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 180),
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withOpacity(0.95),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: ListView.builder(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          itemCount: filtered.length,
+          itemBuilder: (context, index) {
+            final place = filtered[index];
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => onSelected(place),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, color: Colors.white70, size: 18),
+                    const SizedBox(width: 12),
+                    Text(
+                      place,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDestinationCard(String name, String subtitle, int color1, int color2, bool isSelected, bool isLight, {IconData? icon}) {
+    // City-specific icon mapping
+    final IconData cardIcon = icon ?? (isLight ? Icons.directions_bus_rounded : Icons.place_rounded);
+
+    return GestureDetector(
+      onTap: () => setState(() {
+        _selectedTo = name;
+        _toController.text = name;
+      }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         width: 110,
         margin: const EdgeInsets.symmetric(horizontal: 8),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -2153,7 +2690,7 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                isLight ? Icons.explore_rounded : Icons.landscape_rounded,
+                cardIcon,
                 color: isLight ? const Color(0xFF0F172A) : Colors.white,
                 size: 20,
               ),
@@ -2161,17 +2698,44 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
             const Spacer(),
             Text(
               subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 10, color: isLight ? const Color(0xFF64748B) : Colors.white.withOpacity(0.7)),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               name,
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Widget _getAmenityIcon(String name) {
+    final String n = name.toLowerCase();
+    IconData iconData = Icons.star_outline_rounded;
+
+    if (n.contains('wifi')) {
+      iconData = Icons.wifi;
+    } else if (n.contains('charge') || n.contains('charging') || n.contains('plug') || n.contains('outlet')) {
+      iconData = Icons.power;
+    } else if (n.contains('tv') || n.contains('screen') || n.contains('video') || n.contains('hd tv')) {
+      iconData = Icons.tv;
+    } else if (n.contains('seat') || n.contains('recline') || n.contains('reclining')) {
+      iconData = Icons.chair_rounded;
+    } else if (n.contains('restroom') || n.contains('toilet') || n.contains('wc')) {
+      iconData = Icons.wc;
+    } else if (n.contains('luggage') || n.contains('baggage') || n.contains('bag') || n.contains('space')) {
+      iconData = Icons.work;
+    } else if (n.contains('ac') || n.contains('air') || n.contains('cool') || n.contains('snowflake')) {
+      iconData = Icons.ac_unit;
+    }
+
+    return Icon(iconData, size: 14, color: const Color(0xFFE65100));
   }
 
   Widget _buildModernTripCard(BuildContext context, Map<String, dynamic> trip) {
@@ -2264,7 +2828,46 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            
+            // Amenities Row
+            if (trip['amenities'] != null && (trip['amenities'] as List).isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: (trip['amenities'] as List).map<Widget>((ame) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFF1F5F9)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _getAmenityIcon(ame.toString()),
+                          const SizedBox(width: 6),
+                          Text(
+                            ame.toString(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ] else ...[
+              const SizedBox(height: 24),
+            ],
             
             // Action Button
             SizedBox(
@@ -2278,7 +2881,7 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
+                  backgroundColor: const Color(0xFF0A2540),
                   foregroundColor: Colors.white,
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -2295,15 +2898,15 @@ class _PassengerTripsTabState extends State<PassengerTripsTab> {
 
 
 // Seat Selector Screen
-class SeatSelectorScreen extends StatefulWidget {
+class SeatSelectorScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> trip;
   const SeatSelectorScreen({super.key, required this.trip});
 
   @override
-  State<SeatSelectorScreen> createState() => _SeatSelectorScreenState();
+  ConsumerState<SeatSelectorScreen> createState() => _SeatSelectorScreenState();
 }
 
-class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
+class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
   bool _isLoading = true;
   bool _isBookingInProgress = false;
 
@@ -2317,7 +2920,7 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
 
   Future<void> _refreshSeats() async {
     setState(() => _isLoading = true);
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
     state.clearSelectedSeats();
     await state.loadSeatAvailability(widget.trip['id'].toString());
     if (mounted) {
@@ -2333,9 +2936,7 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
     if (booking == null) {
       if (mounted) {
         setState(() => _isBookingInProgress = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to hold seats. They may have just been booked.')),
-        );
+        SeatyNotifications.show(context, 'Failed to hold seats. They may have just been booked.', isError: true);
       }
       return;
     }
@@ -2345,9 +2946,7 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
     if (payment == null) {
       if (mounted) {
         setState(() => _isBookingInProgress = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to initiate payment session.')),
-        );
+        SeatyNotifications.show(context, 'Failed to initiate payment session.', isError: true);
       }
       return;
     }
@@ -2530,12 +3129,16 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
                       _buildLabel('Gender'),
                       DropdownButtonFormField<String>(
                         value: primaryGender,
-                        dropdownColor: const Color(0xFF1E293B),
+                        dropdownColor: const Color(0xFF0F172A),
+                        borderRadius: BorderRadius.circular(16),
                         style: const TextStyle(color: Colors.white, fontSize: 16),
                         decoration: _buildInputDec('Select Gender', Icons.face_outlined),
                         items: ['Male', 'Female'].map((g) => DropdownMenuItem(
                           value: g,
-                          child: Text(g, style: const TextStyle(color: Colors.white)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                          ),
                         )).toList(),
                         onChanged: (val) {
                           if (val != null) {
@@ -2579,7 +3182,8 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
                                 Expanded(
                                   child: DropdownButtonFormField<String>(
                                     value: guestGenders[seat],
-                                    dropdownColor: const Color(0xFF1E293B),
+                                    dropdownColor: const Color(0xFF0F172A),
+                                    borderRadius: BorderRadius.circular(16),
                                     style: const TextStyle(color: Colors.white, fontSize: 14),
                                     decoration: InputDecoration(
                                       filled: true,
@@ -2592,7 +3196,10 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
                                     ),
                                     items: ['Male', 'Female'].map((g) => DropdownMenuItem(
                                       value: g,
-                                      child: Text(g, style: const TextStyle(color: Colors.white)),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                        child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                                      ),
                                     )).toList(),
                                     onChanged: (val) {
                                       if (val != null) {
@@ -2699,7 +3306,7 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Scaffold(
       appBar: AppBar(
@@ -2736,79 +3343,125 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
                     children: [
                       _buildLegendItem(const Color(0xFFF4F6F9), 'Available', border: Colors.black12),
                       _buildLegendItem(const Color(0xFFE65100), 'Selected'),
-                      _buildLegendItem(Colors.grey.shade400, 'Booked'),
+                      _buildLegendItem(const Color(0xFF0F2C59), 'Male'),
+                      _buildLegendItem(const Color(0xFFF472B6), 'Female'),
                       _buildLegendItem(Colors.amber.shade200, 'Held'),
                     ],
                   ),
                 ),
                 
                 // Seat Grid
-                Expanded(
-                  child: GridView.builder(
-                    padding: const EdgeInsets.all(28),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 5,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                    ),
-                    itemCount: 40, // 40 seats
-                    itemBuilder: (context, index) {
-                      // Aisle logic (middle column)
-                      if (index % 5 == 2) {
-                        return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
-                      }
+                Builder(
+                  builder: (context) {
+                    final layout = widget.trip['seat_layout'] ?? {'rows': 10, 'columns': 4, 'aisle_after_column': 2};
+                    final int rows = layout['rows'] ?? 10;
+                    final int columns = layout['columns'] ?? 4;
+                    final int aisleAfter = layout['aisle_after_column'] ?? 2;
+                    final int gridColumns = aisleAfter > 0 ? columns + 1 : columns;
+                    final int totalGridItems = rows * gridColumns;
+                    final List<dynamic>? customSeatsList = layout['seats'];
 
-                      // Seat Label
-                      int row = index ~/ 5 + 1;
-                      String col = String.fromCharCode(65 + (index % 5 > 2 ? index % 5 - 1 : index % 5));
-                      String seatLabel = '$col$row';
-
-                      bool isSelected = state.selectedSeats.contains(seatLabel);
-                      bool isBooked = state.bookedSeats.contains(seatLabel);
-                      bool isHeld = state.heldSeats.contains(seatLabel);
-
-                      Color seatColor = const Color(0xFFF4F6F9);
-                      Color textColor = const Color(0xFF0A2540);
-                      Color borderColor = Colors.black12;
-
-                      if (isSelected) {
-                        seatColor = const Color(0xFFE65100);
-                        textColor = Colors.white;
-                        borderColor = const Color(0xFFE65100);
-                      } else if (isBooked) {
-                        seatColor = Colors.grey.shade300;
-                        textColor = Colors.grey.shade600;
-                        borderColor = Colors.grey.shade400;
-                      } else if (isHeld) {
-                        seatColor = Colors.amber.shade200;
-                        textColor = Colors.amber.shade800;
-                        borderColor = Colors.amber.shade400;
-                      }
-
-                      return InkWell(
-                        onTap: (isBooked || isHeld) ? null : () => state.toggleSeat(seatLabel),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: seatColor,
-                            border: Border.all(
-                              color: borderColor,
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            seatLabel,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                          ),
+                    return Expanded(
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(28),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: gridColumns,
+                          crossAxisSpacing: 14,
+                          mainAxisSpacing: 14,
                         ),
-                      );
-                    },
-                  ),
+                        itemCount: totalGridItems,
+                        itemBuilder: (context, index) {
+                          int colIndex = index % gridColumns;
+                          int row = index ~/ gridColumns + 1;
+
+                          Map<String, dynamic>? customSeat;
+                          if (customSeatsList != null) {
+                            for (var s in customSeatsList) {
+                              if (s is Map && s['row'] == row && s['col'] == colIndex) {
+                                customSeat = Map<String, dynamic>.from(s);
+                                break;
+                              }
+                            }
+                            if (customSeat == null) {
+                              // If no seat is here, check if it's the aisle column. If so, show aisle.
+                              if (aisleAfter > 0 && colIndex == aisleAfter) {
+                                return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
+                              }
+                              return const SizedBox.shrink(); // Empty space
+                            }
+                          } else {
+                            // Fallback for standard layouts
+                            if (aisleAfter > 0 && colIndex == aisleAfter) {
+                              return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
+                            }
+                          }
+
+                          // If fallback (customSeat is null), calculate standard seat label
+                          int seatColIndex = colIndex;
+                          if (customSeat == null && aisleAfter > 0 && colIndex > aisleAfter) {
+                            seatColIndex = colIndex - 1;
+                          }
+                          String seatLabel = customSeat != null ? customSeat['label'] : '${String.fromCharCode(65 + seatColIndex)}$row';
+
+                          bool isSelected = state.selectedSeats.contains(seatLabel);
+                          bool isBooked = state.bookedSeats.contains(seatLabel);
+                          bool isHeld = state.heldSeats.contains(seatLabel);
+
+                          Color seatColor = const Color(0xFFF4F6F9);
+                          Color textColor = const Color(0xFF0A2540);
+                          Color borderColor = Colors.black12;
+
+                          if (isSelected) {
+                            seatColor = const Color(0xFFE65100);
+                            textColor = Colors.white;
+                            borderColor = const Color(0xFFE65100);
+                          } else if (isBooked) {
+                            final gender = state.seatGenders[seatLabel]?.toLowerCase() ?? '';
+                            if (gender == 'male') {
+                              seatColor = const Color(0xFF0F2C59);
+                              textColor = Colors.white;
+                              borderColor = const Color(0xFF0F2C59);
+                            } else if (gender == 'female') {
+                              seatColor = const Color(0xFFF472B6);
+                              textColor = Colors.white;
+                              borderColor = const Color(0xFFF472B6);
+                            } else {
+                              seatColor = Colors.grey.shade300;
+                              textColor = Colors.grey.shade600;
+                              borderColor = Colors.grey.shade400;
+                            }
+                          } else if (isHeld) {
+                            seatColor = Colors.amber.shade200;
+                            textColor = Colors.amber.shade800;
+                            borderColor = Colors.amber.shade400;
+                          }
+
+                          return InkWell(
+                            onTap: (isBooked || isHeld) ? null : () => state.toggleSeat(seatLabel),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: seatColor,
+                                border: Border.all(
+                                  color: borderColor,
+                                  width: 1.5,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              alignment: Alignment.center,
+                              child: Text(
+                                seatLabel,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: textColor,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  }
                 ),
                 
                 // Checkout Info Bar
@@ -2883,7 +3536,7 @@ class _SeatSelectorScreenState extends State<SeatSelectorScreen> {
 }
 
 // Custom Premium Sandbox Payment Screen
-class SandboxPaymentScreen extends StatefulWidget {
+class SandboxPaymentScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> payment;
   final Map<String, dynamic> booking;
   final Map<String, dynamic> trip;
@@ -2896,10 +3549,10 @@ class SandboxPaymentScreen extends StatefulWidget {
   });
 
   @override
-  State<SandboxPaymentScreen> createState() => _SandboxPaymentScreenState();
+  ConsumerState<SandboxPaymentScreen> createState() => _SandboxPaymentScreenState();
 }
 
-class _SandboxPaymentScreenState extends State<SandboxPaymentScreen> {
+class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
   late Timer _timer;
   int _secondsRemaining = 600; // 10 minutes hold timer
   bool _isProcessing = false;
@@ -2922,18 +3575,13 @@ class _SandboxPaymentScreenState extends State<SandboxPaymentScreen> {
   }
 
   void _handleTimeout() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Seat hold expired. Please try booking again.'),
-        backgroundColor: Colors.redAccent,
-      ),
-    );
+    SeatyNotifications.show(context, 'Seat hold expired. Please try booking again.', isError: true);
     Navigator.pop(context);
   }
 
   Future<void> _processPayment(bool success) async {
     setState(() => _isProcessing = true);
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
     final transactionId = widget.payment['gateway_transaction_id'];
 
     final bool result = success
@@ -2943,17 +3591,15 @@ class _SandboxPaymentScreenState extends State<SandboxPaymentScreen> {
     if (mounted) {
       setState(() => _isProcessing = false);
       if (result) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success ? 'Payment Completed Successfully!' : 'Booking cancelled.'),
-            backgroundColor: success ? Colors.green : Colors.orange,
-          ),
+        SeatyNotifications.show(
+          context,
+          success ? 'Payment Completed Successfully!' : 'Booking cancelled.',
+          isError: !success,
+          isWarning: !success,
         );
         Navigator.pop(context);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Something went wrong communicating with sandbox server.')),
-        );
+        SeatyNotifications.show(context, 'Something went wrong communicating with sandbox server.', isError: true);
       }
     }
   }
@@ -3127,19 +3773,19 @@ class _SandboxPaymentScreenState extends State<SandboxPaymentScreen> {
 }
 
 // Sub-Tab 2: Passenger Live Tracking View
-class PassengerTrackingTab extends StatefulWidget {
+class PassengerTrackingTab extends ConsumerStatefulWidget {
   const PassengerTrackingTab({super.key});
 
   @override
-  State<PassengerTrackingTab> createState() => _PassengerTrackingTabState();
+  ConsumerState<PassengerTrackingTab> createState() => _PassengerTrackingTabState();
 }
 
-class _PassengerTrackingTabState extends State<PassengerTrackingTab> {
+class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   String? _selectedBusId;
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -3152,6 +3798,8 @@ class _PassengerTrackingTabState extends State<PassengerTrackingTab> {
           
           // Select Bus to Track
           DropdownButtonFormField<String>(
+            dropdownColor: Colors.white,
+            borderRadius: BorderRadius.circular(16),
             decoration: InputDecoration(
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               labelText: 'Select Bus line to track',
@@ -3160,7 +3808,10 @@ class _PassengerTrackingTabState extends State<PassengerTrackingTab> {
             items: state.trips.map((trip) {
               return DropdownMenuItem<String>(
                 value: trip['reg'],
-                child: Text('${trip['bus_name']} (${trip['reg']})'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Text('${trip['bus_name']} (${trip['reg']})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
               );
             }).toList(),
             onChanged: (val) {
@@ -3353,7 +4004,7 @@ class QrCodePainter extends CustomPainter {
 }
 
 // Sub-Tab 3: Passenger Bookings Tickets List
-class PassengerBookingsTab extends StatelessWidget {
+class PassengerBookingsTab extends ConsumerWidget {
   const PassengerBookingsTab({super.key});
 
   void _showDownloadTicketDialog(BuildContext context, Map<String, dynamic> b) {
@@ -3365,35 +4016,30 @@ class PassengerBookingsTab extends StatelessWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 48),
-              const SizedBox(height: 12),
+              const Icon(Icons.qr_code_2_rounded, size: 84, color: Color(0xFFE65100)),
+              const SizedBox(height: 16),
               const Text(
-                'Ticket Downloaded!',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                'Ready to Board',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0A2540)),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
-                'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}.pdf successfully saved to your downloads folder.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                'Ticket Code: TKT-${b['id'].toString().substring(0, 8).toUpperCase()}',
+                style: const TextStyle(color: Colors.black54, fontSize: 13),
               ),
-              const SizedBox(height: 20),
-              Container(
+              const SizedBox(height: 12),
+              // QR Code representation
+              SizedBox(
                 width: 140,
                 height: 140,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.black12),
-                  borderRadius: BorderRadius.circular(16),
-                ),
                 child: CustomPaint(
                   painter: QrCodePainter(b['id'].toString()),
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Show this QR to the Driver/Owner',
+              Text(
+                'Show this barcode to the driver/conductor during verification.',
+                textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold),
               ),
             ],
@@ -3417,8 +4063,8 @@ class PassengerBookingsTab extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(appStateProvider);
     
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -3436,11 +4082,6 @@ class PassengerBookingsTab extends StatelessWidget {
                     const Text('Present these digital tickets during boarding.', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ],
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 24),
-                onPressed: () => state.logout(),
-                tooltip: 'Log Out',
               ),
             ],
           ),
@@ -3528,14 +4169,14 @@ class PassengerBookingsTab extends StatelessWidget {
 // =====================================================================
 // 5. VEHICLE OWNER MAIN SCREEN
 // =====================================================================
-class OwnerMainScreen extends StatefulWidget {
+class OwnerMainScreen extends ConsumerStatefulWidget {
   const OwnerMainScreen({super.key});
 
   @override
-  State<OwnerMainScreen> createState() => _OwnerMainScreenState();
+  ConsumerState<OwnerMainScreen> createState() => _OwnerMainScreenState();
 }
 
-class _OwnerMainScreenState extends State<OwnerMainScreen> {
+class _OwnerMainScreenState extends ConsumerState<OwnerMainScreen> {
   int _currentIndex = 0;
 
   final List<Widget> _tabs = [
@@ -3547,16 +4188,52 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Scaffold(
       appBar: AppBar(
         title: Text('Owner Hub • ${state.userName}', style: const TextStyle(fontWeight: FontWeight.bold)),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-            onPressed: () => state.logout(),
-          )
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined, color: Color(0xFF0A2540), size: 28),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                  );
+                },
+              ),
+              if (state.unreadNotificationsCount > 0)
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEF4444),
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '${state.unreadNotificationsCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 8),
         ],
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -3578,14 +4255,14 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
 }
 
 // Owner Ticket Verification Tab
-class OwnerScannerTab extends StatefulWidget {
+class OwnerScannerTab extends ConsumerStatefulWidget {
   const OwnerScannerTab({super.key});
 
   @override
-  State<OwnerScannerTab> createState() => _OwnerScannerTabState();
+  ConsumerState<OwnerScannerTab> createState() => _OwnerScannerTabState();
 }
 
-class _OwnerScannerTabState extends State<OwnerScannerTab> with SingleTickerProviderStateMixin {
+class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   String? _selectedBookingId;
   Map<String, dynamic>? _scannedTicket;
@@ -3630,7 +4307,7 @@ class _OwnerScannerTabState extends State<OwnerScannerTab> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     // Filter out only bookings that belong to this owner's vehicles
     final ownerBookings = state.bookings;
@@ -3751,6 +4428,8 @@ class _OwnerScannerTabState extends State<OwnerScannerTab> with SingleTickerProv
                                 children: [
                                   DropdownButtonFormField<String>(
                                     value: _selectedBookingId,
+                                    dropdownColor: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
                                     decoration: InputDecoration(
                                       labelText: 'Select Ticket to Verify',
                                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -3760,7 +4439,10 @@ class _OwnerScannerTabState extends State<OwnerScannerTab> with SingleTickerProv
                                       final tktCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
                                       return DropdownMenuItem<String>(
                                         value: b['id'].toString(),
-                                        child: Text('$tktCode ($passengerName - ${b['seats'].join(',')})', style: const TextStyle(fontSize: 12)),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                          child: Text('$tktCode ($passengerName - ${b['seats'].join(',')})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                        ),
                                       );
                                     }).toList(),
                                     onChanged: (val) => setState(() => _selectedBookingId = val),
@@ -3862,14 +4544,14 @@ class _OwnerScannerTabState extends State<OwnerScannerTab> with SingleTickerProv
   }
 }
 // Owner Tab 1: Vehicles List & Registration
-class OwnerVehiclesTab extends StatefulWidget {
+class OwnerVehiclesTab extends ConsumerStatefulWidget {
   const OwnerVehiclesTab({super.key});
 
   @override
-  State<OwnerVehiclesTab> createState() => _OwnerVehiclesTabState();
+  ConsumerState<OwnerVehiclesTab> createState() => _OwnerVehiclesTabState();
 }
 
-class _OwnerVehiclesTabState extends State<OwnerVehiclesTab> {
+class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
   final _nameController = TextEditingController();
   final _regController = TextEditingController();
   int _capacity = 40;
@@ -3895,9 +4577,17 @@ class _OwnerVehiclesTabState extends State<OwnerVehiclesTab> {
               const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 value: _capacity,
+                dropdownColor: Colors.white,
+                borderRadius: BorderRadius.circular(16),
                 decoration: const InputDecoration(labelText: 'Seat Capacity'),
                 items: [24, 36, 40, 42, 54].map((c) {
-                  return DropdownMenuItem<int>(value: c, child: Text('$c Seats'));
+                  return DropdownMenuItem<int>(
+                    value: c,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Text('$c Seats', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  );
                 }).toList(),
                 onChanged: (val) {
                   if (val != null) setState(() => _capacity = val);
@@ -3913,7 +4603,7 @@ class _OwnerVehiclesTabState extends State<OwnerVehiclesTab> {
             ElevatedButton(
               onPressed: () {
                 if (_nameController.text.isNotEmpty && _regController.text.isNotEmpty) {
-                  Provider.of<AppState>(context, listen: false)
+                  ref.read(appStateProvider)
                       .registerVehicle(_nameController.text, _regController.text, _capacity);
                   _nameController.clear();
                   _regController.clear();
@@ -3930,7 +4620,7 @@ class _OwnerVehiclesTabState extends State<OwnerVehiclesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -3978,14 +4668,14 @@ class _OwnerVehiclesTabState extends State<OwnerVehiclesTab> {
 }
 
 // Owner Tab 2: Trip scheduling
-class OwnerTripsTab extends StatefulWidget {
+class OwnerTripsTab extends ConsumerStatefulWidget {
   const OwnerTripsTab({super.key});
 
   @override
-  State<OwnerTripsTab> createState() => _OwnerTripsTabState();
+  ConsumerState<OwnerTripsTab> createState() => _OwnerTripsTabState();
 }
 
-class _OwnerTripsTabState extends State<OwnerTripsTab> {
+class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
   final _priceController = TextEditingController();
   final _timeController = TextEditingController(text: '14:00'); // Default time
   String? _selectedVehicleId;
@@ -4001,7 +4691,7 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
 
   Future<void> _fetchRouteTemplates() async {
     setState(() => _isLoadingRoutes = true);
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
     try {
       final response = await http.get(
         Uri.parse('${state.apiBaseUrl}/routes'),
@@ -4027,11 +4717,9 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
   }
 
   void _showAddTripDialog() {
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
     if (state.vehicles.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please register a vehicle first.')),
-      );
+      SeatyNotifications.show(context, 'Please register a vehicle first.', isError: true);
       return;
     }
 
@@ -4055,9 +4743,17 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
                   children: [
                     DropdownButtonFormField<String>(
                       value: _selectedVehicleId,
+                      dropdownColor: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
                       decoration: const InputDecoration(labelText: 'Select Vehicle'),
                       items: state.vehicles.map((v) {
-                        return DropdownMenuItem<String>(value: v['id'], child: Text('${v['name']} (${v['reg']})'));
+                        return DropdownMenuItem<String>(
+                          value: v['id'],
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4.0),
+                            child: Text('${v['name']} (${v['reg']})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        );
                       }).toList(),
                       onChanged: (val) => setDialogState(() => _selectedVehicleId = val),
                     ),
@@ -4072,16 +4768,21 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
                               )
                             : DropdownButtonFormField<String>(
                                 value: _selectedRouteId,
+                                dropdownColor: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
                                 decoration: const InputDecoration(labelText: 'Select Route Template'),
                                 items: _routesList.map((r) {
                                   final stopsCount = (r['stops'] as List?)?.length ?? 0;
                                   final stopsText = stopsCount > 0 ? ' ($stopsCount stops)' : ' (direct)';
                                   return DropdownMenuItem<String>(
                                     value: r['id'],
-                                    child: Text(
-                                      '${r['origin']} ➔ ${r['destination']}$stopsText',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 13),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                                      child: Text(
+                                        '${r['origin']} ➔ ${r['destination']}$stopsText',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
                                     ),
                                   );
                                 }).toList(),
@@ -4124,9 +4825,7 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
                           );
                           _priceController.clear();
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Trip scheduled successfully!')),
-                          );
+                          SeatyNotifications.show(context, 'Trip scheduled successfully!');
                         },
                   child: const Text('Schedule'),
                 )
@@ -4140,7 +4839,7 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -4183,20 +4882,20 @@ class _OwnerTripsTabState extends State<OwnerTripsTab> {
 }
 
 // Owner Tab 3: GPS Streaming Sender controls
-class OwnerStreamingTab extends StatefulWidget {
+class OwnerStreamingTab extends ConsumerStatefulWidget {
   const OwnerStreamingTab({super.key});
 
   @override
-  State<OwnerStreamingTab> createState() => _OwnerStreamingTabState();
+  ConsumerState<OwnerStreamingTab> createState() => _OwnerStreamingTabState();
 }
 
-class _OwnerStreamingTabState extends State<OwnerStreamingTab> {
+class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
   String? _selectedVehicleId;
   bool _simulateGps = true;
 
   @override
   Widget build(BuildContext context) {
-    final state = Provider.of<AppState>(context);
+    final state = ref.watch(appStateProvider);
     
     return Padding(
       padding: const EdgeInsets.all(24.0),
@@ -4208,12 +4907,20 @@ class _OwnerStreamingTabState extends State<OwnerStreamingTab> {
           const SizedBox(height: 24),
           DropdownButtonFormField<String>(
             value: _selectedVehicleId,
+            dropdownColor: Colors.white,
+            borderRadius: BorderRadius.circular(16),
             decoration: const InputDecoration(
               border: OutlineInputBorder(),
               labelText: 'Select active vehicle to stream GPS',
             ),
             items: state.vehicles.map((v) {
-              return DropdownMenuItem<String>(value: v['reg'], child: Text('${v['name']} (${v['reg']})'));
+              return DropdownMenuItem<String>(
+                value: v['reg'],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  child: Text('${v['name']} (${v['reg']})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              );
             }).toList(),
             onChanged: (val) => setState(() => _selectedVehicleId = val),
           ),
@@ -4276,14 +4983,14 @@ class _OwnerStreamingTabState extends State<OwnerStreamingTab> {
 }
 
 // Profile Edit Screen
-class ProfileEditScreen extends StatefulWidget {
+class ProfileEditScreen extends ConsumerStatefulWidget {
   const ProfileEditScreen({super.key});
 
   @override
-  State<ProfileEditScreen> createState() => _ProfileEditScreenState();
+  ConsumerState<ProfileEditScreen> createState() => _ProfileEditScreenState();
 }
 
-class _ProfileEditScreenState extends State<ProfileEditScreen> {
+class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _nicController;
@@ -4294,7 +5001,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   @override
   void initState() {
     super.initState();
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
     _nameController = TextEditingController(text: state.userName);
     _nicController = TextEditingController(text: state.userNic);
     _phoneController = TextEditingController(
@@ -4317,7 +5024,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     
-    final state = Provider.of<AppState>(context, listen: false);
+    final state = ref.read(appStateProvider);
     final success = await state.updateProfile(
       _nameController.text.trim(),
       _nicController.text.trim(),
@@ -4327,14 +5034,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
     if (mounted) {
       setState(() => _isSaving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success ? 'Profile updated successfully!' : 'Failed to update profile. Please try again.'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
+      SeatyNotifications.show(
+        context,
+        success ? 'Profile updated successfully!' : 'Failed to update profile. Please try again.',
+        isError: !success,
       );
       if (success) {
-        Navigator.pop(context);
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
       }
     }
   }
@@ -4344,10 +5052,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
+        automaticallyImplyLeading: Navigator.canPop(context),
         title: const Text('Edit Profile'),
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          fontFamily: 'Inter',
+        ),
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -4402,12 +5118,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 _buildFieldLabel('Gender'),
                 DropdownButtonFormField<String>(
                   value: _gender,
-                  dropdownColor: const Color(0xFF1E293B),
+                  dropdownColor: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(16),
                   style: const TextStyle(color: Colors.white, fontSize: 16),
                   decoration: _buildInputDecoration('Select Gender', Icons.face_outlined),
                   items: ['Male', 'Female'].map((g) => DropdownMenuItem(
                     value: g,
-                    child: Text(g, style: const TextStyle(color: Colors.white)),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4.0),
+                      child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
                   )).toList(),
                   onChanged: (val) {
                     if (val != null) {
@@ -4441,6 +5161,24 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         : const Text('Save Profile Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: OutlinedButton.icon(
+                    onPressed: () => ref.read(appStateProvider).logout(),
+                    icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+                    label: const Text(
+                      'Sign Out',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.redAccent, width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
               ],
             ),
           ),
@@ -4483,6 +5221,276 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         borderRadius: BorderRadius.circular(16),
         borderSide: const BorderSide(color: Colors.redAccent),
       ),
+    );
+  }
+}
+
+
+// =====================================================================
+// NOTIFICATIONS CENTER SCREEN (Premium Floating Cards & List)
+// =====================================================================
+class NotificationsScreen extends ConsumerWidget {
+  const NotificationsScreen({super.key});
+
+  String _formatTimeAgo(String? dateTimeStr) {
+    if (dateTimeStr == null || dateTimeStr.isEmpty) return 'Just now';
+    try {
+      final DateTime parsed = DateTime.parse(dateTimeStr).toLocal();
+      final DateTime now = DateTime.now();
+      final Duration difference = now.difference(parsed);
+
+      if (difference.inSeconds < 60) {
+        return 'Just now';
+      } else if (difference.inMinutes < 60) {
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays == 1) {
+        return 'Yesterday';
+      } else {
+        return '${parsed.year}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+      }
+    } catch (e) {
+      return 'Recent';
+    }
+  }
+
+  IconData _getIconForType(String type) {
+    switch (type) {
+      case 'booking':
+        return Icons.confirmation_number_rounded;
+      case 'trip_update':
+        return Icons.event_note_rounded;
+      case 'verification':
+        return Icons.verified_user_rounded;
+      default:
+        return Icons.notifications_active_rounded;
+    }
+  }
+
+  Color _getColorForType(String type) {
+    switch (type) {
+      case 'booking':
+        return const Color(0xFFE65100); // Matte Orange
+      case 'trip_update':
+        return const Color(0xFF0A2540); // Navy Blue
+      case 'verification':
+        return const Color(0xFF10B981); // Emerald Green
+      default:
+        return const Color(0xFF64748B); // Slate Grey
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(appStateProvider);
+    final list = state.notifications;
+    final unreadCount = state.unreadNotificationsCount;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC), // Modern off-white background
+      appBar: AppBar(
+        title: const Text(
+          'Notifications',
+          style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0A2540), letterSpacing: -0.5),
+        ),
+        centerTitle: false,
+        actions: [
+          if (unreadCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: TextButton.icon(
+                onPressed: () {
+                  state.markAllNotificationsAsRead();
+                  SeatyNotifications.show(context, 'All notifications marked as read');
+                },
+                icon: const Icon(Icons.done_all_rounded, size: 18, color: Color(0xFF0A2540)),
+                label: const Text(
+                  'Mark all read',
+                  style: TextStyle(
+                    color: Color(0xFF0A2540),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+      body: list.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    height: 100,
+                    width: 100,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0A2540).withOpacity(0.05),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.notifications_none_rounded,
+                      size: 48,
+                      color: Color(0xFF0A2540),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'All caught up!',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0A2540),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No notifications yet. Enjoy your day!',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: const Color(0xFF0A2540).withOpacity(0.6),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async {
+                await state.fetchNotifications();
+              },
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                itemCount: list.length,
+                itemBuilder: (context, index) {
+                  final noti = list[index];
+                  final String notiId = noti['id']?.toString() ?? '';
+                  final String title = noti['title'] ?? 'Alert';
+                  final String message = noti['message'] ?? '';
+                  final String type = noti['type'] ?? 'system';
+                  final bool isRead = noti['is_read'] == true || noti['is_read'] == 1;
+                  final String timeAgo = _formatTimeAgo(noti['created_at']);
+
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: isRead ? Colors.white : const Color(0xFFF1F5F9), // Subtle greyish-blue for unread
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: isRead 
+                            ? Colors.black.withOpacity(0.05)
+                            : const Color(0xFF0A2540).withOpacity(0.1),
+                        width: 1,
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () {
+                          if (!isRead && notiId.isNotEmpty) {
+                            state.markNotificationAsRead(notiId);
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: _getColorForType(type).withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _getIconForType(type),
+                                  color: _getColorForType(type),
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            title,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: isRead ? FontWeight.bold : FontWeight.w800,
+                                              color: const Color(0xFF0A2540),
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          timeAgo,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: const Color(0xFF0A2540).withOpacity(0.5),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      message,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        color: const Color(0xFF0A2540).withOpacity(0.7),
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                    if (!isRead)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFFE65100),
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            const Text(
+                                              'Tap to mark as read',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFFE65100),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

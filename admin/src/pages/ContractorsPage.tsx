@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getContractors, createContractor, deleteContractor } from '../api/client';
-import { Plus, Trash2, Users, Mail, Phone, UserCheck } from 'lucide-react';
+import { Plus, Users, Mail, Phone, UserCheck, Settings } from 'lucide-react';
 
 interface ContractorRecord {
   id: string;
@@ -16,6 +16,7 @@ export default function ContractorsPage() {
   const [contractors, setContractors] = useState<ContractorRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
   
   // Form State
   const [name, setName] = useState('');
@@ -84,12 +85,12 @@ export default function ContractorsPage() {
 
   return (
     <div>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'between', alignItems: 'center' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 className="page-title">Company Contractors & Staff</h1>
           <p className="page-subtitle">Add and manage drivers, conductors, and checkers authorized to log in to mobile services.</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px' }}>
+        <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', width: 'auto' }}>
           <Plus size={16} /> Add Conductor / Driver
         </button>
       </div>
@@ -101,7 +102,7 @@ export default function ContractorsPage() {
           <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>
             <Users size={48} style={{ marginBottom: '16px', color: 'rgba(255,255,255,0.1)' }} />
             <div>No staff members registered yet.</div>
-            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '16px' }}>Add First Staff Member</button>
+            <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ marginTop: '16px', width: 'auto' }}>Add First Staff Member</button>
           </div>
         ) : (
           <table className="custom-table">
@@ -140,10 +141,72 @@ export default function ContractorsPage() {
                       {c.role}
                     </span>
                   </td>
-                  <td>
-                    <button onClick={() => handleDeleteContractor(c.id)} className="btn-danger" style={{ padding: '6px 12px', background: 'transparent', border: 'none', color: '#ef4444' }}>
-                      <Trash2 size={16} />
+                  <td style={{ position: 'relative' }}>
+                    <button
+                      className="btn-action"
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: activeActionMenuId === c.id ? 'rgba(10,37,64,0.1)' : 'rgba(0,0,0,0.03)',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        color: 'var(--text-main)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => setActiveActionMenuId(activeActionMenuId === c.id ? null : c.id)}
+                    >
+                      <Settings size={15} style={{ marginRight: '4px' }} /> Actions
                     </button>
+                    
+                    {activeActionMenuId === c.id && (
+                      <>
+                        <div
+                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                          onClick={() => setActiveActionMenuId(null)}
+                        />
+                        
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: '100%',
+                            marginTop: '4px',
+                            background: 'white',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                            zIndex: 999,
+                            minWidth: '130px',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: '#ef4444',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onClick={() => {
+                              handleDeleteContractor(c.id);
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            Remove Staff
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

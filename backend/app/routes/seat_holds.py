@@ -133,12 +133,42 @@ def get_trip_seat_availability(
     # Generate all seat labels based on vehicle layout
     all_seats = []
     layout = vehicle.seat_layout or {}
-    rows = layout.get("rows", 10)
-    columns = layout.get("columns", 4)
-    for r in range(1, rows + 1):
-        for c in range(columns):
-            col_letter = chr(65 + c)
-            all_seats.append(f"{col_letter}{r}")
+    if "seats" in layout and isinstance(layout["seats"], list):
+        for s in layout["seats"]:
+            if isinstance(s, dict) and "label" in s:
+                all_seats.append(s["label"])
+    else:
+        rows = layout.get("rows", 10)
+        columns = layout.get("columns", 4)
+        for r in range(1, rows + 1):
+            for c in range(columns):
+                col_letter = chr(65 + c)
+                all_seats.append(f"{col_letter}{r}")
+
+    # Find genders for the booked seats
+    confirmed_bookings = db.query(models.Booking).filter(
+        models.Booking.trip_id == trip_id,
+        models.Booking.booking_status == "confirmed",
+        models.Booking.payment_status == "paid"
+    ).all()
+
+    seat_genders = {}
+    for b in confirmed_bookings:
+        if not b.selected_seats:
+            continue
+        primary_seat = b.selected_seats[0]
+        details = b.passenger_details or {}
+        primary_details = details.get("primary", {})
+        primary_gender = primary_details.get("gender", "Male")
+        seat_genders[primary_seat] = primary_gender.lower()
+        
+        # Map guests
+        guests = details.get("guests", [])
+        for guest in guests:
+            g_seat = guest.get("seat")
+            g_gender = guest.get("gender", "Female")
+            if g_seat:
+                seat_genders[g_seat] = g_gender.lower()
 
     all_unavailable = set(unavailable["booked"]) | set(unavailable["held"])
     available = [s for s in all_seats if s not in all_unavailable]
@@ -148,7 +178,8 @@ def get_trip_seat_availability(
         total_seats=vehicle.total_seats,
         booked_seats=unavailable["booked"],
         held_seats=unavailable["held"],
-        available_seats=available
+        available_seats=available,
+        seat_genders=seat_genders
     )
 
 

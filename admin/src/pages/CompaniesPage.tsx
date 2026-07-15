@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getCompanies, createCompany, toggleCompanyStatus } from '../api/client';
-import { Building2, Plus, Power } from 'lucide-react';
+import { Building2, Plus, Power, Settings } from 'lucide-react';
 
 interface Company {
   id: string;
@@ -19,6 +19,7 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', registration_number: '', contact_email: '', contact_phone: '', address: '' });
 
   const fetchCompanies = async () => {
@@ -122,13 +123,72 @@ export default function CompaniesPage() {
                       {c.is_active ? 'Active' : 'Disabled'}
                     </span>
                   </td>
-                  <td>
+                  <td style={{ position: 'relative' }}>
                     <button
-                      className={`btn-action ${c.is_active ? 'btn-action-danger' : 'btn-action-success'}`}
-                      onClick={() => handleToggle(c.id)}
+                      className="btn-action"
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        background: activeActionMenuId === c.id ? 'rgba(10,37,64,0.1)' : 'rgba(0,0,0,0.03)',
+                        border: '1px solid rgba(0,0,0,0.08)',
+                        color: 'var(--text-main)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s'
+                      }}
+                      onClick={() => setActiveActionMenuId(activeActionMenuId === c.id ? null : c.id)}
                     >
-                      {c.is_active ? 'Disable' : 'Enable'}
+                      <Settings size={15} style={{ marginRight: '4px' }} /> Actions
                     </button>
+                    
+                    {activeActionMenuId === c.id && (
+                      <>
+                        <div
+                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
+                          onClick={() => setActiveActionMenuId(null)}
+                        />
+                        
+                        <div
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            top: '100%',
+                            marginTop: '4px',
+                            background: 'white',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            borderRadius: '8px',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                            zIndex: 999,
+                            minWidth: '130px',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              color: c.is_active ? '#ef4444' : '#10b981',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onClick={() => {
+                              handleToggle(c.id);
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = c.is_active ? '#fef2f2' : '#ecfdf5'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            {c.is_active ? 'Disable' : 'Enable'}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getPlatformSettings, updatePlatformSetting } from '../api/client';
 import { Settings, Save, RefreshCw } from 'lucide-react';
@@ -140,9 +140,9 @@ export default function SettingsPage() {
         <h3 className="table-title" style={{ marginBottom: '20px' }}>Server Status</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {[
-            { name: 'FastAPI Backend', url: 'http://localhost:8000/api/v1' },
-            { name: 'WebSockets GPS Hub', url: 'ws://localhost:8000/api/v1/ws' },
-            { name: 'PostgreSQL Database', url: 'Localhost Postgres Pool' },
+            { name: 'FastAPI Backend', url: 'http://127.0.0.1:8000/api/v1' },
+            { name: 'WebSockets GPS Hub', url: 'ws://127.0.0.1:8000/api/v1/ws' },
+            { name: 'PostgreSQL Database', url: '127.0.0.1 Postgres Pool' },
           ].map((srv, idx) => (
             <div key={idx} style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
