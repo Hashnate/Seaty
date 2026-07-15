@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { getContractors, createContractor, deleteContractor } from '../api/client';
+import { getConductors, createConductor, deleteConductor } from '../api/client';
 import { Plus, Users, Mail, Phone, UserCheck, Settings } from 'lucide-react';
 
-interface ContractorRecord {
+interface ConductorRecord {
   id: string;
   full_name: string;
   email: string;
@@ -11,9 +11,9 @@ interface ContractorRecord {
   role: string;
 }
 
-export default function ContractorsPage() {
+export default function ConductorsPage() {
   const { token } = useAuth();
-  const [contractors, setContractors] = useState<ContractorRecord[]>([]);
+  const [conductors, setConductors] = useState<ConductorRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
@@ -27,20 +27,20 @@ export default function ContractorsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchContractors = () => {
+  const fetchConductors = () => {
     if (!token) return;
     setLoading(true);
-    getContractors(token)
-      .then(data => setContractors((data as ContractorRecord[]) || []))
-      .catch(() => setContractors([]))
+    getConductors(token)
+      .then(data => setConductors((data as ConductorRecord[]) || []))
+      .catch(() => setConductors([]))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    fetchContractors();
+    fetchConductors();
   }, [token]);
 
-  const handleAddContractor = async (e: React.FormEvent) => {
+  const handleAddConductor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
     setError('');
@@ -53,7 +53,7 @@ export default function ContractorsPage() {
     setSubmitting(true);
 
     try {
-      await createContractor(token, {
+      await createConductor(token, {
         full_name: name.trim(),
         email: email.trim(),
         phone_number: phone.trim(),
@@ -65,7 +65,7 @@ export default function ContractorsPage() {
       setEmail('');
       setPhone('');
       setPassword('');
-      fetchContractors();
+      fetchConductors();
     } catch (err: any) {
       setError(err.message || 'Failed to add staff member');
     } finally {
@@ -73,11 +73,11 @@ export default function ContractorsPage() {
     }
   };
 
-  const handleDeleteContractor = async (id: string) => {
+  const handleDeleteConductor = async (id: string) => {
     if (!token || !window.confirm('Are you sure you want to remove this staff member from your company?')) return;
     try {
-      await deleteContractor(token, id);
-      fetchContractors();
+      await deleteConductor(token, id);
+      fetchConductors();
     } catch (err: any) {
       alert(err.message || 'Failed to delete staff member');
     }
@@ -87,7 +87,7 @@ export default function ContractorsPage() {
     <div>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 className="page-title">Company Contractors & Staff</h1>
+          <h1 className="page-title">Company Conductors & Staff</h1>
           <p className="page-subtitle">Add and manage drivers, conductors, and checkers authorized to log in to mobile services.</p>
         </div>
         <button className="btn-primary" onClick={() => setShowAddModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px', width: 'auto' }}>
@@ -98,7 +98,7 @@ export default function ContractorsPage() {
       <div className="table-card">
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>Loading staff...</div>
-        ) : contractors.length === 0 ? (
+        ) : conductors.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px', color: '#9ca3af' }}>
             <Users size={48} style={{ marginBottom: '16px', color: 'rgba(255,255,255,0.1)' }} />
             <div>No staff members registered yet.</div>
@@ -116,7 +116,7 @@ export default function ContractorsPage() {
               </tr>
             </thead>
             <tbody>
-              {contractors.map(c => (
+              {conductors.map(c => (
                 <tr key={c.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
@@ -196,7 +196,7 @@ export default function ContractorsPage() {
                               transition: 'background 0.15s'
                             }}
                             onClick={() => {
-                              handleDeleteContractor(c.id);
+                              handleDeleteConductor(c.id);
                               setActiveActionMenuId(null);
                             }}
                             onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
@@ -221,7 +221,7 @@ export default function ContractorsPage() {
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'white' }}>Register Staff Conductor / Driver</h3>
             {error && <div style={{ color: '#ef4444', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
             
-            <form onSubmit={handleAddContractor}>
+            <form onSubmit={handleAddConductor}>
               <div className="form-group">
                 <label className="form-label">Full Name</label>
                 <input type="text" className="form-input" placeholder="e.g. Sunil Perera" value={name} onChange={(e) => setName(e.target.value)} required />

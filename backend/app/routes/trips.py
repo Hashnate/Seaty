@@ -14,10 +14,10 @@ router = APIRouter(prefix="/trips", tags=["Trips"])
 def create_trip(
     trip_in: schemas.TripCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
+    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
-    # If owner, verify the vehicle belongs to their company
-    if current_user.role == "owner":
+    # If owner or conductor, verify the vehicle belongs to their company
+    if current_user.role in ["owner", "conductor"]:
         vehicle = db.query(models.Vehicle).filter(
             models.Vehicle.id == trip_in.vehicle_id,
             models.Vehicle.company_id == current_user.company_id
@@ -38,6 +38,16 @@ def create_trip(
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
 
+    cond_id = None
+    if trip_in.conductor_id:
+        conductor_user = db.query(models.User).filter(
+            models.User.id == trip_in.conductor_id,
+            models.User.role == "conductor"
+        ).first()
+        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
+            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
+        cond_id = trip_in.conductor_id
+
     db_trip = models.Trip(
         id=uuid.uuid4(),
         vehicle_id=trip_in.vehicle_id,
@@ -45,7 +55,8 @@ def create_trip(
         departure_time=trip_in.departure_time,
         arrival_time=trip_in.arrival_time,
         price_per_seat=trip_in.price_per_seat,
-        status="scheduled"
+        status="scheduled",
+        conductor_id=cond_id
     )
     db.add(db_trip)
     db.commit()
@@ -62,8 +73,11 @@ def list_trips(
 ):
     query = db.query(models.Trip).join(models.Route).join(models.Vehicle)
     
-    if current_user and current_user.role == "owner":
-        query = query.filter(models.Vehicle.company_id == current_user.company_id)
+    if current_user:
+        if current_user.role == "owner":
+            query = query.filter(models.Vehicle.company_id == current_user.company_id)
+        elif current_user.role == "conductor":
+            query = query.filter(models.Trip.conductor_id == current_user.id)
     
     # Filter by date
     if date:
@@ -85,8 +99,8 @@ def list_trips(
                     (models.TripSchedule.effective_until == None) | (models.TripSchedule.effective_until >= target_date)
                 )
                 
-                # If owner, filter schedules by their company
-                if current_user and current_user.role == "owner":
+                # If owner or conductor, filter schedules by their company
+                if current_user and current_user.role in ["owner", "conductor"]:
                     sched_query = sched_query.join(models.Vehicle).filter(
                         models.Vehicle.company_id == current_user.company_id
                     )
@@ -137,7 +151,8 @@ def list_trips(
                                 departure_time=dep_time,
                                 arrival_time=arr_time,
                                 price_per_seat=sched.price_per_seat,
-                                status="scheduled"
+                                status="scheduled",
+                                conductor_id=sched.conductor_id
                             )
                             db.add(new_trip)
                             db.commit()
@@ -159,6 +174,7 @@ def list_trips(
     for trip in trips:
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
         trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
+        trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
         
         # Verify route match with intermediate stops
         if trip.route:
@@ -214,6 +230,7 @@ def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
         
     trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
     trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
+    trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
     return trip
 
 @router.patch("/{trip_id}/status", response_model=schemas.TripResponse)
@@ -221,14 +238,14 @@ async def update_trip_status(
     trip_id: UUID, 
     status: str = Query(..., description="scheduled, ongoing, completed, cancelled"), 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
+    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
         
-    # Verify owner permissions
-    if current_user.role == "owner":
+    # Verify owner/conductor permissions
+    if current_user.role in ["owner", "conductor"]:
         vehicle = db.query(models.Vehicle).filter(
             models.Vehicle.id == trip.vehicle_id,
             models.Vehicle.company_id == current_user.company_id
@@ -295,8 +312,8 @@ async def update_trip(
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
         
-    # Verify owner permissions
-    if current_user.role == "owner":
+    # Verify owner/conductor permissions
+    if current_user.role in ["owner", "conductor"]:
         # Check current vehicle owner
         current_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
         if not current_vehicle or current_vehicle.company_id != current_user.company_id:
@@ -317,6 +334,17 @@ async def update_trip(
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
         
+    if trip_in.conductor_id is not None:
+        conductor_user = db.query(models.User).filter(
+            models.User.id == trip_in.conductor_id,
+            models.User.role == "conductor"
+        ).first()
+        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
+            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
+        trip.conductor_id = trip_in.conductor_id
+    else:
+        trip.conductor_id = None
+
     old_dep_time = trip.departure_time
     trip.vehicle_id = trip_in.vehicle_id
     trip.route_id = trip_in.route_id
@@ -365,9 +393,89 @@ def delete_trip(
         raise HTTPException(status_code=404, detail="Scheduled trip not found")
         
     vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
-    if current_user.role != "admin" and (current_user.role != "owner" or not vehicle or vehicle.company_id != current_user.company_id):
+    if current_user.role != "admin" and (current_user.role not in ["owner", "conductor"] or not vehicle or vehicle.company_id != current_user.company_id):
         raise HTTPException(status_code=403, detail="Unauthorized to delete this scheduled trip")
         
     db.delete(trip)
     db.commit()
     return {}
+
+@router.get("/{trip_id}/manifest")
+def get_trip_manifest(
+    trip_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin", "owner", "conductor"]))
+):
+    """Get a detailed manifest of passengers for a specific trip, used by conductors."""
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+
+    bookings = db.query(models.Booking).filter(
+        models.Booking.trip_id == trip_id,
+        models.Booking.booking_status == "confirmed"
+    ).all()
+    
+    manifest = []
+    
+    for b in bookings:
+        details = b.passenger_details or {}
+        primary = details.get("primary", {})
+        guests = details.get("guests", [])
+        
+        # Determine seats for primary and guests
+        seats = b.selected_seats or []
+        if not seats:
+            continue
+            
+        primary_seat = seats[0]
+        manifest.append({
+            "seat": primary_seat,
+            "name": primary.get("name", "Unknown"),
+            "gender": primary.get("gender", "Male").lower(),
+            "phone": primary.get("phone", ""),
+            "booking_id": str(b.id)
+        })
+        
+        # For guests, we need to handle both case where guest has explicit seat or not
+        for i, guest in enumerate(guests):
+            if i + 1 < len(seats):
+                g_seat = guest.get("seat", seats[i + 1])
+                manifest.append({
+                    "seat": g_seat,
+                    "name": guest.get("name", "Guest"),
+                    "gender": guest.get("gender", "Female").lower(),
+                    "phone": guest.get("phone", ""),
+                    "booking_id": str(b.id)
+                })
+
+    return {
+        "trip_id": str(trip.id),
+        "boarded_seats": trip.boarded_seats,
+        "manifest": manifest
+    }
+
+@router.post("/{trip_id}/toggle-board")
+def toggle_seat_board_status(
+    trip_id: UUID,
+    seat: str,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin", "owner", "conductor"]))
+):
+    """Toggle the boarding status of a specific seat."""
+    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
+    if not trip:
+        raise HTTPException(status_code=404, detail="Trip not found")
+        
+    boarded = list(trip.boarded_seats)
+    if seat in boarded:
+        boarded.remove(seat)
+        action = "unboarded"
+    else:
+        boarded.append(seat)
+        action = "boarded"
+        
+    trip.boarded_seats = boarded
+    db.commit()
+    
+    return {"message": f"Seat {seat} marked as {action}", "boarded_seats": boarded}

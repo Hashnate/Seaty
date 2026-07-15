@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { getCompanies, createCompany, toggleCompanyStatus } from '../api/client';
-import { Building2, Plus, Power, Settings } from 'lucide-react';
+import { getCompanies, createCompany, toggleCompanyStatus, updateCompany, registerUser } from '../api/client';
+import { Building2, Plus, Power, Settings, UserPlus, Edit3 } from 'lucide-react';
 
 interface Company {
   id: string;
@@ -19,8 +19,21 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<Company | null>(null);
+  const [registeringCompany, setRegisteringCompany] = useState<Company | null>(null);
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+  
+  // Create Form State
   const [form, setForm] = useState({ name: '', registration_number: '', contact_email: '', contact_phone: '', address: '' });
+  
+  // Edit Form State
+  const [editForm, setEditForm] = useState({ name: '', registration_number: '', contact_email: '', contact_phone: '', address: '' });
+
+  // Register Owner Form State
+  const [ownerForm, setOwnerForm] = useState({ full_name: '', email: '', phone_number: '', password: '' });
+  const [ownerError, setOwnerError] = useState('');
+  const [ownerSuccess, setOwnerSuccess] = useState('');
+  const [ownerSubmitting, setOwnerSubmitting] = useState(false);
 
   const fetchCompanies = async () => {
     if (!token) return;
@@ -47,6 +60,49 @@ export default function CompaniesPage() {
       await fetchCompanies();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to create company');
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !editingCompany || !editForm.name) return;
+    try {
+      await updateCompany(token, editingCompany.id, editForm);
+      setEditingCompany(null);
+      await fetchCompanies();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update company');
+    }
+  };
+
+  const handleRegisterOwner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !registeringCompany) return;
+    setOwnerError('');
+    setOwnerSuccess('');
+    
+    if (!ownerForm.full_name.trim()) return setOwnerError('Please enter full name');
+    if (!ownerForm.email.trim()) return setOwnerError('Please enter email address');
+    if (!ownerForm.password.trim() || ownerForm.password.length < 6) {
+      return setOwnerError('Password must be at least 6 characters');
+    }
+
+    setOwnerSubmitting(true);
+    try {
+      await registerUser({
+        email: ownerForm.email.trim(),
+        password: ownerForm.password.trim(),
+        full_name: ownerForm.full_name.trim(),
+        phone_number: ownerForm.phone_number.trim() || null,
+        role: 'owner',
+        company_id: registeringCompany.id
+      });
+      setOwnerSuccess('Operator/Owner credentials registered successfully! They can now log in.');
+      setOwnerForm({ full_name: '', email: '', phone_number: '', password: '' });
+    } catch (err: any) {
+      setOwnerError(err.message || 'Failed to register operator credentials');
+    } finally {
+      setOwnerSubmitting(false);
     }
   };
 
@@ -161,10 +217,71 @@ export default function CompaniesPage() {
                             borderRadius: '8px',
                             boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                             zIndex: 999,
-                            minWidth: '130px',
+                            minWidth: '170px',
                             overflow: 'hidden'
                           }}
                         >
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              borderBottom: '1px solid rgba(0,0,0,0.04)',
+                              textAlign: 'left',
+                              transition: 'background 0.15s',
+                              color: 'var(--text-main)'
+                            }}
+                            onClick={() => {
+                              setEditingCompany(c);
+                              setEditForm({
+                                name: c.name,
+                                registration_number: c.registration_number || '',
+                                contact_email: c.contact_email || '',
+                                contact_phone: c.contact_phone || '',
+                                address: c.address || ''
+                              });
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <Edit3 size={14} /> Edit Details
+                          </div>
+                          
+                          <div
+                            style={{
+                              padding: '8px 12px',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              borderBottom: '1px solid rgba(0,0,0,0.04)',
+                              textAlign: 'left',
+                              transition: 'background 0.15s',
+                              color: 'var(--text-main)'
+                            }}
+                            onClick={() => {
+                              setRegisteringCompany(c);
+                              setOwnerForm({
+                                full_name: '',
+                                email: '',
+                                phone_number: '',
+                                password: ''
+                              });
+                              setOwnerError('');
+                              setOwnerSuccess('');
+                              setActiveActionMenuId(null);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f1f5f9'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <UserPlus size={14} /> Register Owner
+                          </div>
+
                           <div
                             style={{
                               padding: '8px 12px',
@@ -184,7 +301,7 @@ export default function CompaniesPage() {
                             onMouseEnter={(e) => e.currentTarget.style.background = c.is_active ? '#fef2f2' : '#ecfdf5'}
                             onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                           >
-                            {c.is_active ? 'Disable' : 'Enable'}
+                            <Power size={14} /> {c.is_active ? 'Disable' : 'Enable'}
                           </div>
                         </div>
                       </>
@@ -238,6 +355,120 @@ export default function CompaniesPage() {
                   background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
                 }}>Cancel</button>
                 <button type="submit" className="btn-primary" style={{ flex: 1 }}>Register Company</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Company Modal */}
+      {editingCompany && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '16px', padding: '32px', width: '100%',
+            maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+            animation: 'fadeIn 0.3s ease-out',
+          }}>
+            <h3 style={{ marginBottom: '20px', fontSize: '18px', fontWeight: 700 }}>Edit Company Details</h3>
+            <form onSubmit={handleUpdate}>
+              <div className="form-group">
+                <label className="form-label">Company Name *</label>
+                <input className="form-input" value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Business Registration No.</label>
+                <input className="form-input" value={editForm.registration_number} onChange={e => setEditForm({ ...editForm, registration_number: e.target.value })} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input className="form-input" type="email" value={editForm.contact_email} onChange={e => setEditForm({ ...editForm, contact_email: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Phone</label>
+                  <input className="form-input" value={editForm.contact_phone} onChange={e => setEditForm({ ...editForm, contact_phone: e.target.value })} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Address</label>
+                <input className="form-input" value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} />
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                <button type="button" onClick={() => setEditingCompany(null)} style={{
+                  flex: 1, padding: '12px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '10px',
+                  background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
+                }}>Cancel</button>
+                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Register Owner Modal */}
+      {registeringCompany && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '16px', padding: '32px', width: '100%',
+            maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+            animation: 'fadeIn 0.3s ease-out',
+          }}>
+            <h3 style={{ marginBottom: '8px', fontSize: '18px', fontWeight: 700 }}>Register Company Operator</h3>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Create owner credentials for <strong>{registeringCompany.name}</strong> to manage vehicles, routes, staff, and schedules.
+            </p>
+
+            {ownerError && (
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+                borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#ef4444', marginBottom: '16px'
+              }}>
+                {ownerError}
+              </div>
+            )}
+
+            {ownerSuccess && (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: '8px', padding: '10px 14px', fontSize: '13px', color: '#10b981', marginBottom: '16px'
+              }}>
+                {ownerSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleRegisterOwner}>
+              <div className="form-group">
+                <label className="form-label">Full Name *</label>
+                <input className="form-input" placeholder="e.g. Sunil Shantha" value={ownerForm.full_name} onChange={e => setOwnerForm({ ...ownerForm, full_name: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Operator Email *</label>
+                <input className="form-input" type="email" placeholder="e.g. sunil@company.lk" value={ownerForm.email} onChange={e => setOwnerForm({ ...ownerForm, email: e.target.value })} required />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Contact Number</label>
+                  <input className="form-input" placeholder="e.g. 0771234567" value={ownerForm.phone_number} onChange={e => setOwnerForm({ ...ownerForm, phone_number: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Password *</label>
+                  <input className="form-input" type="password" placeholder="Min 6 chars" value={ownerForm.password} onChange={e => setOwnerForm({ ...ownerForm, password: e.target.value })} required />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                <button type="button" onClick={() => setRegisteringCompany(null)} style={{
+                  flex: 1, padding: '12px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '10px',
+                  background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
+                }}>Close</button>
+                <button type="submit" className="btn-primary" disabled={ownerSubmitting} style={{ flex: 1 }}>
+                  {ownerSubmitting ? 'Registering...' : 'Register Operator'}
+                </button>
               </div>
             </form>
           </div>

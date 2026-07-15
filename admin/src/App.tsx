@@ -12,7 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import RoutesPage from './pages/RoutesPage';
 import MyFleetPage from './pages/MyFleetPage';
 import MyTripsPage from './pages/MyTripsPage';
-import ContractorsPage from './pages/ContractorsPage';
+import ConductorsPage from './pages/ConductorsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
@@ -86,10 +86,10 @@ export default function App() {
                       } 
                     />
                     <Route 
-                      path="/contractors" 
+                      path="/conductors" 
                       element={
                         <RoleProtectedRoute allowed={['owner', 'admin']}>
-                          <ContractorsPage />
+                          <ConductorsPage />
                         </RoleProtectedRoute>
                       } 
                     />

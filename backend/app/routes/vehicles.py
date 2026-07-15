@@ -13,7 +13,7 @@ router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 async def create_vehicle(
     vehicle_in: schemas.VehicleCreate, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
+    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
     db_vehicle = models.Vehicle(
         id=uuid.uuid4(),
@@ -57,8 +57,8 @@ def list_vehicles(
     if current_user.role == "admin":
         # Admins see everything
         return db.query(models.Vehicle).all()
-    elif current_user.role == "owner":
-        # Owners see vehicles belonging to their company
+    elif current_user.role in ["owner", "conductor"]:
+        # Owners and conductors see vehicles belonging to their company
         return db.query(models.Vehicle).filter(models.Vehicle.company_id == current_user.company_id).all()
     else:
         # Passengers only see verified vehicles
@@ -149,7 +149,7 @@ def delete_vehicle(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
         
-    if current_user.role != "admin" and (current_user.role != "owner" or vehicle.company_id != current_user.company_id):
+    if current_user.role != "admin" and (current_user.role not in ["owner", "conductor"] or vehicle.company_id != current_user.company_id):
         raise HTTPException(status_code=403, detail="Unauthorized to delete this vehicle")
         
     db.delete(vehicle)
@@ -167,7 +167,7 @@ def update_vehicle(
     if not vehicle:
         raise HTTPException(status_code=404, detail="Vehicle not found")
         
-    if current_user.role != "admin" and (current_user.role != "owner" or vehicle.company_id != current_user.company_id):
+    if current_user.role != "admin" and (current_user.role not in ["owner", "conductor"] or vehicle.company_id != current_user.company_id):
         raise HTTPException(status_code=403, detail="Unauthorized to update this vehicle")
         
     vehicle.name = vehicle_in.name

@@ -7,29 +7,29 @@ import uuid
 from app.database import get_db
 from app import models, schemas, auth
 
-router = APIRouter(prefix="/contractors", tags=["Contractors"])
+router = APIRouter(prefix="/conductors", tags=["Conductors"])
 
 @router.get("", response_model=List[schemas.UserResponse])
-def list_contractors(
+def list_conductors(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
 ):
-    """List all contractors/staff registered under the current owner's company."""
+    """List all conductors/staff registered under the current owner's company."""
     if current_user.role == "admin":
-        return db.query(models.User).filter(models.User.role == "contractor").all()
+        return db.query(models.User).filter(models.User.role == "conductor").all()
         
     return db.query(models.User).filter(
-        models.User.role == "contractor",
+        models.User.role == "conductor",
         models.User.company_id == current_user.company_id
     ).all()
 
 @router.post("", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def create_contractor(
-    payload: schemas.ContractorCreate,
+def create_conductor(
+    payload: schemas.ConductorCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["owner"]))
 ):
-    """Add a new contractor staff member (conductor/driver) linked to the owner's company."""
+    """Add a new conductor staff member (conductor/driver) linked to the owner's company."""
     # Ensure owner has a company
     if not current_user.company_id:
         raise HTTPException(
@@ -47,7 +47,7 @@ def create_contractor(
         
     existing_phone = db.query(models.User).filter(
         models.User.phone_number == payload.phone_number,
-        models.User.role == "contractor"
+        models.User.role == "conductor"
     ).first()
     if existing_phone:
         raise HTTPException(
@@ -55,39 +55,39 @@ def create_contractor(
             detail="A staff member with this phone number is already registered."
         )
 
-    db_contractor = models.User(
+    db_conductor = models.User(
         id=uuid.uuid4(),
         email=payload.email,
         hashed_password=auth.get_password_hash(payload.password),
         full_name=payload.full_name,
         phone_number=payload.phone_number,
-        role="contractor",
+        role="conductor",
         company_id=current_user.company_id
     )
-    db.add(db_contractor)
+    db.add(db_conductor)
     db.commit()
-    db.refresh(db_contractor)
-    return db_contractor
+    db.refresh(db_conductor)
+    return db_conductor
 
-@router.delete("/{contractor_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_contractor(
-    contractor_id: UUID,
+@router.delete("/{conductor_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_conductor(
+    conductor_id: UUID,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
 ):
-    """Delete a contractor staff member."""
-    contractor = db.query(models.User).filter(
-        models.User.id == contractor_id,
-        models.User.role == "contractor"
+    """Delete a conductor staff member."""
+    conductor = db.query(models.User).filter(
+        models.User.id == conductor_id,
+        models.User.role == "conductor"
     ).first()
     
-    if not contractor:
-        raise HTTPException(status_code=404, detail="Contractor record not found")
+    if not conductor:
+        raise HTTPException(status_code=404, detail="Conductor record not found")
         
     # Enforce company RBAC
-    if current_user.role != "admin" and contractor.company_id != current_user.company_id:
+    if current_user.role != "admin" and conductor.company_id != current_user.company_id:
         raise HTTPException(status_code=403, detail="Unauthorized to remove this staff member")
         
-    db.delete(contractor)
+    db.delete(conductor)
     db.commit()
     return {}

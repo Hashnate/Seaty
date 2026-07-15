@@ -14,10 +14,10 @@ router = APIRouter(prefix="/schedules", tags=["Schedules"])
 def create_schedule(
     schedule_in: schemas.TripScheduleCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
+    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
-    # Enforce vehicle owner check
-    if current_user.role == "owner":
+    # Enforce vehicle owner/conductor check
+    if current_user.role in ["owner", "conductor"]:
         vehicle = db.query(models.Vehicle).filter(
             models.Vehicle.id == schedule_in.vehicle_id,
             models.Vehicle.company_id == current_user.company_id
@@ -38,6 +38,16 @@ def create_schedule(
     if not route:
         raise HTTPException(status_code=404, detail="Route template not found")
 
+    cond_id = None
+    if schedule_in.conductor_id:
+        conductor_user = db.query(models.User).filter(
+            models.User.id == schedule_in.conductor_id,
+            models.User.role == "conductor"
+        ).first()
+        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
+            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
+        cond_id = schedule_in.conductor_id
+
     db_schedule = models.TripSchedule(
         id=uuid.uuid4(),
         vehicle_id=schedule_in.vehicle_id,
@@ -49,7 +59,8 @@ def create_schedule(
         custom_days=schedule_in.custom_days or [],
         effective_from=schedule_in.effective_from,
         effective_until=schedule_in.effective_until,
-        is_active=True
+        is_active=True,
+        conductor_id=cond_id
     )
     db.add(db_schedule)
     db.commit()
@@ -57,6 +68,7 @@ def create_schedule(
     
     db_schedule.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == db_schedule.vehicle_id).first()
     db_schedule.route = db.query(models.Route).filter(models.Route.id == db_schedule.route_id).first()
+    db_schedule.conductor = db.query(models.User).filter(models.User.id == db_schedule.conductor_id).first()
     
     return db_schedule
 
@@ -69,12 +81,15 @@ def list_schedules(
     
     if current_user.role == "owner":
         query = query.filter(models.Vehicle.company_id == current_user.company_id)
+    elif current_user.role == "conductor":
+        query = query.filter(models.TripSchedule.conductor_id == current_user.id)
     
     schedules = query.all()
     
     for s in schedules:
         s.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == s.vehicle_id).first()
         s.route = db.query(models.Route).filter(models.Route.id == s.route_id).first()
+        s.conductor = db.query(models.User).filter(models.User.id == s.conductor_id).first()
         
     return schedules
 
@@ -94,6 +109,7 @@ def get_schedule(
         
     schedule.vehicle = vehicle
     schedule.route = db.query(models.Route).filter(models.Route.id == schedule.route_id).first()
+    schedule.conductor = db.query(models.User).filter(models.User.id == schedule.conductor_id).first()
     return schedule
 
 @router.put("/{schedule_id}", response_model=schemas.TripScheduleResponse)
@@ -112,7 +128,7 @@ def update_schedule(
         raise HTTPException(status_code=403, detail="Unauthorized to modify this schedule")
 
     if schedule_in.vehicle_id is not None:
-        if current_user.role == "owner":
+        if current_user.role in ["owner", "conductor"]:
             new_vehicle = db.query(models.Vehicle).filter(
                 models.Vehicle.id == schedule_in.vehicle_id,
                 models.Vehicle.company_id == current_user.company_id
@@ -145,6 +161,24 @@ def update_schedule(
         schedule.effective_until = schedule_in.effective_until
     if schedule_in.is_active is not None:
         schedule.is_active = schedule_in.is_active
+    if schedule_in.conductor_id is not None:
+        conductor_user = db.query(models.User).filter(
+            models.User.id == schedule_in.conductor_id,
+            models.User.role == "conductor"
+        ).first()
+        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
+            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
+        schedule.conductor_id = schedule_in.conductor_id
+    elif "conductor_id" in schedule_in.model_dump(exclude_unset=True):
+        # Allow removing the assigned conductor if sent explicitly as None
+        schedule.conductor_id = None
+        
+    # Retroactively update future trips generated from this schedule
+    now = datetime.datetime.now(datetime.timezone.utc)
+    db.query(models.Trip).filter(
+        models.Trip.schedule_id == schedule.id,
+        models.Trip.departure_time >= now
+    ).update({"conductor_id": schedule.conductor_id}, synchronize_session=False)
 
     schedule.updated_at = datetime.datetime.utcnow()
     db.commit()
@@ -152,6 +186,7 @@ def update_schedule(
     
     schedule.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
     schedule.route = db.query(models.Route).filter(models.Route.id == schedule.route_id).first()
+    schedule.conductor = db.query(models.User).filter(models.User.id == schedule.conductor_id).first()
     return schedule
 
 @router.patch("/{schedule_id}/toggle", response_model=schemas.TripScheduleResponse)
@@ -220,7 +255,7 @@ def create_override(
     if not rep_vehicle:
         raise HTTPException(status_code=404, detail="Replacement vehicle not found")
         
-    if current_user.role == "owner":
+    if current_user.role in ["owner", "conductor"]:
         if rep_vehicle.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Replacement vehicle does not belong to your company")
         if not rep_vehicle.is_verified:

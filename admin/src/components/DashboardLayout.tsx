@@ -23,7 +23,7 @@ const NAV_ITEMS = [
   { path: '/routes', icon: RouteIcon, label: 'Route Templates' },
   { path: '/fleet', icon: Bus, label: 'My Fleet' },
   { path: '/trips', icon: Calendar, label: 'Trip Scheduling' },
-  { path: '/contractors', icon: Contact, label: 'My Contractors' },
+  { path: '/conductors', icon: Contact, label: 'My Conductors' },
   { path: '/map', icon: MapIcon, label: 'Live Fleet Map', badge: 'Live' },
   { path: '/bookings', icon: Users, label: 'Bookings Log' },
   { path: '/settings', icon: SettingsIcon, label: 'Console Settings' },
@@ -43,10 +43,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const visibleNavItems = NAV_ITEMS.filter(item => {
     if (userRole === 'owner') {
-      return ['/', '/fleet', '/trips', '/contractors', '/bookings', '/map'].includes(item.path);
+      return ['/', '/fleet', '/trips', '/conductors', '/bookings', '/map'].includes(item.path);
     }
     // Admins can see all views
-    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/contractors', '/map', '/bookings', '/settings'].includes(item.path);
+    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/conductors', '/map', '/bookings', '/settings'].includes(item.path);
   });
 
   return (
