@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: ./database/Dockerfile
+    container_name: seaty-db
+    environment:
+      POSTGRES_DB: seaty
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: seaty_secure_password_987
+    volumes:
+      - seaty-postgres-data:/var/lib/postgresql/data
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: seaty-backend
+    environment:
+      DATABASE_URL: postgresql://postgres:seaty_secure_password_987@db:5432/seaty
+      SECRET_KEY: SUPER_SECRET_KEY_SEATY_1234567890_CHANGEME_IN_PRODUCTION
+    depends_on:
+      - db
+    restart: always
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: seaty-admin
+    ports:
+      - "8025:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  seaty-postgres-data:

@@ -1,14 +1,19 @@
+import os
 import psycopg2
 
-password = ""
 try:
-    conn = psycopg2.connect(
-        dbname="seaty",
-        user="postgres",
-        password=password,
-        host="localhost",
-        port=5432
-    )
+    database_url = os.getenv("DATABASE_URL")
+    if database_url:
+        conn = psycopg2.connect(database_url)
+    else:
+        password = ""
+        conn = psycopg2.connect(
+            dbname="seaty",
+            user="postgres",
+            password=password,
+            host="localhost",
+            port=5432
+        )
     conn.autocommit = True
     cur = conn.cursor()
     
