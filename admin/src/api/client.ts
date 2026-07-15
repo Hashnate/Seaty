@@ -65,6 +65,19 @@ export async function getCurrentUser(token: string) {
   return request('/auth/me', { token });
 }
 
+export async function registerUser(data: Record<string, unknown>) {
+  const response = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Registration failed' }));
+    throw new Error(err.detail || 'Failed to register account');
+  }
+  return response.json();
+}
+
 // ==========================================
 // Admin Dashboard
 // ==========================================
@@ -205,19 +218,18 @@ export async function updateTrip(token: string, tripId: string, data: Record<str
   return request(`/trips/${tripId}`, { method: 'PUT', body: data, token });
 }
 
+// Conductor/Staff Management (Owner)
 // ==========================================
-// Contractor/Staff Management (Owner)
-// ==========================================
-export async function getContractors(token: string) {
-  return request('/contractors', { token });
+export async function getConductors(token: string) {
+  return request('/conductors', { token });
 }
 
-export async function createContractor(token: string, data: Record<string, unknown>) {
-  return request('/contractors', { method: 'POST', body: data, token });
+export async function createConductor(token: string, data: Record<string, unknown>) {
+  return request('/conductors', { method: 'POST', body: data, token });
 }
 
-export async function deleteContractor(token: string, contractorId: string) {
-  return request(`/contractors/${contractorId}`, { method: 'DELETE', token });
+export async function deleteConductor(token: string, conductorId: string) {
+  return request(`/conductors/${conductorId}`, { method: 'DELETE', token });
 }
 
 // ==========================================

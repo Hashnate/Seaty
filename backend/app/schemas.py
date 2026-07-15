@@ -26,7 +26,7 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
-class ContractorCreate(BaseModel):
+class ConductorCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str
@@ -158,12 +158,14 @@ class TripCreate(BaseModel):
     departure_time: datetime.datetime
     arrival_time: datetime.datetime
     price_per_seat: float
+    conductor_id: Optional[UUID] = None
 
 class TripResponse(BaseModel):
     id: UUID
     vehicle_id: UUID
     route_id: UUID
     schedule_id: Optional[UUID] = None
+    conductor_id: Optional[UUID] = None
     departure_time: datetime.datetime
     arrival_time: datetime.datetime
     price_per_seat: float
@@ -173,6 +175,7 @@ class TripResponse(BaseModel):
     # Nested components can be requested via specific endpoints or query params
     vehicle: Optional[VehicleResponse] = None
     route: Optional[RouteResponse] = None
+    conductor: Optional[UserResponse] = None
 
     class Config:
         from_attributes = True
@@ -190,6 +193,7 @@ class TripScheduleCreate(BaseModel):
     custom_days: Optional[List[int]] = []
     effective_from: datetime.date
     effective_until: Optional[datetime.date] = None
+    conductor_id: Optional[UUID] = None
 
 class TripScheduleUpdate(BaseModel):
     vehicle_id: Optional[UUID] = None
@@ -202,6 +206,7 @@ class TripScheduleUpdate(BaseModel):
     effective_from: Optional[datetime.date] = None
     effective_until: Optional[datetime.date] = None
     is_active: Optional[bool] = None
+    conductor_id: Optional[UUID] = None
 
 class TripScheduleResponse(BaseModel):
     id: UUID
@@ -219,6 +224,8 @@ class TripScheduleResponse(BaseModel):
     updated_at: datetime.datetime
     vehicle: Optional[VehicleResponse] = None
     route: Optional[RouteResponse] = None
+    conductor_id: Optional[UUID] = None
+    conductor: Optional[UserResponse] = None
 
     class Config:
         from_attributes = True

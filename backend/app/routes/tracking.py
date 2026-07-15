@@ -84,12 +84,19 @@ async def tracking_endpoint(
 
         # 2. Check permissions based on requested role
         if role == "driver":
-            # Verify user owns the vehicle they want to track
             vehicle = db.query(models.Vehicle).filter(
-                models.Vehicle.id == vehicle_id,
-                models.Vehicle.owner_id == user.id
+                models.Vehicle.id == vehicle_id
             ).first()
             if not vehicle:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Vehicle not found")
+                return
+            
+            # Check permission: user must be the owner of the vehicle, or a conductor/admin in the same company
+            is_owner = (user.role == "owner" and vehicle.owner_id == user.id)
+            is_company_conductor = (user.role == "conductor" and vehicle.company_id == user.company_id and user.company_id is not None)
+            is_admin = (user.role == "admin")
+            
+            if not (is_owner or is_company_conductor or is_admin):
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized vehicle stream")
                 return
             

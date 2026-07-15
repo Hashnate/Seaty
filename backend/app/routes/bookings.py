@@ -105,15 +105,20 @@ def list_bookings(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     if current_user.role == "admin":
-        bookings = db.query(models.Booking).all()
+        bookings = db.query(models.Booking).order_by(models.Booking.created_at.desc()).all()
     elif current_user.role == "owner":
         # Get bookings for trips scheduled on vehicles belonging to their company
         bookings = db.query(models.Booking).join(models.Trip).join(models.Vehicle).filter(
             models.Vehicle.company_id == current_user.company_id
-        ).all()
+        ).order_by(models.Booking.created_at.desc()).all()
+    elif current_user.role == "conductor":
+        # Get bookings for trips assigned to this conductor
+        bookings = db.query(models.Booking).join(models.Trip).filter(
+            models.Trip.conductor_id == current_user.id
+        ).order_by(models.Booking.created_at.desc()).all()
     else:
         # Passengers get their own bookings
-        bookings = db.query(models.Booking).filter(models.Booking.passenger_id == current_user.id).all()
+        bookings = db.query(models.Booking).filter(models.Booking.passenger_id == current_user.id).order_by(models.Booking.created_at.desc()).all()
 
     # Populate nested structures for returning to client
     for booking in bookings:
@@ -142,8 +147,12 @@ def get_booking(
     elif current_user.role == "owner":
         trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
         vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
-        if vehicle.company_id != current_user.company_id:
+        if not vehicle or vehicle.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Unauthorized to view this company's booking")
+    elif current_user.role == "conductor":
+        trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
+        if not trip or trip.conductor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Unauthorized to view this booking")
 
     booking.trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
     booking.passenger = db.query(models.User).filter(models.User.id == booking.passenger_id).first()
