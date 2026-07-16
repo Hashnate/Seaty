@@ -1,5 +1,5 @@
-# Set platform to iOS 13.0 to support Firebase SDK and modern plugins
-platform :ios, '13.0'
+# Set platform to iOS 15.0 to support Firebase SDK and modern plugins
+platform :ios, '15.0'
 
 # CocoaPods analytics sends usage stats. If you want to disable it, uncomment the following line:
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -38,9 +38,9 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     
-    # Force all pod targets to use iOS 13.0 to match the deployment target
+    # Force all pod targets to use iOS 15.0 to match the deployment target
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
 end
