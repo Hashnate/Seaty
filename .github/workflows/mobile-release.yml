@@ -104,6 +104,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pods-
 
+      - name: Decode App Store Connect API Key
+        run: |
+          echo "APP_STORE_CONNECT_API_KEY_DECODED<<EOF" >> $GITHUB_ENV
+          echo "${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}" | base64 --decode >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
       - name: Install Apple Certificate and Provisioning Profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
@@ -155,11 +161,15 @@ jobs:
             -exportOptionsPlist ExportOptions.plist \
             -exportPath $RUNNER_TEMP/export \
             -allowProvisioningUpdates
+          
+          # Find exported ipa dynamically to prevent naming mismatch
+          IPA_PATH=$(find $RUNNER_TEMP/export -name "*.ipa" | head -n 1)
+          echo "EXPORTED_IPA_PATH=$IPA_PATH" >> $GITHUB_ENV
 
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: '${{ runner.temp }}/export/Runner.ipa'
+          app-path: ${{ env.EXPORTED_IPA_PATH }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          api-private-key: ${{ env.APP_STORE_CONNECT_API_KEY_DECODED }}
