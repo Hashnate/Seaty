@@ -383,6 +383,10 @@
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = 5X9A8V7S49;
+				PROVISIONING_PROFILE_SPECIFIER = "Seaty App Store Profile";
 			};
 			name = Profile;
 		};
@@ -588,6 +592,10 @@
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = 5X9A8V7S49;
+				PROVISIONING_PROFILE_SPECIFIER = "Seaty App Store Profile";
 			};
 			name = Release;
 		};
