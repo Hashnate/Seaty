@@ -78,5 +78,7 @@
 		<string>We need your location to show nearby rides and track your journey.</string>
 		<key>NSLocationAlwaysUsageDescription</key>
 		<string>We need your location to show nearby rides and track your journey.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>We need camera access to scan passenger ticket QR codes.</string>
 	</dict>
 </plist>

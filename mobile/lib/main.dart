@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 // =====================================================================
 // 1. STATE MANAGEMENT (PROVIDER)
@@ -4086,119 +4088,121 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
     
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Live GPS Radar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Track luxury buses commuting live.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 16),
-          
-          // Select Bus to Track
-          DropdownButtonFormField<String>(
-            dropdownColor: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            decoration: InputDecoration(
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              labelText: 'Select Bus line to track',
-            ),
-            value: _selectedBusId,
-            items: state.trips.map((trip) {
-              return DropdownMenuItem<String>(
-                value: trip['reg'],
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Text('${trip['bus_name']} (${trip['reg']})', style: const TextStyle(fontWeight: FontWeight.w600)),
-                ),
-              );
-            }).toList(),
-            onChanged: (val) {
-              setState(() => _selectedBusId = val);
-              if (val != null) {
-                state.startTracking(val);
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-
-          // Custom Radar View (acting as a gorgeous map placeholder)
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0F4F8),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.black12),
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Live GPS Radar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            const Text('Track luxury buses commuting live.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+            const SizedBox(height: 16),
+            
+            // Select Bus to Track
+            DropdownButtonFormField<String>(
+              dropdownColor: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              decoration: InputDecoration(
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                labelText: 'Select Bus line to track',
               ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: RadarPainter(
-                        isTracking: state.isTracking,
-                        loc: state.trackedBusLocation,
+              value: _selectedBusId,
+              items: state.trips.map((trip) {
+                return DropdownMenuItem<String>(
+                  value: trip['reg'],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Text('${trip['bus_name']} (${trip['reg']})', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+                );
+              }).toList(),
+              onChanged: (val) {
+                setState(() => _selectedBusId = val);
+                if (val != null) {
+                  state.startTracking(val);
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+  
+            // Custom Radar View (acting as a gorgeous map placeholder)
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F4F8),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.black12),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: RadarPainter(
+                          isTracking: state.isTracking,
+                          loc: state.trackedBusLocation,
+                        ),
                       ),
                     ),
-                  ),
-                  
-                  // Radar detail dashboard overlay
-                  if (state.isTracking && state.trackedBusLocation != null)
-                    Positioned(
-                      bottom: 16,
-                      left: 16,
-                      right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.95),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF0A2540).withOpacity(0.2)),
+                    
+                    // Radar detail dashboard overlay
+                    if (state.isTracking && state.trackedBusLocation != null)
+                      Positioned(
+                        bottom: 16,
+                        left: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF0A2540).withOpacity(0.2)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.gps_fixed_rounded, size: 14, color: Color(0xFF10B981)),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Streaming Active: $_selectedBusId', 
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF10B981))
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'GPS Coords: [${state.trackedBusLocation!['latitude'].toStringAsFixed(4)}, ${state.trackedBusLocation!['longitude'].toStringAsFixed(4)}]',
+                                style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFF0A2540)),
+                              ),
+                              Text(
+                                'Speed: ${state.trackedBusLocation!['speed'].toStringAsFixed(1)} km/h • Bearing: ${state.trackedBusLocation!['heading']?.toStringAsFixed(0)}°',
+                                style: const TextStyle(color: Colors.black87),
+                              ),
+                            ],
+                          ),
                         ),
+                      )
+                    else
+                      const Center(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.gps_fixed_rounded, size: 14, color: Color(0xFF10B981)),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Streaming Active: $_selectedBusId', 
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF10B981))
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'GPS Coords: [${state.trackedBusLocation!['latitude'].toStringAsFixed(4)}, ${state.trackedBusLocation!['longitude'].toStringAsFixed(4)}]',
-                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFF0A2540)),
-                            ),
-                            Text(
-                              'Speed: ${state.trackedBusLocation!['speed'].toStringAsFixed(1)} km/h • Bearing: ${state.trackedBusLocation!['heading']?.toStringAsFixed(0)}°',
-                              style: const TextStyle(color: Colors.black87),
-                            ),
+                            Icon(Icons.radar_rounded, size: 48, color: Color(0xFF0A2540)),
+                            const SizedBox(height: 8),
+                            Text('Select a vehicle to initiate tracking', style: TextStyle(color: Colors.grey, fontSize: 13)),
                           ],
                         ),
-                      ),
-                    )
-                  else
-                    const Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.radar_rounded, size: 48, color: Color(0xFF0A2540)),
-                          const SizedBox(height: 8),
-                          Text('Select a vehicle to initiate tracking', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                        ],
-                      ),
-                    )
-                ],
+                      )
+                  ],
+                ),
               ),
-            ),
-          )
-        ],
+            )
+          ],
+        ),
       ),
     );
   }
@@ -4331,8 +4335,10 @@ class PassengerBookingsTab extends ConsumerWidget {
               SizedBox(
                 width: 140,
                 height: 140,
-                child: CustomPaint(
-                  painter: QrCodePainter(b['id'].toString()),
+                child: QrImageView(
+                  data: b['id'].toString(),
+                  version: QrVersions.auto,
+                  size: 140.0,
                 ),
               ),
               const SizedBox(height: 12),
@@ -4365,101 +4371,105 @@ class PassengerBookingsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appStateProvider);
     
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('My Booked Tickets', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    const Text('Present these digital tickets during boarding.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: state.bookings.isEmpty
-                ? const Center(child: Text('No tickets booked yet.', style: TextStyle(color: Colors.grey)))
-                : ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 95),
-                    itemCount: state.bookings.length,
-                    itemBuilder: (context, index) {
-                      final b = state.bookings[index];
-                      final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: const BorderSide(color: Colors.black12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(b['bus_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                        Text(b['reg'], style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace')),
-                                        const SizedBox(height: 12),
-                                        Text('Route: ${b['origin']} \u2192 ${b['destination']}', style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold)),
-                                        const SizedBox(height: 6),
-                                        Text('Seats Reserved: ${b['seats'].join(', ')}', style: const TextStyle(color: Colors.black87)),
-                                        Text('Departure: ${b['departure']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                      ],
-                                    ),
-                                  ),
-                                  // QR Code visualization block
-                                  Container(
-                                    width: 76,
-                                    height: 76,
-                                    padding: const EdgeInsets.all(6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      border: Border.all(color: Colors.black12),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: CustomPaint(
-                                      painter: QrCodePainter(b['id'].toString()),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const Divider(height: 24, color: Colors.black12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(ticketCode, style: const TextStyle(fontFamily: 'monospace', color: Color(0xFF0A2540), fontSize: 12, fontWeight: FontWeight.bold)),
-                                  TextButton.icon(
-                                    onPressed: () => _showDownloadTicketDialog(context, b),
-                                    icon: const Icon(Icons.download_rounded, size: 14, color: Color(0xFFE65100)),
-                                    label: const Text('Download', style: TextStyle(fontSize: 12, color: Color(0xFFE65100), fontWeight: FontWeight.bold)),
-                                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                                  ),
-                                  Text('Fare: Rs. ${b['price']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE65100))),
-                                ],
-                              )
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('My Booked Tickets', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const Text('Present these digital tickets during boarding.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
                   ),
-          )
-        ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: state.bookings.isEmpty
+                  ? const Center(child: Text('No tickets booked yet.', style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 95),
+                      itemCount: state.bookings.length,
+                      itemBuilder: (context, index) {
+                        final b = state.bookings[index];
+                        final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: const BorderSide(color: Colors.black12),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(b['bus_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                          Text(b['reg'], style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace')),
+                                          const SizedBox(height: 12),
+                                          Text('Route: ${b['origin']} \u2192 ${b['destination']}', style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold)),
+                                          const SizedBox(height: 6),
+                                          Text('Seats Reserved: ${b['seats'].join(', ')}', style: const TextStyle(color: Colors.black87)),
+                                          Text('Departure: ${b['departure']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                        ],
+                                      ),
+                                    ),
+                                    // QR Code visualization block
+                                    Container(
+                                      width: 76,
+                                      height: 76,
+                                      padding: const EdgeInsets.all(2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        border: Border.all(color: Colors.black12),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: QrImageView(
+                                        data: b['id'].toString(),
+                                        version: QrVersions.auto,
+                                        size: 72.0,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Divider(height: 24, color: Colors.black12),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(ticketCode, style: const TextStyle(fontFamily: 'monospace', color: Color(0xFF0A2540), fontSize: 12, fontWeight: FontWeight.bold)),
+                                    TextButton.icon(
+                                      onPressed: () => _showDownloadTicketDialog(context, b),
+                                      icon: const Icon(Icons.download_rounded, size: 14, color: Color(0xFFE65100)),
+                                      label: const Text('Download', style: TextStyle(fontSize: 12, color: Color(0xFFE65100), fontWeight: FontWeight.bold)),
+                                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                                    ),
+                                    Text('Fare: Rs. ${b['price']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE65100))),
+                                  ],
+                                )
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            )
+          ],
+        ),
       ),
     );
   }
@@ -4614,7 +4624,6 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
   late AnimationController _animController;
   String? _selectedBookingId;
   Map<String, dynamic>? _scannedTicket;
-  bool _isScanning = false;
   bool _scanAttempted = false;
   bool _isCheckingIn = false;
 
@@ -4637,7 +4646,6 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
     if (_selectedBookingId == null) return;
     
     setState(() {
-      _isScanning = true;
       _scanAttempted = false;
       _scannedTicket = null;
     });
@@ -4647,7 +4655,6 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
       if (!mounted) return;
       final match = bookings.firstWhere((b) => b['id'].toString() == _selectedBookingId);
       setState(() {
-        _isScanning = false;
         _scanAttempted = true;
         _scannedTicket = match;
       });
@@ -4761,6 +4768,42 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
+                          Positioned.fill(
+                            child: MobileScanner(
+                              onDetect: (capture) {
+                                final List<Barcode> barcodes = capture.barcodes;
+                                if (barcodes.isNotEmpty) {
+                                  final barcodeValue = barcodes.first.rawValue;
+                                  if (barcodeValue != null && barcodeValue.isNotEmpty) {
+                                    Navigator.pop(context); // Close scanning overlay
+
+                                    // Validate if it belongs to ownerBookings
+                                    String? actualMatchedId;
+                                    for (var b in ownerBookings) {
+                                      if (b['id'].toString().toLowerCase() == barcodeValue.toLowerCase()) {
+                                        actualMatchedId = b['id'].toString();
+                                        break;
+                                      }
+                                    }
+
+                                    if (actualMatchedId != null) {
+                                      setState(() {
+                                        _selectedBookingId = actualMatchedId;
+                                        _scanAttempted = false;
+                                      });
+                                      _simulateScan(ownerBookings); // It will load ticket detail
+                                    } else {
+                                      setState(() {
+                                        _selectedBookingId = null;
+                                        _scannedTicket = null;
+                                        _scanAttempted = true;
+                                      });
+                                    }
+                                  }
+                                }
+                              },
+                            ),
+                          ),
                           // Scanner pulsing line
                           AnimatedBuilder(
                             animation: _animController,
@@ -4785,24 +4828,11 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                               );
                             },
                           ),
-                          
-                          // Scanner camera mockup overlay
-                          Opacity(
-                            opacity: 0.1,
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                gradient: RadialGradient(
-                                  colors: [Colors.white, Colors.black],
-                                  radius: 1,
-                                ),
-                              ),
-                            ),
-                          ),
                           const Positioned(
                             bottom: 12,
                             child: Text(
                               'Align QR within box',
-                              style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
