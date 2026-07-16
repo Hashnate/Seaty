@@ -32,6 +32,10 @@ class ConductorCreate(BaseModel):
     full_name: str
     phone_number: str
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
 # ==========================================
 # User/Profile Schemas
 # ==========================================

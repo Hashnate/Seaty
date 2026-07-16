@@ -1,4 +1,4 @@
-const API_BASE = 'http://127.0.0.1:8000/api/v1';
+const API_BASE = 'https://api.seaty.hashnate.com/api/v1';
 
 interface RequestOptions {
   method?: string;
@@ -283,5 +283,13 @@ export async function createScheduleOverride(token: string, scheduleId: string, 
 
 export async function deleteScheduleOverride(token: string, overrideId: string) {
   return request(`/schedules/overrides/${overrideId}`, { method: 'DELETE', token });
+}
+
+export async function changePassword(token: string, data: Record<string, unknown>) {
+  return request('/auth/change-password', {
+    method: 'POST',
+    body: data,
+    token,
+  });
 }
 

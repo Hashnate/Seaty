@@ -26,7 +26,7 @@ export default function NotificationDrawer() {
       fetchNotis();
 
       // Establish WebSocket connection
-      const wsUrl = `ws://127.0.0.1:8000/api/v1/notifications/ws?token=${token}`;
+      const wsUrl = `wss://api.seaty.hashnate.com/api/v1/notifications/ws?token=${token}`;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

@@ -145,3 +145,21 @@ def update_profile(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    payload: schemas.PasswordChangeRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    # Verify current password
+    if not auth.verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect current password."
+        )
+    # Hash and save new password
+    current_user.hashed_password = auth.get_password_hash(payload.new_password)
+    db.commit()
+    return {"message": "Password changed successfully."}
+

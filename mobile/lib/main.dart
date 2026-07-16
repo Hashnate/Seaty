@@ -30,8 +30,8 @@ class AppState extends ChangeNotifier {
   String get userPhone => _userPhone;
   
   // API URL Config
-  String apiBaseUrl = 'http://localhost:8000/api/v1';
-  String wsBaseUrl = 'ws://localhost:8000/api/v1/ws';
+  String apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
+  String wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
 
   AppState(this._prefs) {
     _loadSession();
@@ -54,13 +54,13 @@ class AppState extends ChangeNotifier {
     _userNic = _prefs.getString('userNic') ?? '';
     _userGender = _prefs.getString('userGender') ?? '';
     _userPhone = _prefs.getString('userPhone') ?? '';
-    apiBaseUrl = _prefs.getString('apiBaseUrl') ?? 'http://localhost:8000/api/v1';
-    wsBaseUrl = _prefs.getString('wsBaseUrl') ?? 'ws://localhost:8000/api/v1/ws';
+    apiBaseUrl = _prefs.getString('apiBaseUrl') ?? 'https://api.seaty.hashnate.com/api/v1';
+    wsBaseUrl = _prefs.getString('wsBaseUrl') ?? 'wss://api.seaty.hashnate.com/api/v1/ws';
     
     // Auto-override outdated placeholder IP to avoid socket timeouts
-    if (apiBaseUrl.contains('192.168.1.195')) {
-      apiBaseUrl = 'http://localhost:8000/api/v1';
-      wsBaseUrl = 'ws://localhost:8000/api/v1/ws';
+    if (apiBaseUrl.contains('192.168.1.195') || apiBaseUrl.contains('localhost')) {
+      apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
+      wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
       _saveSession();
     }
   }

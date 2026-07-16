@@ -40,7 +40,9 @@ CREATE TABLE public.users (
     hashed_password TEXT NOT NULL,
     full_name TEXT NOT NULL,
     phone_number TEXT,
-    role TEXT NOT NULL DEFAULT 'passenger' CHECK (role IN ('passenger', 'owner', 'admin')),
+    nic_number TEXT,
+    gender TEXT,
+    role TEXT NOT NULL DEFAULT 'passenger' CHECK (role IN ('passenger', 'owner', 'admin', 'conductor')),
     company_id UUID REFERENCES public.bus_companies(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -86,18 +88,57 @@ CREATE TABLE public.routes (
 ALTER TABLE public.routes ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
+-- 4.5. Trip Schedules Table (Recurring routes)
+-- ==========================================
+CREATE TABLE public.trip_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vehicle_id UUID NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
+    route_id UUID NOT NULL REFERENCES public.routes(id) ON DELETE CASCADE,
+    departure_time TIME NOT NULL,
+    arrival_time TIME NOT NULL,
+    price_per_seat NUMERIC(10, 2) NOT NULL,
+    schedule_type TEXT NOT NULL DEFAULT 'daily',
+    custom_days INTEGER[] DEFAULT '{}',
+    effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
+    effective_until DATE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    conductor_id UUID REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.trip_schedules ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- 4.6. Bus Overrides Table
+-- ==========================================
+CREATE TABLE public.bus_overrides (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    schedule_id UUID NOT NULL REFERENCES public.trip_schedules(id) ON DELETE CASCADE,
+    override_date DATE NOT NULL,
+    replacement_vehicle_id UUID NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
+    reason TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.bus_overrides ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
 -- 5. Trips Table (Instances of scheduled journeys)
 -- ==========================================
 CREATE TABLE public.trips (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     vehicle_id UUID NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
     route_id UUID NOT NULL REFERENCES public.routes(id) ON DELETE CASCADE,
+    schedule_id UUID REFERENCES public.trip_schedules(id) ON DELETE SET NULL,
     departure_time TIMESTAMPTZ NOT NULL,
     arrival_time TIMESTAMPTZ NOT NULL,
     price_per_seat NUMERIC(10, 2) NOT NULL,
     status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'ongoing', 'completed', 'cancelled')),
+    boarded_seats TEXT[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    conductor_id UUID REFERENCES public.users(id) ON DELETE SET NULL
 );
 
 ALTER TABLE public.trips ENABLE ROW LEVEL SECURITY;
@@ -114,6 +155,7 @@ CREATE TABLE public.bookings (
     platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0, -- Commission charged by Seaty
     payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'awaiting_payment', 'paid', 'failed', 'refunded')),
     booking_status TEXT NOT NULL DEFAULT 'pending' CHECK (booking_status IN ('pending', 'confirmed', 'cancelled')),
+    passenger_details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
