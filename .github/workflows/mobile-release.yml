@@ -100,7 +100,7 @@ jobs:
           path: |
             ~/Library/Caches/CocoaPods
             mobile/ios/Pods
-          key: ${{ runner.os }}-pods-${{ hashFiles('mobile/pubspec.lock') }}
+          key: ${{ runner.os }}-pods-${{ hashFiles('mobile/pubspec.lock', 'mobile/ios/Podfile') }}
           restore-keys: |
             ${{ runner.os }}-pods-
 
