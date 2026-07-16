@@ -140,8 +140,8 @@ export default function SettingsPage() {
         <h3 className="table-title" style={{ marginBottom: '20px' }}>Server Status</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {[
-            { name: 'FastAPI Backend', url: `${window.location.protocol}//${window.location.host}/api/v1` },
-            { name: 'WebSockets GPS Hub', url: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/ws` },
+            { name: 'FastAPI Backend', url: 'https://api.seaty.hashnate.com/api/v1' },
+            { name: 'WebSockets GPS Hub', url: 'wss://api.seaty.hashnate.com/api/v1/ws' },
             { name: 'PostgreSQL Database', url: 'Docker Postgres Pool' },
           ].map((srv, idx) => (
             <div key={idx} style={{
