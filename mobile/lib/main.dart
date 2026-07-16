@@ -1,5 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:ui';
@@ -1061,8 +1063,61 @@ final appStateProvider = ChangeNotifierProvider<AppState>((ref) {
   return AppState(globalPrefs);
 });
 
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint("Handling a background message: ${message.messageId}");
+}
+
+void setupPushNotifications() async {
+  final messaging = FirebaseMessaging.instance;
+  
+  // Request permission for iOS/Android 13+
+  final settings = await messaging.requestPermission(
+    alert: true,
+    announcement: false,
+    badge: true,
+    carPlay: false,
+    criticalAlert: false,
+    provisional: false,
+    sound: true,
+  );
+  
+  debugPrint('User granted permission: ${settings.authorizationStatus}');
+  
+  // Get FCM token
+  try {
+    final token = await messaging.getToken();
+    debugPrint('FCM Token: $token');
+  } catch (e) {
+    debugPrint('Error getting FCM token: $e');
+  }
+  
+  // Listen to foreground messages
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    debugPrint('Got a message whilst in the foreground!');
+    if (message.notification != null) {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        SeatyNotifications.show(
+          context,
+          message.notification!.body ?? message.notification!.title ?? 'New Notification',
+          isWarning: false,
+        );
+      }
+    }
+  });
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    setupPushNotifications();
+  } catch (e) {
+    debugPrint('Firebase initialization failed: $e');
+  }
   globalPrefs = await SharedPreferences.getInstance();
   runApp(
     const ProviderScope(

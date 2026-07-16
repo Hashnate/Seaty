@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "709235659395",
+    "project_id": "seaty-3db21",
+    "storage_bucket": "seaty-3db21.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:709235659395:android:2e0ce07084c590a60281b6",
+        "android_client_info": {
+          "package_name": "lk.seaty.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCBs_jyAbnfC6SJHPt_33VAGIt0zQxowJg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
