@@ -114,12 +114,31 @@ jobs:
 
       - name: Build iOS IPA
         run: |
-          flutter build ipa --release --build-number=${{ github.run_number }} --export-options-plist=ios/ExportOptions.plist
+          flutter build ipa --release --build-number=${{ github.run_number }} \
+            --export-options-plist=ios/ExportOptions.plist \
+            --dart-define=FLUTTER_BUILD_NUMBER=${{ github.run_number }} \
+            --no-codesign
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            PROVISIONING_PROFILE_SPECIFIER="Seaty App Store Profile" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            DEVELOPMENT_TEAM=5X9A8V7S49 \
+            OTHER_CODE_SIGN_FLAGS="--keychain $RUNNER_TEMP/app-signing.keychain-db"
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/Runner.xcarchive \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/export \
+            -allowProvisioningUpdates
 
       - name: Upload to TestFlight
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: 'mobile/build/ios/ipa/seaty.ipa'
+          app-path: '${{ runner.temp }}/export/seaty.ipa'
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           api-key-base64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
