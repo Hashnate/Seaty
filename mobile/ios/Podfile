@@ -1,0 +1,23 @@
+# Set platform to iOS 13.0 to support Firebase SDK and modern plugins
+platform :ios, '13.0'
+
+# CocoaPods analytics sends usage stats. If you want to disable it, uncomment the following line:
+# cocoapods_analytics_not_me!
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.expand_path(__FILE__))
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    # Force all pod targets to use iOS 13.0 to match the deployment target
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
+  end
+end

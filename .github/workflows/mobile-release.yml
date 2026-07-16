@@ -29,6 +29,7 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+          cache: 'gradle'
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -39,6 +40,7 @@ jobs:
       - name: Decode Android Keystore
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/seaty.keystore
+        working-directory: mobile
 
       - name: Create key.properties
         run: |
@@ -46,15 +48,19 @@ jobs:
           echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> android/key.properties
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" >> android/key.properties
           echo "storeFile=seaty.keystore" >> android/key.properties
+        working-directory: mobile
 
       - name: Install Dependencies
         run: flutter pub get
+        working-directory: mobile
 
       - name: Build APK
         run: flutter build apk --release --build-number=${{ env.BUILD_NUMBER }}
+        working-directory: mobile
 
       - name: Build App Bundle (AAB)
         run: flutter build appbundle --release --build-number=${{ env.BUILD_NUMBER }}
+        working-directory: mobile
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -87,6 +93,16 @@ jobs:
         with:
           channel: 'stable'
           cache: true
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            mobile/ios/Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('mobile/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
 
       - name: Install Apple Certificate and Provisioning Profile
         env:
