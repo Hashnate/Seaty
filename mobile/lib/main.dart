@@ -11,6 +11,11 @@ import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:video_player/video_player.dart';
+import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/screens/ticket_screen.dart';
+import 'package:seaty/screens/profile_screen.dart';
+import 'package:seaty/screens/bus_details_screen.dart';
 
 // =====================================================================
 // 1. STATE MANAGEMENT (PROVIDER)
@@ -123,6 +128,7 @@ class AppState extends ChangeNotifier {
   
   // Selected seats state
   final List<String> _selectedSeats = [];
+  final Map<String, String> _selectedSeatGenders = {};
   List<String> _bookedSeats = [];
   List<String> _heldSeats = [];
   Map<String, String> _seatGenders = {};
@@ -130,6 +136,7 @@ class AppState extends ChangeNotifier {
   // Tracking bus variables
   Map<String, dynamic>? _trackedBusLocation;
   WebSocketChannel? _trackingChannel;
+  Timer? _trackingTimer;
   bool _isTracking = false;
 
   // Senders variables (Owner streaming GPS)
@@ -150,6 +157,7 @@ class AppState extends ChangeNotifier {
   List<Map<String, dynamic>> get trips => _trips;
   List<Map<String, dynamic>> get bookings => _bookings;
   List<String> get selectedSeats => _selectedSeats;
+  Map<String, String> get selectedSeatGenders => _selectedSeatGenders;
   List<String> get bookedSeats => _bookedSeats;
   List<String> get heldSeats => _heldSeats;
   Map<String, String> get seatGenders => _seatGenders;
@@ -835,17 +843,23 @@ class AppState extends ChangeNotifier {
   }
 
   // Seats interactions
-  void toggleSeat(String seatLabel) {
-    if (_selectedSeats.contains(seatLabel)) {
-      _selectedSeats.remove(seatLabel);
-    } else {
+  void selectSeatWithGender(String seatLabel, String gender) {
+    if (!_selectedSeats.contains(seatLabel)) {
       _selectedSeats.add(seatLabel);
     }
+    _selectedSeatGenders[seatLabel] = gender;
+    notifyListeners();
+  }
+
+  void deselectSeat(String seatLabel) {
+    _selectedSeats.remove(seatLabel);
+    _selectedSeatGenders.remove(seatLabel);
     notifyListeners();
   }
 
   void clearSelectedSeats() {
     _selectedSeats.clear();
+    _selectedSeatGenders.clear();
     notifyListeners();
   }
 
@@ -869,41 +883,115 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Live Tracking listener (WS Client)
+  // Live Tracking listener (WS Client with Simulation Fallback)
   void startTracking(String vehicleId) {
     stopTracking();
     _isTracking = true;
+
+    // Find matching trip for route coordinates fallback
+    final trip = _trips.firstWhere(
+      (t) => t['reg'] == vehicleId,
+      orElse: () => <String, dynamic>{},
+    );
+
+    double startLat = 6.9271;
+    double startLon = 79.8612;
+    double destLat = 6.0535;
+    double destLon = 80.2210;
+
+    if (trip.isNotEmpty) {
+      final dest = trip['destination']?.toString().toLowerCase() ?? '';
+      if (dest.contains('kandy')) {
+        destLat = 7.2906;
+        destLon = 80.6337;
+      } else if (dest.contains('ella')) {
+        destLat = 6.8667;
+        destLon = 81.0466;
+      } else if (dest.contains('trinco') || dest.contains('trincomalee')) {
+        destLat = 8.5873;
+        destLon = 81.2152;
+      }
+    }
+
     _trackedBusLocation = {
       'vehicle_id': vehicleId,
-      'latitude': 6.9271,
-      'longitude': 79.8612,
+      'latitude': startLat,
+      'longitude': startLon,
       'speed': 0.0,
       'heading': 0.0
     };
     notifyListeners();
 
+    bool connected = false;
     try {
       final wsUrl = '$wsBaseUrl/tracking/$vehicleId?role=passenger&token=$_token';
       _trackingChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      
+
       _trackingChannel!.stream.listen((message) {
+        connected = true;
         final data = json.decode(message);
         _trackedBusLocation = data;
         notifyListeners();
       }, onError: (err) {
-        print('Tracking socket error: $err');
+        debugPrint('Tracking socket error: $err');
+        if (!connected) {
+          _startLocalTrackingSimulation(vehicleId, startLat, startLon, destLat, destLon);
+        }
       }, onDone: () {
-        _isTracking = false;
-        notifyListeners();
+        if (!connected) {
+          _startLocalTrackingSimulation(vehicleId, startLat, startLon, destLat, destLon);
+        } else {
+          _isTracking = false;
+          _trackedBusLocation = null;
+          notifyListeners();
+        }
       });
     } catch (e) {
-      print('WebSocket connection failed: $e');
+      debugPrint('WebSocket connection failed: $e. Starting simulation fallback.');
+      _startLocalTrackingSimulation(vehicleId, startLat, startLon, destLat, destLon);
     }
+  }
+
+  void _startLocalTrackingSimulation(String vehicleId, double startLat, double startLon, double destLat, double destLon) {
+    _trackingTimer?.cancel();
+    double currentLat = startLat;
+    double currentLon = startLon;
+
+    // Move in 50 steps
+    final double latStep = (destLat - startLat) / 50;
+    final double lonStep = (destLon - startLon) / 50;
+
+    _trackingTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (!_isTracking) {
+        timer.cancel();
+        return;
+      }
+
+      currentLat += latStep;
+      currentLon += lonStep;
+
+      // Reset to start if near destination
+      if ((currentLat - destLat).abs() < 0.02 && (currentLon - destLon).abs() < 0.02) {
+        currentLat = startLat;
+        currentLon = startLon;
+      }
+
+      _trackedBusLocation = {
+        'vehicle_id': vehicleId,
+        'latitude': currentLat,
+        'longitude': currentLon,
+        'speed': 62.5,
+        'heading': 165.0,
+      };
+      notifyListeners();
+    });
   }
 
   void stopTracking() {
     _trackingChannel?.sink.close();
     _trackingChannel = null;
+    _trackingTimer?.cancel();
+    _trackingTimer = null;
     _isTracking = false;
     _trackedBusLocation = null;
     notifyListeners();
@@ -1885,20 +1973,22 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
   Widget _buildTelegramBottomNavBar(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(left: 32, right: 32, bottom: 24),
-      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      height: 64,
       decoration: BoxDecoration(
-        color: const Color(0xFF0A2540), // Solid Dark Navy
-        borderRadius: BorderRadius.circular(30),
+        color: const Color(0xFF0F172A), // Premium Dark Slate
+        borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
           _buildNavItem(1, Icons.near_me_outlined, Icons.near_me_rounded, 'Tracker'),
@@ -1911,37 +2001,47 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
 
   Widget _buildNavItem(int index, IconData outlineIcon, IconData solidIcon, String label) {
     final isSelected = _currentIndex == index;
-    final activeColor = const Color(0xFFE65100); // Matte Orange
-    final inactiveColor = Colors.white.withOpacity(0.55);
+    final activeColor = Colors.white;
+    final activeBgColor = const Color(0xFFE65100); // Matte Orange
+    final inactiveColor = Colors.white.withOpacity(0.5);
 
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
       behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFFE65100).withOpacity(0.18) : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(
-              isSelected ? solidIcon : outlineIcon,
-              color: isSelected ? activeColor : inactiveColor,
-              size: 20,
-            ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutQuint,
+        padding: EdgeInsets.symmetric(horizontal: isSelected ? 16 : 12, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? activeBgColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutQuint,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSelected ? solidIcon : outlineIcon,
+                color: isSelected ? activeColor : inactiveColor,
+                size: 24,
+              ),
+              if (isSelected) ...[
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ],
+            ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? activeColor : inactiveColor,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1955,7 +2055,7 @@ class PassengerTripsTab extends ConsumerStatefulWidget {
   ConsumerState<PassengerTripsTab> createState() => _PassengerTripsTabState();
 }
 
-class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
+class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with WidgetsBindingObserver {
   String _selectedFrom = 'All';
   String _selectedTo = 'All';
   DateTime? _selectedDate;
@@ -1966,22 +2066,67 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
   final FocusNode _fromFocusNode = FocusNode();
   final FocusNode _toFocusNode = FocusNode();
 
+  VideoPlayerController? _videoController;
+  late final ScrollController _scrollController;
+  double _headerOpacity = 0.0;
+
   @override
   void initState() {
     super.initState();
+    _scrollController = ScrollController()..addListener(_onScroll);
+    WidgetsBinding.instance.addObserver(this);
     _fromController = TextEditingController(text: _selectedFrom);
     _toController = TextEditingController(text: _selectedTo);
     _dateController = TextEditingController(text: 'All Dates');
     _fromFocusNode.addListener(_onFocusChange);
     _toFocusNode.addListener(_onFocusChange);
+    _initVideoBackground();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_videoController != null && !_videoController!.value.isPlaying) {
+        _videoController?.play();
+      }
+    }
+  }
+
+  void _initVideoBackground() {
+    _videoController = VideoPlayerController.asset(
+      'assets/videos/bg_travel.mp4',
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    )..initialize().then((_) {
+        if (mounted) {
+          setState(() {});
+          _videoController?.setLooping(true);
+          _videoController?.setVolume(0.0);
+          _videoController?.play();
+        }
+      }).catchError((e) {
+        debugPrint('Error loading bg video: $e');
+      });
   }
 
   void _onFocusChange() {
     setState(() {});
   }
 
+  void _onScroll() {
+    final offset = _scrollController.offset;
+    final newOpacity = (offset / 100.0).clamp(0.0, 1.0);
+    if (newOpacity != _headerOpacity) {
+      setState(() {
+        _headerOpacity = newOpacity;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _scrollController.dispose();
+    _videoController?.dispose();
     _fromController.dispose();
     _toController.dispose();
     _dateController.dispose();
@@ -2016,34 +2161,18 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
   ];
 
   List<Map<String, dynamic>> _getDestinations(List<Map<String, dynamic>> trips) {
-    final seen = <String>{};
+    final topDestinations = ['Colombo', 'Kandy', 'Galle', 'Ella', 'Trincomalee', 'Anuradhapura'];
     final result = <Map<String, dynamic>>[];
-
-    for (final trip in trips) {
-      final locs = <String>[];
-      if (trip['origin'] != null) locs.add(trip['origin'].toString());
-      if (trip['destination'] != null) locs.add(trip['destination'].toString());
-      // Also collect route stop names
-      final routeObj = trip['route'];
-      if (routeObj != null && routeObj['stops'] != null) {
-        for (final stop in routeObj['stops'] as List<dynamic>) {
-          final stopName = stop['name']?.toString();
-          if (stopName != null) locs.add(stopName);
-        }
-      }
-      for (final loc in locs) {
-        final key = loc.trim().toLowerCase();
-        if (key.isNotEmpty && !seen.contains(key)) {
-          seen.add(key);
-          final idx = result.length % _colorPalette.length;
-          result.add({
-            'name': loc.trim(),
-            'color1': _colorPalette[idx][0],
-            'color2': _colorPalette[idx][1],
-            'icon': _iconPool[idx % _iconPool.length],
-          });
-        }
-      }
+    
+    for (int i = 0; i < topDestinations.length; i++) {
+      final idx = i % _colorPalette.length;
+      result.add({
+        'name': topDestinations[i],
+        'color1': _colorPalette[idx][0],
+        'color2': _colorPalette[idx][1],
+        'icon': _iconPool[idx % _iconPool.length],
+        'asset': 'assets/images/destinations/${topDestinations[i].toLowerCase()}.jpg',
+      });
     }
     return result;
   }
@@ -2051,6 +2180,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
+    final headerContentColor = Color.lerp(Colors.white, Colors.black, _headerOpacity) ?? Colors.white;
 
     final allTrips = state.trips;
     final Set<String> placesSet = {'All'};
@@ -2144,21 +2274,52 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
       return match;
     }).toList();
 
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        // ─── Glassmorphic Hero & Search Header ───
-        SliverToBoxAdapter(
-          child: Stack(
-            children: [
-              // Background gradient map pattern placeholder
-              Container(
+    return Stack(
+      children: [
+        CustomScrollView(
+          controller: _scrollController,
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            // ─── Glassmorphic Hero & Search Header ───
+            SliverToBoxAdapter(
+              child: Stack(
+                children: [
+                  // Background Video Player / Fallback Gradient
+              SizedBox(
                 height: 320,
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                width: double.infinity,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (_videoController != null && _videoController!.value.isInitialized)
+                        FittedBox(
+                          fit: BoxFit.cover,
+                          child: SizedBox(
+                            width: _videoController!.value.size.width,
+                            height: _videoController!.value.size.height,
+                            child: VideoPlayer(_videoController!),
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                            ),
+                          ),
+                        ),
+                      // Dark overlay to ensure text readability over the video
+                      Container(
+                        color: Colors.black.withOpacity(0.4),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -2170,83 +2331,9 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ─── Logo + Profile Row ───
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Row(
-                            children: [
-                              Image.asset(
-                                'assets/images/app_icon.png',
-                                width: 32,
-                                height: 32,
-                                color: Colors.white,
-                                fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE65100),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 20),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              const Text(
-                                'Seaty',
-                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: 0.5),
-                              ),
-                            ],
-                          ),
-                          Row(
-                            children: [
-                              Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  IconButton(
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    icon: const Icon(Icons.notifications_outlined, color: Colors.white, size: 28),
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                                      );
-                                    },
-                                  ),
-                                  if (state.unreadNotificationsCount > 0)
-                                    Positioned(
-                                      right: -4,
-                                      top: -4,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFEF4444),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        constraints: const BoxConstraints(
-                                          minWidth: 16,
-                                          minHeight: 16,
-                                        ),
-                                        child: Text(
-                                          '${state.unreadNotificationsCount}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 8,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
+                      // Spacer for sticky header
+                      const SizedBox(height: 64),
+                      const SizedBox(height: 12),
                       // Greeting + Search prompt
                       Text(
                         'Hello, ${state.userName} 👋',
@@ -2265,7 +2352,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                         child: BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                           child: Container(
-                            padding: const EdgeInsets.all(20),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                             decoration: BoxDecoration(
                               color: const Color(0xFF0F172A).withOpacity(0.85),
                               borderRadius: BorderRadius.circular(24),
@@ -2297,7 +2384,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                                     },
                                   ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
                                   child: Row(
                                     children: [
                                       const SizedBox(width: 20),
@@ -2315,8 +2402,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                                           });
                                         },
                                         child: Container(
-                                          padding: const EdgeInsets.all(8),
-                                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                                          padding: const EdgeInsets.all(6),
+                                          margin: const EdgeInsets.symmetric(horizontal: 12),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFE65100),
                                             shape: BoxShape.circle,
@@ -2324,7 +2411,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                                               BoxShadow(color: const Color(0xFFE65100).withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4)),
                                             ],
                                           ),
-                                          child: const Icon(Icons.swap_vert_rounded, size: 20, color: Colors.white),
+                                          child: const Icon(Icons.swap_vert_rounded, size: 16, color: Colors.white),
                                         ),
                                       ),
                                       Expanded(
@@ -2357,7 +2444,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                                     },
                                   ),
                                 Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
                                   child: Container(height: 1, color: Colors.white.withOpacity(0.1)),
                                 ),
                                 _buildGlassDateField(
@@ -2450,7 +2537,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
                         if (destinations.isEmpty) return const SizedBox.shrink();
                         final dest = destinations[index - 1];
                         final isSelected = _selectedTo == dest['name'];
-                        return _buildDestinationCard(dest['name'] as String, 'Explore', dest['color1'] as int, dest['color2'] as int, isSelected, false, icon: dest['icon'] as IconData);
+                        return _buildDestinationCard(dest['name'] as String, 'Explore', dest['color1'] as int, dest['color2'] as int, isSelected, false, icon: dest['icon'] as IconData, assetImage: dest['asset'] as String);
                       },
                       itemCount: _getDestinations(state.trips).length + 1,
                     ),
@@ -2514,6 +2601,103 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
               ),
             ),
           ),
+          ],
+        ),
+        // Sticky Header with content-color scroll transition
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            color: Colors.transparent,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Image.asset(
+                          'assets/images/app_icon.png',
+                          width: 28,
+                          height: 28,
+                          color: headerContentColor,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE65100),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(Icons.directions_bus_rounded, color: headerContentColor, size: 16),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Seaty',
+                          style: TextStyle(
+                            fontSize: 20, 
+                            fontWeight: FontWeight.w900, 
+                            color: headerContentColor, 
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: Icon(Icons.notifications_outlined, color: headerContentColor, size: 24),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                                );
+                              },
+                            ),
+                            if (state.unreadNotificationsCount > 0)
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFEF4444),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 14,
+                                    minHeight: 14,
+                                  ),
+                                  child: Text(
+                                    '${state.unreadNotificationsCount}',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -2657,9 +2841,25 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
     );
   }
 
-  Widget _buildDestinationCard(String name, String subtitle, int color1, int color2, bool isSelected, bool isLight, {IconData? icon}) {
+  Widget _buildDestinationCard(String name, String subtitle, int color1, int color2, bool isSelected, bool isLight, {IconData? icon, String? assetImage}) {
     // City-specific icon mapping
     final IconData cardIcon = icon ?? (isLight ? Icons.directions_bus_rounded : Icons.place_rounded);
+    
+    ImageProvider imgProvider;
+    if (assetImage != null) {
+      imgProvider = AssetImage(assetImage);
+    } else {
+      final String cleanName = name.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
+      imgProvider = NetworkImage(name == 'All'
+          ? 'https://loremflickr.com/400/400/srilanka,travel/all?lock=100'
+          : 'https://loremflickr.com/400/400/$cleanName,srilanka/all?lock=${cleanName.hashCode.abs()}');
+    }
+
+    final DecorationImage bgImage = DecorationImage(
+      image: imgProvider,
+      fit: BoxFit.cover,
+      colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.4), BlendMode.darken),
+    );
 
     return GestureDetector(
       onTap: () => setState(() {
@@ -2672,11 +2872,14 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
         margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(color1), Color(color2)],
-          ),
+          gradient: bgImage == null
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(color1), Color(color2)],
+                )
+              : null,
+          image: bgImage,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: isSelected && isLight ? const Color(0xFFE65100) : Colors.transparent, width: 2),
           boxShadow: [
@@ -2722,182 +2925,275 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> {
     );
   }
 
-  Widget _getAmenityIcon(String name) {
+  Widget _getAmenityIcon(String name, {Color color = const Color(0xFF64748B)}) {
     final String n = name.toLowerCase();
     IconData iconData = Icons.star_outline_rounded;
 
     if (n.contains('wifi')) {
-      iconData = Icons.wifi;
+      iconData = Icons.wifi_rounded;
     } else if (n.contains('charge') || n.contains('charging') || n.contains('plug') || n.contains('outlet')) {
-      iconData = Icons.power;
+      iconData = Icons.power_rounded;
     } else if (n.contains('tv') || n.contains('screen') || n.contains('video') || n.contains('hd tv')) {
-      iconData = Icons.tv;
+      iconData = Icons.tv_rounded;
     } else if (n.contains('seat') || n.contains('recline') || n.contains('reclining')) {
       iconData = Icons.chair_rounded;
     } else if (n.contains('restroom') || n.contains('toilet') || n.contains('wc')) {
-      iconData = Icons.wc;
+      iconData = Icons.wc_rounded;
     } else if (n.contains('luggage') || n.contains('baggage') || n.contains('bag') || n.contains('space')) {
-      iconData = Icons.work;
+      iconData = Icons.work_rounded;
     } else if (n.contains('ac') || n.contains('air') || n.contains('cool') || n.contains('snowflake')) {
-      iconData = Icons.ac_unit;
+      iconData = Icons.ac_unit_rounded;
     }
 
-    return Icon(iconData, size: 14, color: const Color(0xFFE65100));
+    return Icon(iconData, size: 16, color: color);
   }
 
   Widget _buildModernTripCard(BuildContext context, Map<String, dynamic> trip) {
+    final String priceStr = double.tryParse(trip['price'].toString())?.toStringAsFixed(0) ?? trip['price'].toString();
+    final int totalSeats = trip['total_seats'] as int? ?? 40;
+    final int bookedCount = (trip['boarded_seats'] as List?)?.length ?? 0;
+    final int seatsLeft = totalSeats - bookedCount;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withOpacity(0.06),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
+            color: const Color(0xFF0A2540).withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            // Top Header: Bus Name & Price
-            Row(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.directions_bus_rounded, color: Color(0xFF0F172A)),
+                // ── Header Row (Bus Info & Price Pill) ──
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0A2540).withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.directions_bus_rounded, color: Color(0xFF0A2540), size: 18),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              trip['bus_name'],
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0A2540),
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            Text(
+                              trip['reg'],
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: const Color(0xFF0A2540).withValues(alpha: 0.5),
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE65100),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Rs. $priceStr',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(trip['bus_name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: -0.5)),
-                      const SizedBox(height: 4),
-                      Text(trip['reg'], style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w600, fontFamily: 'monospace')),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                const SizedBox(height: 16),
+
+                // ── Route Row (Large Bold Dark Blue Text with Arrow) ──
+                Row(
                   children: [
                     Text(
-                      'Rs. ${trip['price'].toString().split('.')[0]}',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFFE65100), letterSpacing: -0.5),
+                      trip['origin'],
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF0A2540),
+                        letterSpacing: -0.5,
+                      ),
                     ),
-                    const Text('per seat', style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.east_rounded, color: Color(0xFFE65100), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        trip['destination'],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0A2540),
+                          letterSpacing: -0.5,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // ── Ice-Blue Tags and Amenities Icon Row ──
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        // Time Tag
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.schedule_rounded, size: 12, color: Color(0xFF0A2540)),
+                              const SizedBox(width: 4),
+                              Text(
+                                trip['departure'],
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0A2540),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        // Seats Left Tag
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.event_seat_rounded, size: 12, color: Color(0xFF0A2540)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$seatsLeft seats left',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF0A2540),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Amenities Icon Only Wrap (monochromatic gray)
+                    if (trip['amenities'] != null && (trip['amenities'] as List).isNotEmpty)
+                      Row(
+                        children: (trip['amenities'] as List).map<Widget>((ame) {
+                          return Padding(
+                            padding: const EdgeInsets.only(left: 6.0),
+                            child: Tooltip(
+                              message: ame.toString(),
+                              child: _getAmenityIcon(ame.toString()),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            
-            // Route Graphic
-            Row(
+          ),
+          // ── Divider & Action Button Block ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+              border: Border(
+                top: BorderSide(color: const Color(0xFFE2E8F0).withValues(alpha: 0.6)),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(trip['origin'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                      const SizedBox(height: 4),
-                      Text('Departure ${trip['departure']}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
-                    ],
-                  ),
+                const Row(
+                  children: [
+                    Icon(Icons.verified_user_outlined, size: 14, color: Color(0xFF10B981)),
+                    SizedBox(width: 4),
+                    Text(
+                      'Seaty Verified',
+                      style: TextStyle(
+                        color: Color(0xFF10B981),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Container(width: 6, height: 6, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFCBD5E1))),
-                      Container(width: 30, height: 2, color: const Color(0xFFF1F5F9)),
-                      const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFFCBD5E1)),
-                    ],
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => BusDetailsScreen(trip: trip)),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0A2540),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                  child: const Row(
                     children: [
-                      Text(trip['destination'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                      const SizedBox(height: 4),
-                      const Text('Drop-off Point', style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+                      Text(
+                        'Book Seats',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(width: 4),
+                      Icon(Icons.arrow_forward_rounded, size: 14),
                     ],
                   ),
                 ),
               ],
             ),
-            
-            // Amenities Row
-            if (trip['amenities'] != null && (trip['amenities'] as List).isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: (trip['amenities'] as List).map<Widget>((ame) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFF1F5F9)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _getAmenityIcon(ame.toString()),
-                          const SizedBox(width: 6),
-                          Text(
-                            ame.toString(),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF475569),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 20),
-            ] else ...[
-              const SizedBox(height: 24),
-            ],
-            
-            // Action Button
-            SizedBox(
-              width: double.infinity,
-              height: 54,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => SeatSelectorScreen(trip: trip)),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0A2540),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text('Book Seats', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2913,16 +3209,40 @@ class SeatSelectorScreen extends ConsumerStatefulWidget {
   ConsumerState<SeatSelectorScreen> createState() => _SeatSelectorScreenState();
 }
 
-class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
+class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with TickerProviderStateMixin {
   bool _isLoading = true;
   bool _isBookingInProgress = false;
+  late AnimationController _introController;
+  late Animation<double> _perspectiveAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
+    _introController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _perspectiveAnimation = Tween<double>(begin: -0.7, end: 0.0).animate(
+      CurvedAnimation(parent: _introController, curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic)),
+    );
+    _scaleAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _introController, curve: const Interval(0.0, 0.85, curve: Curves.easeOutCubic)),
+    );
+    _slideAnimation = Tween<double>(begin: 350.0, end: 0.0).animate(
+      CurvedAnimation(parent: _introController, curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn)),
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshSeats();
     });
+  }
+
+  @override
+  void dispose() {
+    _introController.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshSeats() async {
@@ -2932,6 +3252,8 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
     await state.loadSeatAvailability(widget.trip['id'].toString());
     if (mounted) {
       setState(() => _isLoading = false);
+      _introController.reset();
+      _introController.forward();
     }
   }
 
@@ -2983,11 +3305,12 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
     final nameController = TextEditingController(text: state.userName);
     final phoneController = TextEditingController(text: state.userPhone);
     final nicController = TextEditingController(text: state.userNic);
-    String primaryGender = state.userGender.isEmpty ? 'Male' : state.userGender;
+    String primaryGender = state.selectedSeatGenders[selectedSeats.first] ?? (state.userGender.isEmpty ? 'Male' : state.userGender);
 
     final Map<String, String> guestGenders = {};
     for (int i = 1; i < selectedSeats.length; i++) {
-      guestGenders[selectedSeats[i]] = 'Female';
+      final String seat = selectedSeats[i];
+      guestGenders[seat] = state.selectedSeatGenders[seat] ?? 'Female';
     }
 
     final formKey = GlobalKey<FormState>();
@@ -3154,72 +3477,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                         },
                       ),
                       
-                      if (selectedSeats.length > 1) ...[
-                        const SizedBox(height: 24),
-                        const Divider(color: Colors.white24, height: 32),
-                        const Text(
-                          'Additional Passenger Genders',
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Select genders for other seats',
-                          style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        ...selectedSeats.skip(1).map((seat) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 16.0),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.05),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.white.withOpacity(0.1)),
-                                  ),
-                                  child: Text(
-                                    'Seat $seat',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: DropdownButtonFormField<String>(
-                                    value: guestGenders[seat],
-                                    dropdownColor: const Color(0xFF0F172A),
-                                    borderRadius: BorderRadius.circular(16),
-                                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                                    decoration: InputDecoration(
-                                      filled: true,
-                                      fillColor: Colors.white.withOpacity(0.05),
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-                                      ),
-                                    ),
-                                    items: ['Male', 'Female'].map((g) => DropdownMenuItem(
-                                      value: g,
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                                        child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                                      ),
-                                    )).toList(),
-                                    onChanged: (val) {
-                                      if (val != null) {
-                                        setModalState(() => guestGenders[seat] = val);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
+
                       
                       const SizedBox(height: 32),
 
@@ -3317,14 +3575,10 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Luxury Seats'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _refreshSeats,
-            tooltip: 'Refresh seats',
-          )
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFE65100)))
@@ -3357,115 +3611,57 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                   ),
                 ),
                 
-                // Seat Grid
+                // Seat Grid with Cinematic 3D Fly-In Intro Animation (No scrolling, auto-fits one view)
                 Builder(
                   builder: (context) {
                     final layout = widget.trip['seat_layout'] ?? {'rows': 10, 'columns': 4, 'aisle_after_column': 2};
                     final int rows = layout['rows'] ?? 10;
                     final int columns = layout['columns'] ?? 4;
                     final int aisleAfter = layout['aisle_after_column'] ?? 2;
-                    final int gridColumns = aisleAfter > 0 ? columns + 1 : columns;
-                    final int totalGridItems = rows * gridColumns;
-                    final List<dynamic>? customSeatsList = layout['seats'];
 
                     return Expanded(
-                      child: GridView.builder(
-                        padding: const EdgeInsets.all(28),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: gridColumns,
-                          crossAxisSpacing: 14,
-                          mainAxisSpacing: 14,
-                        ),
-                        itemCount: totalGridItems,
-                        itemBuilder: (context, index) {
-                          int colIndex = index % gridColumns;
-                          int row = index ~/ gridColumns + 1;
-
-                          Map<String, dynamic>? customSeat;
-                          if (customSeatsList != null) {
-                            for (var s in customSeatsList) {
-                              if (s is Map && s['row'] == row && s['col'] == colIndex) {
-                                customSeat = Map<String, dynamic>.from(s);
-                                break;
-                              }
-                            }
-                            if (customSeat == null) {
-                              // If no seat is here, check if it's the aisle column. If so, show aisle.
-                              if (aisleAfter > 0 && colIndex == aisleAfter) {
-                                return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
-                              }
-                              return const SizedBox.shrink(); // Empty space
-                            }
-                          } else {
-                            // Fallback for standard layouts
-                            if (aisleAfter > 0 && colIndex == aisleAfter) {
-                              return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
-                            }
-                          }
-
-                          // If fallback (customSeat is null), calculate standard seat label
-                          int seatColIndex = colIndex;
-                          if (customSeat == null && aisleAfter > 0 && colIndex > aisleAfter) {
-                            seatColIndex = colIndex - 1;
-                          }
-                          String seatLabel = customSeat != null ? customSeat['label'] : '${String.fromCharCode(65 + seatColIndex)}$row';
-
-                          bool isSelected = state.selectedSeats.contains(seatLabel);
-                          bool isBooked = state.bookedSeats.contains(seatLabel);
-                          bool isHeld = state.heldSeats.contains(seatLabel);
-
-                          Color seatColor = const Color(0xFFF4F6F9);
-                          Color textColor = const Color(0xFF0A2540);
-                          Color borderColor = Colors.black12;
-
-                          if (isSelected) {
-                            seatColor = const Color(0xFFE65100);
-                            textColor = Colors.white;
-                            borderColor = const Color(0xFFE65100);
-                          } else if (isBooked) {
-                            final gender = state.seatGenders[seatLabel]?.toLowerCase() ?? '';
-                            if (gender == 'male') {
-                              seatColor = const Color(0xFF0F2C59);
-                              textColor = Colors.white;
-                              borderColor = const Color(0xFF0F2C59);
-                            } else if (gender == 'female') {
-                              seatColor = const Color(0xFFF472B6);
-                              textColor = Colors.white;
-                              borderColor = const Color(0xFFF472B6);
-                            } else {
-                              seatColor = Colors.grey.shade300;
-                              textColor = Colors.grey.shade600;
-                              borderColor = Colors.grey.shade400;
-                            }
-                          } else if (isHeld) {
-                            seatColor = Colors.amber.shade200;
-                            textColor = Colors.amber.shade800;
-                            borderColor = Colors.amber.shade400;
-                          }
-
-                          return InkWell(
-                            onTap: (isBooked || isHeld) ? null : () => state.toggleSeat(seatLabel),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: seatColor,
-                                border: Border.all(
-                                  color: borderColor,
-                                  width: 1.5,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                      child: Container(
+                        width: double.infinity,
+                        color: const Color(0xFFF1F5F9), // Light bus cabin floor color
+                        child: AnimatedBuilder(
+                          animation: _introController,
+                          builder: (context, child) {
+                            return Transform(
+                              transform: Matrix4.identity()
+                                ..setEntry(3, 2, 0.001) // perspective depth
+                                ..rotateX(_perspectiveAnimation.value)
+                                ..scale(_scaleAnimation.value),
                               alignment: Alignment.center,
-                              child: Text(
-                                seatLabel,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: textColor,
-                                ),
+                              child: Transform.translate(
+                                offset: Offset(0, _slideAnimation.value),
+                                child: child,
                               ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                final double gridHeight = constraints.maxHeight;
+                                // We subtract cockpit height (approx 44px) + vertical margins/spacing (approx 16px)
+                                final double availableGridHeight = gridHeight - 60.0;
+                                final double rowHeight = (availableGridHeight / rows).clamp(32.0, 56.0);
+                                final double seatHeight = (rowHeight - 6.0).clamp(26.0, 48.0);
+                                final double seatWidth = (seatHeight * 1.35).clamp(42.0, 58.0);
+
+                                return Column(
+                                  children: [
+                                    _buildCabinFront(),
+                                    const SizedBox(height: 8),
+                                    Expanded(
+                                      child: _buildFlatGrid(state, layout, rows, columns, aisleAfter, seatWidth, seatHeight),
+                                    ),
+                                  ],
+                                );
+                              }
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       ),
                     );
                   }
@@ -3484,10 +3680,16 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            state.selectedSeats.isEmpty ? 'No seats selected' : 'Seats: ${state.selectedSeats.join(', ')}', 
-                            style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Text(
+                                state.selectedSeats.isEmpty ? 'No seats selected' : 'Seats: ${state.selectedSeats.join(', ')}', 
+                                style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)
+                              ),
+                            ),
                           ),
+                          const SizedBox(width: 16),
                           Text(
                             'Rs. ${(widget.trip['price'] * state.selectedSeats.length).toStringAsFixed(0)}',
                             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFE65100)),
@@ -3523,6 +3725,214 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
     );
   }
 
+  Widget _buildCabinFront() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A2540),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.circle_outlined, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 8),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Cockpit Area', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  Text('Driver Seat', style: TextStyle(color: Colors.white54, fontSize: 9)),
+                ],
+              ),
+            ],
+          ),
+          Container(
+            width: 80,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white30,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Icon(Icons.sensor_door_rounded, color: Colors.white54, size: 18),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFlatGrid(AppState state, Map<String, dynamic> layout, int rows, int columns, int aisleAfter, double seatWidth, double seatHeight) {
+    final List<dynamic>? customSeatsList = layout['seats'];
+    final int gridColumns = aisleAfter > 0 ? columns + 1 : columns;
+
+    return Column(
+      children: List.generate(rows, (rIndex) {
+        int row = rIndex + 1;
+        return Expanded(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(gridColumns, (cIndex) {
+              if (aisleAfter > 0 && cIndex == aisleAfter) {
+                return SizedBox(
+                  width: 20,
+                  child: Center(
+                    child: Icon(
+                      Icons.arrow_upward_rounded, 
+                      color: const Color(0xFF0A2540).withValues(alpha: 0.15), 
+                      size: 14
+                    ),
+                  ),
+                );
+              }
+
+              int seatColIndex = cIndex;
+              if (aisleAfter > 0 && cIndex > aisleAfter) {
+                seatColIndex = cIndex - 1;
+              }
+
+              Map<String, dynamic>? customSeat;
+              if (customSeatsList != null) {
+                for (var s in customSeatsList) {
+                  if (s is Map && s['row'] == row && s['col'] == cIndex) {
+                    customSeat = Map<String, dynamic>.from(s);
+                    break;
+                  }
+                }
+                if (customSeat == null) return SizedBox(width: seatWidth);
+              }
+
+              String seatLabel = customSeat != null ? customSeat['label'] : '${String.fromCharCode(65 + seatColIndex)}$row';
+
+              bool isSelected = state.selectedSeats.contains(seatLabel);
+              bool isBooked = state.bookedSeats.contains(seatLabel);
+              bool isHeld = state.heldSeats.contains(seatLabel);
+              
+              String gender = '';
+              if (isBooked) {
+                gender = state.seatGenders[seatLabel]?.toString() ?? '';
+              } else if (isSelected) {
+                gender = state.selectedSeatGenders[seatLabel]?.toString() ?? '';
+              }
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                child: Animated3DSeat(
+                  label: seatLabel,
+                  isSelected: isSelected,
+                  isBooked: isBooked,
+                  isHeld: isHeld,
+                  gender: gender,
+                  width: seatWidth,
+                  height: seatHeight,
+                  onTap: () {
+                    if (isSelected) {
+                      state.deselectSeat(seatLabel);
+                    } else {
+                      _showGenderSelectionDialog(context, state, seatLabel);
+                    }
+                  },
+                ),
+              );
+            }),
+          ),
+        );
+      }),
+    );
+  }
+
+  void _showGenderSelectionDialog(BuildContext context, AppState state, String seatLabel) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Select Passenger for Seat $seatLabel',
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    // Boy selection option
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          state.selectSeatWithGender(seatLabel, 'Male');
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                            border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Column(
+                            children: [
+                              Icon(Icons.face_rounded, color: Color(0xFF3B82F6), size: 36),
+                              SizedBox(height: 8),
+                              Text('Boy', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Girl selection option
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          state.selectSeatWithGender(seatLabel, 'Female');
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF472B6).withValues(alpha: 0.1),
+                            border: Border.all(color: const Color(0xFFF472B6), width: 1.5),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Column(
+                            children: [
+                              Icon(Icons.face_3_rounded, color: Color(0xFFF472B6), size: 36),
+                              SizedBox(height: 8),
+                              Text('Girl', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildLegendItem(Color color, String label, {Color? border}) {
     return Row(
       children: [
@@ -3538,6 +3948,253 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87)),
       ],
+    );
+  }
+}
+
+class Animated3DSeat extends StatefulWidget {
+  final String label;
+  final bool isSelected;
+  final bool isBooked;
+  final bool isHeld;
+  final String gender;
+  final double width;
+  final double height;
+  final VoidCallback? onTap;
+
+  const Animated3DSeat({
+    super.key,
+    required this.label,
+    required this.isSelected,
+    required this.isBooked,
+    required this.isHeld,
+    required this.gender,
+    required this.width,
+    required this.height,
+    this.onTap,
+  });
+
+  @override
+  State<Animated3DSeat> createState() => _Animated3DSeatState();
+}
+
+class _Animated3DSeatState extends State<Animated3DSeat> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _elevation;
+  late Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _elevation = Tween<double>(begin: 0.0, end: 6.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOut,
+      ),
+    );
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.15), weight: 50),
+      TweenSequenceItem(tween: Tween<double>(begin: 1.15, end: 1.0), weight: 50),
+    ]).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    if (widget.isSelected) {
+      _controller.value = 1.0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant Animated3DSeat oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isSelected != oldWidget.isSelected) {
+      if (widget.isSelected) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Color mainColor = const Color(0xFFF1F5F9);
+    Color depthColor = const Color(0xFFCBD5E1);
+    Color textColor = const Color(0xFF0F172A);
+    Color glowColor = Colors.transparent;
+
+    if (widget.isSelected) {
+      if (widget.gender.toLowerCase() == 'male') {
+        mainColor = const Color(0xFF3B82F6);
+        depthColor = const Color(0xFF1D4ED8);
+        textColor = Colors.white;
+        glowColor = const Color(0xFF3B82F6).withValues(alpha: 0.3);
+      } else if (widget.gender.toLowerCase() == 'female') {
+        mainColor = const Color(0xFFF472B6);
+        depthColor = const Color(0xFFBE185D);
+        textColor = Colors.white;
+        glowColor = const Color(0xFFF472B6).withValues(alpha: 0.3);
+      } else {
+        mainColor = const Color(0xFFFF8A50);
+        depthColor = const Color(0xFFE65100);
+        textColor = Colors.white;
+        glowColor = const Color(0xFFFF8A50).withValues(alpha: 0.3);
+      }
+    } else if (widget.isBooked) {
+      if (widget.gender.toLowerCase() == 'male') {
+        mainColor = const Color(0xFF3B82F6);
+        depthColor = const Color(0xFF1D4ED8);
+        textColor = Colors.white;
+      } else if (widget.gender.toLowerCase() == 'female') {
+        mainColor = const Color(0xFFF472B6);
+        depthColor = const Color(0xFFBE185D);
+        textColor = Colors.white;
+      } else {
+        mainColor = const Color(0xFF94A3B8);
+        depthColor = const Color(0xFF64748B);
+        textColor = Colors.white;
+      }
+    } else if (widget.isHeld) {
+      mainColor = const Color(0xFFFCD34D);
+      depthColor = const Color(0xFFD97706);
+      textColor = const Color(0xFF78350F);
+    }
+
+    final double w = widget.width;
+    final double hCushion = widget.height * 0.6;
+    final double hBackrest = widget.height * 0.3;
+    final double depth = widget.height * 0.1;
+
+    return GestureDetector(
+      onTap: (widget.isBooked || widget.isHeld) ? null : widget.onTap,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          final double elevVal = _elevation.value;
+          final double scaleVal = _scale.value;
+
+          return Transform.scale(
+            scale: scaleVal,
+            child: SizedBox(
+              height: widget.height,
+              width: widget.width,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // 1. Drop Shadow under the seat (increases with elevation)
+                  Positioned(
+                    bottom: -2 - elevVal,
+                    left: 2,
+                    right: 2,
+                    child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: widget.isSelected 
+                                ? glowColor 
+                                : Colors.black.withValues(alpha: 0.12 + (elevVal * 0.015)),
+                            blurRadius: 4 + elevVal,
+                            offset: Offset(0, 2 + (elevVal * 0.5)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // 2. Volumetric Cushions and Backrest (elevates upward along Y axis)
+                  Positioned(
+                    top: -elevVal,
+                    left: 0,
+                    right: 0,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Backrest
+                        Container(
+                          width: w * 0.85,
+                          height: hBackrest,
+                          decoration: BoxDecoration(
+                            color: mainColor,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(6),
+                              topRight: Radius.circular(6),
+                            ),
+                          ),
+                          alignment: Alignment.bottomCenter,
+                          child: Container(
+                            height: 1.0,
+                            color: depthColor.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        // Cushion Stack
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // 3D Cushion Depth
+                            Container(
+                              width: w,
+                              height: hCushion + depth,
+                              decoration: BoxDecoration(
+                                color: depthColor,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            // Cushion Top Face
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                width: w,
+                                height: hCushion,
+                                decoration: BoxDecoration(
+                                  color: mainColor,
+                                  borderRadius: BorderRadius.circular(6),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      mainColor,
+                                      Color.lerp(mainColor, Colors.white, 0.15) ?? mainColor
+                                    ],
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                  ),
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  widget.label,
+                                  style: TextStyle(
+                                    fontSize: (widget.height * 0.24).clamp(8.0, 12.0),
+                                    fontWeight: FontWeight.w900,
+                                    color: textColor,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -4068,408 +4725,6 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
           Text(value, style: const TextStyle(color: Color(0xFF0A2540), fontSize: 13, fontWeight: FontWeight.bold)),
         ],
-      ),
-    );
-  }
-}
-
-// Sub-Tab 2: Passenger Live Tracking View
-class PassengerTrackingTab extends ConsumerStatefulWidget {
-  const PassengerTrackingTab({super.key});
-
-  @override
-  ConsumerState<PassengerTrackingTab> createState() => _PassengerTrackingTabState();
-}
-
-class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
-  String? _selectedBusId;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
-    
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Live GPS Radar', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const Text('Track luxury buses commuting live.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 16),
-            
-            // Select Bus to Track
-            DropdownButtonFormField<String>(
-              dropdownColor: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              decoration: InputDecoration(
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                labelText: 'Select Bus line to track',
-              ),
-              value: _selectedBusId,
-              items: state.trips.map((trip) {
-                return DropdownMenuItem<String>(
-                  value: trip['reg'],
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Text('${trip['bus_name']} (${trip['reg']})', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ),
-                );
-              }).toList(),
-              onChanged: (val) {
-                setState(() => _selectedBusId = val);
-                if (val != null) {
-                  state.startTracking(val);
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-  
-            // Custom Radar View (acting as a gorgeous map placeholder)
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF0F4F8),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.black12),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: CustomPaint(
-                        painter: RadarPainter(
-                          isTracking: state.isTracking,
-                          loc: state.trackedBusLocation,
-                        ),
-                      ),
-                    ),
-                    
-                    // Radar detail dashboard overlay
-                    if (state.isTracking && state.trackedBusLocation != null)
-                      Positioned(
-                        bottom: 16,
-                        left: 16,
-                        right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.95),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF0A2540).withOpacity(0.2)),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.gps_fixed_rounded, size: 14, color: Color(0xFF10B981)),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Streaming Active: $_selectedBusId', 
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF10B981))
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'GPS Coords: [${state.trackedBusLocation!['latitude'].toStringAsFixed(4)}, ${state.trackedBusLocation!['longitude'].toStringAsFixed(4)}]',
-                                style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Color(0xFF0A2540)),
-                              ),
-                              Text(
-                                'Speed: ${state.trackedBusLocation!['speed'].toStringAsFixed(1)} km/h • Bearing: ${state.trackedBusLocation!['heading']?.toStringAsFixed(0)}°',
-                                style: const TextStyle(color: Colors.black87),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    else
-                      const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.radar_rounded, size: 48, color: Color(0xFF0A2540)),
-                            const SizedBox(height: 8),
-                            Text('Select a vehicle to initiate tracking', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                          ],
-                        ),
-                      )
-                  ],
-                ),
-              ),
-            )
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Custom Painter to draw a sleek glowing Radar map
-class RadarPainter extends CustomPainter {
-  final bool isTracking;
-  final Map<String, dynamic>? loc;
-  RadarPainter({required this.isTracking, required this.loc});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF0A2540).withOpacity(0.1)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    // Draw radar circles
-    final center = Offset(size.width / 2, size.height / 2);
-    canvas.drawCircle(center, size.width * 0.15, paint);
-    canvas.drawCircle(center, size.width * 0.3, paint);
-    canvas.drawCircle(center, size.width * 0.45, paint);
-
-    // Draw cross lines
-    canvas.drawLine(Offset(0, center.dy), Offset(size.width, center.dy), paint);
-    canvas.drawLine(Offset(center.dx, 0), Offset(center.dx, size.height), paint);
-
-    // Draw active locator dots if tracking
-    if (isTracking && loc != null) {
-      final pointPaint = Paint()
-        ..color = const Color(0xFFE65100)
-        ..style = PaintingStyle.fill;
-        
-      final ringPaint = Paint()
-        ..color = const Color(0xFFE65100).withOpacity(0.2)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
-
-      // Draw active vehicle dot (pulse animation mock: center of the radar with minor updates)
-      canvas.drawCircle(center, 8, pointPaint);
-      canvas.drawCircle(center, 16, ringPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
-}
-
-// Custom Deterministic QR Code Painter
-class QrCodePainter extends CustomPainter {
-  final String data;
-  QrCodePainter(this.data);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFF0A2540)
-      ..style = PaintingStyle.fill;
-
-    // Draw finder patterns (outer alignment squares)
-    final double finderSize = size.width * 0.28;
-    _drawFinderPattern(canvas, const Offset(0, 0), finderSize, paint);
-    _drawFinderPattern(canvas, Offset(size.width - finderSize, 0), finderSize, paint);
-    _drawFinderPattern(canvas, Offset(0, size.height - finderSize), finderSize, paint);
-
-    // Mock deterministic block matrix based on ticket data hash
-    final int hash = data.hashCode;
-    const int rows = 12;
-    const int cols = 12;
-    final double blockW = size.width / cols;
-    final double blockH = size.height / rows;
-
-    for (int r = 0; r < rows; r++) {
-      for (int c = 0; c < cols; c++) {
-        // Skip finder areas
-        if ((r < 4 && c < 4) || (r < 4 && c >= cols - 4) || (r >= rows - 4 && c < 4)) {
-          continue;
-        }
-        final int val = (hash ^ (r * 37 + c * 73)) % 100;
-        if (val < 45) {
-          canvas.drawRect(
-            Rect.fromLTWH(c * blockW, r * blockH, blockW - 0.5, blockH - 0.5),
-            paint,
-          );
-        }
-      }
-    }
-  }
-
-  void _drawFinderPattern(Canvas canvas, Offset offset, double size, Paint paint) {
-    canvas.drawRect(Rect.fromLTWH(offset.dx, offset.dy, size, size), paint);
-    final whitePaint = Paint()..color = Colors.white..style = PaintingStyle.fill;
-    final double inset1 = size * 0.2;
-    canvas.drawRect(Rect.fromLTWH(offset.dx + inset1, offset.dy + inset1, size - inset1 * 2, size - inset1 * 2), whitePaint);
-    final double inset2 = size * 0.4;
-    canvas.drawRect(Rect.fromLTWH(offset.dx + inset2, offset.dy + inset2, size - inset2 * 2, size - inset2 * 2), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// Sub-Tab 3: Passenger Bookings Tickets List
-class PassengerBookingsTab extends ConsumerWidget {
-  const PassengerBookingsTab({super.key});
-
-  void _showDownloadTicketDialog(BuildContext context, Map<String, dynamic> b) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.qr_code_2_rounded, size: 84, color: Color(0xFFE65100)),
-              const SizedBox(height: 16),
-              const Text(
-                'Ready to Board',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0A2540)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Ticket Code: TKT-${b['id'].toString().substring(0, 8).toUpperCase()}',
-                style: const TextStyle(color: Colors.black54, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              // QR Code representation
-              SizedBox(
-                width: 140,
-                height: 140,
-                child: QrImageView(
-                  data: b['id'].toString(),
-                  version: QrVersions.auto,
-                  size: 140.0,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Show this barcode to the driver/conductor during verification.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          actions: [
-            Center(
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0A2540),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text('Close'),
-              ),
-            )
-          ],
-        );
-      },
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(appStateProvider);
-    
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('My Booked Tickets', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      const Text('Present these digital tickets during boarding.', style: TextStyle(color: Colors.grey, fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: state.bookings.isEmpty
-                  ? const Center(child: Text('No tickets booked yet.', style: TextStyle(color: Colors.grey)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: 95),
-                      itemCount: state.bookings.length,
-                      itemBuilder: (context, index) {
-                        final b = state.bookings[index];
-                        final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: Colors.black12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(b['bus_name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                                          Text(b['reg'], style: const TextStyle(color: Colors.grey, fontSize: 11, fontFamily: 'monospace')),
-                                          const SizedBox(height: 12),
-                                          Text('Route: ${b['origin']} \u2192 ${b['destination']}', style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.bold)),
-                                          const SizedBox(height: 6),
-                                          Text('Seats Reserved: ${b['seats'].join(', ')}', style: const TextStyle(color: Colors.black87)),
-                                          Text('Departure: ${b['departure']}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                                        ],
-                                      ),
-                                    ),
-                                    // QR Code visualization block
-                                    Container(
-                                      width: 76,
-                                      height: 76,
-                                      padding: const EdgeInsets.all(2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        border: Border.all(color: Colors.black12),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: QrImageView(
-                                        data: b['id'].toString(),
-                                        version: QrVersions.auto,
-                                        size: 72.0,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Divider(height: 24, color: Colors.black12),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(ticketCode, style: const TextStyle(fontFamily: 'monospace', color: Color(0xFF0A2540), fontSize: 12, fontWeight: FontWeight.bold)),
-                                    TextButton.icon(
-                                      onPressed: () => _showDownloadTicketDialog(context, b),
-                                      icon: const Icon(Icons.download_rounded, size: 14, color: Color(0xFFE65100)),
-                                      label: const Text('Download', style: TextStyle(fontSize: 12, color: Color(0xFFE65100), fontWeight: FontWeight.bold)),
-                                      style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                                    ),
-                                    Text('Fare: Rs. ${b['price']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE65100))),
-                                  ],
-                                )
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-            )
-          ],
-        ),
       ),
     );
   }
@@ -5714,6 +5969,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                 await state.loadTrips();
               },
               child: ListView.builder(
+                padding: const EdgeInsets.only(bottom: 110),
                 physics: const AlwaysScrollableScrollPhysics(),
                 itemCount: state.trips.length,
                 itemBuilder: (context, index) {
@@ -5802,8 +6058,9 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
     
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 24.0, bottom: 110.0),
+      physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -5898,250 +6155,6 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
     );
   }
 }
-
-// Profile Edit Screen
-class ProfileEditScreen extends ConsumerStatefulWidget {
-  const ProfileEditScreen({super.key});
-
-  @override
-  ConsumerState<ProfileEditScreen> createState() => _ProfileEditScreenState();
-}
-
-class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _nicController;
-  late TextEditingController _phoneController;
-  String _gender = 'Male';
-  bool _isSaving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final state = ref.read(appStateProvider);
-    _nameController = TextEditingController(text: state.userName);
-    _nicController = TextEditingController(text: state.userNic);
-    _phoneController = TextEditingController(
-      text: state.userPhone.isEmpty 
-          ? (state.role == 'passenger' ? '0771234567' : '0777654321') 
-          : state.userPhone
-    );
-    _gender = state.userGender.isEmpty ? 'Male' : state.userGender;
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _nicController.dispose();
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  void _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _isSaving = true);
-    
-    final state = ref.read(appStateProvider);
-    final success = await state.updateProfile(
-      _nameController.text.trim(),
-      _nicController.text.trim(),
-      _gender,
-      _phoneController.text.trim(),
-    );
-
-    if (mounted) {
-      setState(() => _isSaving = false);
-      SeatyNotifications.show(
-        context,
-        success ? 'Profile updated successfully!' : 'Failed to update profile. Please try again.',
-        isError: !success,
-      );
-      if (success) {
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
-        }
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(
-        automaticallyImplyLeading: Navigator.canPop(context),
-        title: const Text('Edit Profile'),
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        titleTextStyle: const TextStyle(
-          color: Colors.white,
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          fontFamily: 'Inter',
-        ),
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Personal Information',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Manage your identity details for booking tickets.',
-                  style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
-                ),
-                const SizedBox(height: 24),
-                
-                // Name Field
-                _buildFieldLabel('Full Name'),
-                TextFormField(
-                  controller: _nameController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _buildInputDecoration('Enter your full name', Icons.person_outline),
-                  validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
-                ),
-                const SizedBox(height: 20),
-
-                // Phone Field
-                _buildFieldLabel('Phone Number'),
-                TextFormField(
-                  controller: _phoneController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _buildInputDecoration('Enter phone number', Icons.phone_android_outlined),
-                  validator: (val) => val == null || val.trim().isEmpty ? 'Phone number is required' : null,
-                ),
-                const SizedBox(height: 20),
-
-                // NIC Field
-                _buildFieldLabel('NIC Number'),
-                TextFormField(
-                  controller: _nicController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: _buildInputDecoration('e.g. 199912345678 or 991234567V', Icons.badge_outlined),
-                  validator: (val) => val == null || val.trim().isEmpty ? 'NIC number is required' : null,
-                ),
-                const SizedBox(height: 20),
-
-                // Gender Field
-                _buildFieldLabel('Gender'),
-                DropdownButtonFormField<String>(
-                  value: _gender,
-                  dropdownColor: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(16),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                  decoration: _buildInputDecoration('Select Gender', Icons.face_outlined),
-                  items: ['Male', 'Female'].map((g) => DropdownMenuItem(
-                    value: g,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                    ),
-                  )).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _gender = val);
-                    }
-                  },
-                ),
-                const SizedBox(height: 40),
-
-                // Save Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isSaving ? null : _saveProfile,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE65100),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFFE65100).withOpacity(0.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 4,
-                    ),
-                    child: _isSaving
-                        ? const Center(
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                            ),
-                          )
-                        : const Text('Save Profile Changes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: OutlinedButton.icon(
-                    onPressed: () => ref.read(appStateProvider).logout(),
-                    icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
-                    label: const Text(
-                      'Sign Out',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.redAccent, width: 1.5),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFieldLabel(String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0, left: 4.0),
-      child: Text(
-        label,
-        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
-      ),
-    );
-  }
-
-  InputDecoration _buildInputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
-      prefixIcon: Icon(icon, color: Colors.white.withOpacity(0.5)),
-      filled: true,
-      fillColor: Colors.white.withOpacity(0.05),
-      contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Color(0xFFE65100), width: 1.5),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(16),
-        borderSide: const BorderSide(color: Colors.redAccent),
-      ),
-    );
-  }
-}
-
 
 // =====================================================================
 // NOTIFICATIONS CENTER SCREEN (Premium Floating Cards & List)
