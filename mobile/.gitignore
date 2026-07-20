@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Private signing keys & certificates
+*.key
+*.pem
+*.cer
+*.certSigningRequest
+*.p12
+*_base64.txt
+*.p8
+*.mobileprovision

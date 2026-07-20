@@ -68,5 +68,17 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>remote-notification</string>
+		</array>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>We need your location to show nearby rides and track your journey.</string>
+		<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+		<string>We need your location to show nearby rides and track your journey.</string>
+		<key>NSLocationAlwaysUsageDescription</key>
+		<string>We need your location to show nearby rides and track your journey.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>We need camera access to scan passenger ticket QR codes.</string>
 	</dict>
 </plist>
