@@ -13,6 +13,7 @@ import RoutesPage from './pages/RoutesPage';
 import MyFleetPage from './pages/MyFleetPage';
 import MyTripsPage from './pages/MyTripsPage';
 import ConductorsPage from './pages/ConductorsPage';
+import PassengersPage from './pages/PassengersPage';
 
 import { Loader2 } from 'lucide-react';
 
@@ -106,6 +107,14 @@ export default function App() {
                       element={
                         <RoleProtectedRoute allowed={['owner', 'admin']}>
                           <ConductorsPage />
+                        </RoleProtectedRoute>
+                      } 
+                    />
+                    <Route 
+                      path="/passengers" 
+                      element={
+                        <RoleProtectedRoute allowed={['admin']}>
+                          <PassengersPage />
                         </RoleProtectedRoute>
                       } 
                     />

@@ -353,10 +353,10 @@ export default function MyFleetPage() {
       </div>
 
       {showAddModal && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, backdropFilter: 'blur(4px)', overflowY: 'auto', padding: '40px 20px' }}>
-          <div className="table-card" style={{ width: '960px', maxWidth: '95vw', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.08)', padding: '28px', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', margin: 'auto' }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Bus style={{ color: '#2563eb' }} /> {editingVehicleId ? 'Edit Bus & Design Layout' : 'Register New Bus & Design Layout'}
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, backdropFilter: 'blur(8px)', overflowY: 'auto', padding: '40px 20px' }}>
+          <div className="table-card" style={{ width: '960px', maxWidth: '95vw', background: '#ffffff', border: '1px solid var(--border-color)', padding: '28px', borderRadius: '24px', boxShadow: '0 24px 48px -12px rgba(10, 37, 64, 0.18)', margin: 'auto' }}>
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: 800, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Bus style={{ color: 'var(--color-primary)' }} /> {editingVehicleId ? 'Edit Bus & Design Layout' : 'Register New Bus & Design Layout'}
             </h3>
             {error && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '13px', background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{error}</div>}
             
@@ -393,7 +393,7 @@ export default function MyFleetPage() {
                   </div>
                   <div>
                     <label className="form-label">Total Seats (Read-only)</label>
-                    <input type="text" className="form-input" style={{ background: 'rgba(255,255,255,0.02)', cursor: 'not-allowed', color: '#2563eb', fontWeight: 'bold' }} value={`${seats} Seats`} readOnly />
+                    <input type="text" className="form-input" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', cursor: 'not-allowed', color: 'var(--color-primary)', fontWeight: 'bold' }} value={`${seats} Seats`} readOnly />
                   </div>
                 </div>
                 
@@ -441,9 +441,9 @@ export default function MyFleetPage() {
                           key={ame}
                           onClick={() => toggleAmenity(ame)}
                           style={{
-                            background: active ? '#2563eb' : 'rgba(255,255,255,0.04)',
-                            color: active ? 'white' : 'rgba(255,255,255,0.6)',
-                            border: active ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
+                            background: active ? 'var(--color-primary)' : 'var(--bg-secondary)',
+                            color: active ? 'white' : 'var(--text-muted)',
+                            border: active ? '1px solid var(--color-primary)' : '1px solid var(--border-color)',
                             padding: '8px 12px',
                             borderRadius: '8px',
                             fontSize: '12px',
@@ -471,15 +471,15 @@ export default function MyFleetPage() {
               </div>
 
               {/* Right Panel: Interactive Layout Simulator */}
-              <div style={{ display: 'flex', flexDirection: 'column', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div>
-                    <h4 style={{ margin: 0, color: 'white', fontSize: '15px', fontWeight: 600 }}>Visual Cabin Layout Builder</h4>
-                    <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>
+                    <h4 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '15px', fontWeight: 600 }}>Visual Cabin Layout Builder</h4>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: 'var(--text-muted)' }}>
                       Drag the template to grid cells, or click cells to toggle seats.
                     </p>
                   </div>
-                  <div style={{ padding: '6px 12px', background: 'rgba(37, 99, 235, 0.1)', border: '1px solid rgba(37, 99, 235, 0.2)', borderRadius: '8px', color: '#ff7043', fontSize: '12px', fontWeight: 600 }}>
+                  <div style={{ padding: '6px 12px', background: 'rgba(37, 99, 235, 0.08)', border: '1px solid rgba(37, 99, 235, 0.15)', borderRadius: '8px', color: 'var(--color-primary)', fontSize: '12px', fontWeight: 600 }}>
                     Seats placed: {seats}
                   </div>
                 </div>
@@ -494,17 +494,17 @@ export default function MyFleetPage() {
                     style={{
                       width: '100%',
                       padding: '12px 16px',
-                      background: '#1e293b',
-                      border: isOpenPreset ? '1.5px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
+                      background: '#ffffff',
+                      border: isOpenPreset ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color)',
                       borderRadius: '10px',
-                      color: 'white',
+                      color: 'var(--text-dark)',
                       fontSize: '15px',
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       userSelect: 'none',
-                      boxShadow: isOpenPreset ? '0 0 12px rgba(37, 99, 235, 0.25)' : 'none',
+                      boxShadow: isOpenPreset ? '0 0 12px rgba(37, 99, 235, 0.12)' : 'none',
                       transition: 'all 0.15s ease'
                     }}
                   >
@@ -514,7 +514,7 @@ export default function MyFleetPage() {
                       {preset === 'rosa' && 'Toyota Rosa Mini Bus (2x1 Layout - 31 Seats)'}
                       {preset === 'custom' && 'Blank Custom Layout (Start Empty)'}
                     </span>
-                    <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', transition: 'transform 0.2s', transform: isOpenPreset ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', transition: 'transform 0.2s', transform: isOpenPreset ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                       ▼
                     </span>
                   </div>
@@ -528,10 +528,10 @@ export default function MyFleetPage() {
                         left: 0,
                         right: 0,
                         marginTop: '6px',
-                        background: '#0b0f19',
-                        border: '1px solid rgba(255,255,255,0.12)',
+                        background: '#ffffff',
+                        border: '1px solid var(--border-color)',
                         borderRadius: '10px',
-                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.08)',
                         zIndex: 1010,
                         overflow: 'hidden'
                       }}
@@ -552,7 +552,7 @@ export default function MyFleetPage() {
                             }}
                             onMouseEnter={(e) => {
                               if (!isSelected) {
-                                e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
+                                e.currentTarget.style.background = 'rgba(37, 99, 235, 0.05)';
                               }
                             }}
                             onMouseLeave={(e) => {
@@ -562,8 +562,8 @@ export default function MyFleetPage() {
                             }}
                             style={{
                               padding: '12px 16px',
-                              background: isSelected ? '#2563eb' : 'transparent',
-                              color: isSelected ? 'white' : 'rgba(255,255,255,0.8)',
+                              background: isSelected ? 'var(--color-primary)' : 'transparent',
+                              color: isSelected ? 'white' : 'var(--text-dark)',
                               cursor: 'pointer',
                               fontSize: '14px',
                               fontWeight: isSelected ? 600 : 400,
@@ -579,43 +579,52 @@ export default function MyFleetPage() {
                 </div>
 
                 {/* Toolbox */}
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', gap: '14px', alignItems: 'center', padding: '12px', background: '#ffffff', border: '1px solid var(--border-color)', borderRadius: '10px', marginBottom: '16px' }}>
                   <div
                     draggable
                     onDragStart={(e) => {
                       e.dataTransfer.setData('drag-type', 'new-seat');
                     }}
                     style={{
-                      padding: '8px 14px',
-                      background: '#2563eb',
+                      padding: '8px 12px',
+                      background: 'var(--color-primary)',
                       borderRadius: '8px',
                       color: 'white',
                       fontWeight: 700,
                       cursor: 'grab',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '8px',
+                      gap: '6px',
                       fontSize: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
+                      boxShadow: '0 4px 10px rgba(37, 99, 235, 0.15)',
+                      flexShrink: 0
                     }}
                   >
-                    <Bus size={14} /> Drag Standard Seat
+                    <Bus size={13} /> Drag Seat
                   </div>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>
-                    💡 Tip: Dragging existing seats lets you rearrange them.
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'flex-start', 
+                    gap: '4px', 
+                    fontSize: '11px', 
+                    color: 'var(--text-muted)', 
+                    lineHeight: '1.4' 
+                  }}>
+                    <span style={{ fontSize: '12px', lineHeight: 1 }}>💡</span>
+                    <span>Tip: Dragging existing seats lets you rearrange them.</span>
                   </div>
                 </div>
 
                 {/* Bus Body Simulator */}
-                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', padding: '20px 40px', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', padding: '20px 40px', background: 'rgba(10, 37, 64, 0.02)', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   {/* Bus Front Cap (Steering wheel and Driver section) */}
-                  <div style={{ width: '100%', maxWidth: '320px', height: '50px', background: 'rgba(255,255,255,0.03)', border: '2px solid rgba(255,255,255,0.08)', borderBottom: 'none', borderRadius: '40px 40px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 28px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
+                  <div style={{ width: '100%', maxWidth: '320px', height: '50px', background: '#ffffff', border: '2px solid var(--border-color)', borderBottom: 'none', borderRadius: '40px 40px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 28px', color: 'var(--text-muted)', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600 }}>
-                      <span style={{ width: '8px', height: '8px', background: '#22c55e', borderRadius: '50%' }}></span> Front / Driver
+                      <span style={{ width: '8px', height: '8px', background: 'var(--color-success)', borderRadius: '50%' }}></span> Front / Driver
                     </div>
                     {/* Visual steering wheel */}
-                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: '4px double rgba(255,255,255,0.3)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                      <div style={{ width: '4px', height: '4px', background: 'rgba(255,255,255,0.3)', borderRadius: '50%' }}></div>
+                    <div style={{ width: '22px', height: '22px', borderRadius: '50%', border: '4px double var(--border-color)', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ width: '4px', height: '4px', background: 'var(--text-muted)', borderRadius: '50%' }}></div>
                     </div>
                   </div>
 
@@ -631,8 +640,8 @@ export default function MyFleetPage() {
                           gridTemplateColumns: `repeat(${gridColumnsCount}, 1fr)`,
                           gap: '8px',
                           padding: '16px',
-                          background: '#090d16',
-                          border: '2px solid rgba(255,255,255,0.08)',
+                          background: '#ffffff',
+                          border: '2px solid var(--border-color)',
                           borderRadius: '0 0 20px 20px',
                           minHeight: '280px'
                         }}
@@ -677,15 +686,15 @@ export default function MyFleetPage() {
                                 }}
                                 style={{
                                   height: '36px',
-                                  border: seat ? 'none' : isAisle ? '1px dashed rgba(255,255,255,0.05)' : '1px dashed rgba(255,255,255,0.12)',
+                                  border: seat ? 'none' : isAisle ? '1px dashed rgba(10, 37, 64, 0.05)' : '1px dashed rgba(10, 37, 64, 0.15)',
                                   borderRadius: '6px',
-                                  background: seat ? '#2563eb' : isAisle ? 'rgba(255,255,255,0.02)' : 'transparent',
-                                  boxShadow: seat ? 'inset 0 -2px 0 rgba(0,0,0,0.2), 0 2px 4px rgba(37,99,235,0.15)' : 'none',
+                                  background: seat ? 'var(--color-primary)' : isAisle ? 'rgba(10, 37, 64, 0.01)' : 'transparent',
+                                  boxShadow: seat ? 'inset 0 -2px 0 rgba(0,0,0,0.2), 0 4px 10px rgba(37,99,235,0.15)' : 'none',
                                   display: 'flex',
                                   justifyContent: 'center',
                                   alignItems: 'center',
                                   cursor: 'pointer',
-                                  color: seat ? 'white' : isAisle ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.15)',
+                                  color: seat ? 'white' : isAisle ? 'rgba(10, 37, 64, 0.2)' : 'rgba(10, 37, 64, 0.3)',
                                   fontWeight: 700,
                                   fontSize: '10px',
                                   transition: 'all 0.15s ease',

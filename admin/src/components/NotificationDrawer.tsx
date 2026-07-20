@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Bell, X, CheckCheck, Info, FileCheck, Ticket } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api/client';
@@ -106,7 +107,7 @@ export default function NotificationDrawer() {
       </div>
 
       {/* Floating live toast alerts */}
-      {toast && (
+      {toast && createPortal(
         <div className="live-notification-toast animate-slide-in">
           <div className="toast-header">
             <Bell size={14} style={{ color: 'var(--color-primary)' }} />
@@ -116,11 +117,12 @@ export default function NotificationDrawer() {
             </button>
           </div>
           <div className="toast-body">{toast.message}</div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Slide-out Drawer Panel */}
-      {isOpen && (
+      {isOpen && createPortal(
         <div className="notification-drawer-backdrop" onClick={() => setIsOpen(false)}>
           <aside className="notification-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-header">
@@ -172,7 +174,8 @@ export default function NotificationDrawer() {
               )}
             </div>
           </aside>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

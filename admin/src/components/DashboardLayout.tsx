@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Building2,
   Users,
+  User,
   Map as MapIcon,
   Settings as SettingsIcon,
   Route as RouteIcon,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { path: '/conductors', icon: Contact, label: 'My Conductors' },
   { path: '/map', icon: MapIcon, label: 'Live Fleet Map', badge: 'Live' },
   { path: '/bookings', icon: Users, label: 'Bookings Log' },
+  { path: '/passengers', icon: User, label: 'Passengers' },
   { path: '/settings', icon: SettingsIcon, label: 'Console Settings' },
 ];
 
@@ -107,7 +109,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return ['/', '/fleet', '/trips', '/conductors', '/bookings', '/map'].includes(item.path);
     }
     // Admins can see all views
-    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/conductors', '/map', '/bookings', '/settings'].includes(item.path);
+    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/conductors', '/map', '/bookings', '/passengers', '/settings'].includes(item.path);
   });
 
   return (
@@ -162,7 +164,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           border: '1px solid rgba(255, 255, 255, 0.5)',
           borderRadius: '16px',
           marginBottom: '28px',
-          boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
+          boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6)',
+          position: 'relative',
+          zIndex: 10
         }}>
           <div className="navbar-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, color: 'var(--text-muted)' }}>Console Control</span>

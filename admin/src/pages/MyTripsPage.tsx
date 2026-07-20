@@ -796,16 +796,16 @@ export default function MyTripsPage() {
 
       {/* SCHEDULE MODAL (CREATE / EDIT) */}
       {showScheduleModal && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, overflowY: 'auto', padding: '40px 20px' }}>
-          <div className="table-card" style={{ width: '480px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px', margin: 'auto' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'white' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, backdropFilter: 'blur(8px)', overflowY: 'auto', padding: '40px 20px' }}>
+          <div className="table-card" style={{ width: '480px', background: '#ffffff', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '16px', boxShadow: '0 24px 48px -12px rgba(10, 37, 64, 0.18)', margin: 'auto' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'var(--text-dark)' }}>
               {editingScheduleId ? 'Edit Recurring Schedule' : 'Create Recurring Schedule'}
             </h3>
             {error && <div style={{ color: '#ef4444', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
             
             <form onSubmit={handleSaveSchedule}>
               <div className="form-group">
-                <label className="form-label" style={{ color: '#9ca3af' }}>Select Default Bus</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Select Default Bus</label>
                 <CustomSelect
                   options={vehicles.map(v => ({ value: v.id, label: `${v.name} (${v.registration_number})` }))}
                   value={selectedVehicle}
@@ -815,7 +815,7 @@ export default function MyTripsPage() {
               </div>
               
               <div className="form-group">
-                <label className="form-label" style={{ color: '#9ca3af' }}>Select Route Template</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Select Route Template</label>
                 <CustomSelect
                   options={routes.map(r => ({ value: r.id, label: `${r.origin} to ${r.destination}` }))}
                   value={selectedRoute}
@@ -825,7 +825,7 @@ export default function MyTripsPage() {
               </div>
 
               <div className="form-group">
-                <label className="form-label" style={{ color: '#9ca3af' }}>Assign Conductor</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Assign Conductor</label>
                 <CustomSelect
                   options={conductors.map(c => ({ value: c.id, label: `${c.full_name} (${c.phone_number})` }))}
                   value={selectedConductor}
@@ -836,17 +836,17 @@ export default function MyTripsPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ color: '#9ca3af' }}>Departure Time</label>
-                  <input type="time" className="form-input" style={{ backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} required />
+                  <label className="form-label" style={{ color: 'var(--text-muted)' }}>Departure Time</label>
+                  <input type="time" className="form-input" style={{ backgroundColor: 'transparent', color: 'var(--text-dark)', border: '1px solid var(--border-color)' }} value={departureTime} onChange={(e) => setDepartureTime(e.target.value)} required />
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label" style={{ color: '#9ca3af' }}>Journey Duration</label>
+                  <label className="form-label" style={{ color: 'var(--text-muted)' }}>Journey Duration</label>
                   <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                     <input 
                       type="number" 
                       className="form-input" 
-                      style={{ backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '12px 8px', textAlign: 'center' }} 
+                      style={{ backgroundColor: 'transparent', color: 'var(--text-dark)', border: '1px solid var(--border-color)', padding: '12px 8px', textAlign: 'center' }} 
                       min="0" 
                       max="23" 
                       value={durationHours} 
@@ -854,11 +854,11 @@ export default function MyTripsPage() {
                       placeholder="Hrs" 
                       required 
                     />
-                    <span style={{ color: '#9ca3af', fontSize: '12px' }}>h</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>h</span>
                     <input 
                       type="number" 
                       className="form-input" 
-                      style={{ backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '12px 8px', textAlign: 'center' }} 
+                      style={{ backgroundColor: 'transparent', color: 'var(--text-dark)', border: '1px solid var(--border-color)', padding: '12px 8px', textAlign: 'center' }} 
                       min="0" 
                       max="59" 
                       value={durationMinutes} 
@@ -866,37 +866,37 @@ export default function MyTripsPage() {
                       placeholder="Mins" 
                       required 
                     />
-                    <span style={{ color: '#9ca3af', fontSize: '12px' }}>m</span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>m</span>
                   </div>
                 </div>
               </div>
 
               {/* Calculated Arrival Time Display */}
               <div className="form-group" style={{ 
-                backgroundColor: 'rgba(255,255,255,0.02)', 
-                border: '1px dashed rgba(255,255,255,0.1)', 
+                backgroundColor: 'var(--bg-secondary)', 
+                border: '1px dashed var(--border-color)', 
                 borderRadius: '10px', 
                 padding: '12px',
                 marginTop: '-8px',
                 marginBottom: '16px'
               }}>
-                <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600 }}>Estimated Arrival Time</div>
-                <div style={{ fontSize: '15px', color: 'white', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Clock size={15} style={{ color: '#2563eb' }} />
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Estimated Arrival Time</div>
+                <div style={{ fontSize: '15px', color: 'var(--text-dark)', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Clock size={15} style={{ color: 'var(--color-primary)' }} />
                   {calculateArrivalTime(departureTime, durationHours, durationMinutes).display}
                 </div>
               </div>
               
               <div className="form-group">
-                <label className="form-label" style={{ color: '#9ca3af' }}>Fare per Seat (LKR)</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Fare per Seat (LKR)</label>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '12px', top: '12px', color: '#2563eb', fontWeight: 'bold' }}>Rs.</span>
-                  <input type="number" className="form-input" style={{ backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)', paddingLeft: '40px' }} min="100" max="10000" value={price} onChange={(e) => setPrice(e.target.value)} required />
+                  <span style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>Rs.</span>
+                  <input type="number" className="form-input" style={{ backgroundColor: 'transparent', color: 'var(--text-dark)', border: '1px solid var(--border-color)', paddingLeft: '40px' }} min="100" max="10000" value={price} onChange={(e) => setPrice(e.target.value)} required />
                 </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label" style={{ color: '#9ca3af' }}>Frequency Pattern</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Frequency Pattern</label>
                 <CustomSelect
                   options={[
                     { value: 'daily', label: 'Daily Schedule' },
@@ -911,7 +911,7 @@ export default function MyTripsPage() {
 
               {scheduleType === 'custom' && (
                 <div className="form-group">
-                  <label className="form-label" style={{ color: '#9ca3af' }}>Days of Week</label>
+                  <label className="form-label" style={{ color: 'var(--text-muted)' }}>Days of Week</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                     {DAYS_OF_WEEK.map(day => {
                       const isSelected = customDays.includes(day.value);
@@ -927,9 +927,9 @@ export default function MyTripsPage() {
                             fontWeight: 600,
                             cursor: 'pointer',
                             border: '1px solid',
-                            borderColor: isSelected ? 'var(--color-primary)' : 'rgba(255,255,255,0.1)',
-                            backgroundColor: isSelected ? 'rgba(37, 99, 235, 0.2)' : '#1e293b',
-                            color: isSelected ? 'white' : '#9ca3af',
+                            borderColor: isSelected ? 'var(--color-primary)' : 'var(--border-color)',
+                            backgroundColor: isSelected ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-secondary)',
+                            color: isSelected ? 'var(--color-primary)' : 'var(--text-muted)',
                             transition: 'var(--transition-smooth)'
                           }}
                         >
@@ -943,17 +943,17 @@ export default function MyTripsPage() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ color: '#9ca3af' }}>Effective From</label>
-                  <CustomDatePicker value={effectiveFrom} onChange={setEffectiveFrom} />
+                  <label className="form-label" style={{ color: 'var(--text-muted)' }}>Effective From</label>
+                  <CustomDatePicker value={effectiveFrom} onChange={setEffectiveFrom} placement="top" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label" style={{ color: '#9ca3af' }}>Effective Until</label>
-                  <CustomDatePicker value={effectiveUntil} onChange={setEffectiveUntil} />
+                  <label className="form-label" style={{ color: 'var(--text-muted)' }}>Effective Until</label>
+                  <CustomDatePicker value={effectiveUntil} onChange={setEffectiveUntil} placement="top" />
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => { setShowScheduleModal(false); }} style={{ flex: 1, marginTop: 0, padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontSize: '14px' }}>Cancel</button>
+                <button type="button" className="btn-secondary" onClick={() => { setShowScheduleModal(false); }} style={{ flex: 1, marginTop: 0, padding: '12px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '14px' }}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={submitting} style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>
                   {submitting ? 'Saving...' : 'Save Schedule'}
                 </button>
@@ -965,44 +965,44 @@ export default function MyTripsPage() {
 
       {/* OVERRIDES MODAL */}
       {showOverrideModal && selectedSchedule && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, overflowY: 'auto', padding: '40px 20px' }}>
-          <div className="table-card" style={{ width: '600px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px', margin: 'auto' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, backdropFilter: 'blur(8px)', overflowY: 'auto', padding: '40px 20px' }}>
+          <div className="table-card" style={{ width: '600px', background: '#ffffff', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '16px', boxShadow: '0 24px 48px -12px rgba(10, 37, 64, 0.18)', margin: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', color: 'white' }}>Bus Swap / Overrides</h3>
+              <h3 style={{ margin: 0, fontSize: '18px', color: 'var(--text-dark)' }}>Bus Swap / Overrides</h3>
               <button 
                 type="button" 
                 onClick={() => setShowOverrideModal(false)}
-                style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '20px', cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer' }}
               >
                 &times;
               </button>
             </div>
             
             <div style={{ 
-              backgroundColor: 'rgba(37, 99, 235, 0.1)', 
-              border: '1px solid rgba(37, 99, 235, 0.2)', 
+              backgroundColor: 'rgba(37, 99, 235, 0.06)', 
+              border: '1px solid rgba(37, 99, 235, 0.15)', 
               borderRadius: '10px', 
               padding: '12px', 
               marginBottom: '20px',
               fontSize: '13px',
-              color: '#f97316'
+              color: 'var(--text-dark)'
             }}>
               <strong>Route:</strong> {selectedSchedule.route?.origin} to {selectedSchedule.route?.destination} <br/>
               <strong>Default Bus:</strong> {selectedSchedule.vehicle?.name} ({selectedSchedule.vehicle?.registration_number}) at {selectedSchedule.departure_time.substring(0, 5)}
             </div>
 
             {/* Create Override Form */}
-            <form onSubmit={handleAddOverride} style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px', marginBottom: '20px' }}>
-              <h4 style={{ color: 'white', fontSize: '14px', marginBottom: '12px' }}>Apply a Temporary Bus Swap</h4>
+            <form onSubmit={handleAddOverride} style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '20px', marginBottom: '20px' }}>
+              <h4 style={{ color: 'var(--text-dark)', fontSize: '14px', marginBottom: '12px' }}>Apply a Temporary Bus Swap</h4>
               {overrideError && <div style={{ color: '#ef4444', marginBottom: '12px', fontSize: '13px' }}>{overrideError}</div>}
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ color: '#9ca3af', fontSize: '11px' }}>Swap Date</label>
-                  <CustomDatePicker value={overrideDate} onChange={setOverrideDate} />
+                  <label className="form-label" style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Swap Date</label>
+                  <CustomDatePicker value={overrideDate} onChange={setOverrideDate} placement="top" />
                 </div>
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ color: '#9ca3af', fontSize: '11px' }}>Replacement Bus</label>
+                  <label className="form-label" style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Replacement Bus</label>
                   <CustomSelect
                     options={vehicles.filter(v => v.id !== selectedSchedule.vehicle_id).map(v => ({ value: v.id, label: `${v.name} (${v.registration_number})` }))}
                     value={overrideVehicleId}
@@ -1013,11 +1013,11 @@ export default function MyTripsPage() {
               </div>
 
               <div className="form-group" style={{ marginBottom: '16px' }}>
-                <label className="form-label" style={{ color: '#9ca3af', fontSize: '11px' }}>Reason (Optional)</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Reason (Optional)</label>
                 <input 
                   type="text" 
                   className="form-input" 
-                  style={{ backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)', padding: '10px' }} 
+                  style={{ backgroundColor: 'transparent', color: 'var(--text-dark)', border: '1px solid var(--border-color)', padding: '10px' }} 
                   placeholder="e.g. Bus undergoing periodic servicing" 
                   value={overrideReason} 
                   onChange={(e) => setOverrideReason(e.target.value)} 
@@ -1031,11 +1031,11 @@ export default function MyTripsPage() {
 
             {/* List Existing Overrides */}
             <div>
-              <h4 style={{ color: 'white', fontSize: '14px', marginBottom: '12px' }}>Active Swaps</h4>
+              <h4 style={{ color: 'var(--text-dark)', fontSize: '14px', marginBottom: '12px' }}>Active Swaps</h4>
               {loadingOverrides ? (
-                <div style={{ color: '#9ca3af', fontSize: '13px', textAlign: 'center', padding: '10px' }}>Loading swaps...</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '13px', textAlign: 'center', padding: '10px' }}>Loading swaps...</div>
               ) : overrides.length === 0 ? (
-                <div style={{ color: '#64748b', fontSize: '13px', fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '13px', fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>
                   No bus swaps scheduled for this route.
                 </div>
               ) : (
@@ -1047,21 +1047,21 @@ export default function MyTripsPage() {
                         display: 'flex', 
                         justifyContent: 'space-between', 
                         alignItems: 'center', 
-                        backgroundColor: '#1e293b', 
+                        backgroundColor: 'var(--bg-secondary)', 
                         padding: '10px 14px', 
                         borderRadius: '8px',
-                        border: '1px solid rgba(255,255,255,0.05)'
+                        border: '1px solid var(--border-color)'
                       }}
                     >
                       <div>
-                        <div style={{ color: 'white', fontWeight: 600, fontSize: '13.5px' }}>
+                        <div style={{ color: 'var(--text-dark)', fontWeight: 600, fontSize: '13.5px' }}>
                           Date: {o.override_date}
                         </div>
-                        <div style={{ color: '#2563eb', fontSize: '12.5px', marginTop: '2px', fontWeight: 500 }}>
+                        <div style={{ color: 'var(--color-primary)', fontSize: '12.5px', marginTop: '2px', fontWeight: 500 }}>
                           Replaced with: {o.replacement_vehicle?.name} ({o.replacement_vehicle?.registration_number})
                         </div>
                         {o.reason && (
-                          <div style={{ color: '#9ca3af', fontSize: '12px', marginTop: '2px', fontStyle: 'italic' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '2px', fontStyle: 'italic' }}>
                             Reason: "{o.reason}"
                           </div>
                         )}

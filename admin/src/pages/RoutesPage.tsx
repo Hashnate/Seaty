@@ -300,9 +300,18 @@ export default function RoutesPage() {
                     type="button" 
                     onClick={handleAddStop} 
                     style={{
-                      background: '#0a2540', color: 'white', border: 'none', borderRadius: '8px',
-                      padding: '0 16px', fontWeight: 'bold', cursor: 'pointer'
+                      background: 'var(--color-primary)', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '8px',
+                      padding: '0 20px', 
+                      fontWeight: 700, 
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      transition: 'background 0.2s',
                     }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--color-primary-hover)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'var(--color-primary)'}
                   >
                     Add
                   </button>

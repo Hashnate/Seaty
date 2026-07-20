@@ -216,34 +216,34 @@ export default function ConductorsPage() {
       </div>
 
       {showAddModal && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="table-card" style={{ width: '450px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'white' }}>Register Staff Conductor / Driver</h3>
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, backdropFilter: 'blur(8px)' }}>
+          <div className="table-card" style={{ width: '450px', background: '#ffffff', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '16px', boxShadow: '0 24px 48px -12px rgba(10, 37, 64, 0.18)' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'var(--text-dark)' }}>Register Staff Conductor / Driver</h3>
             {error && <div style={{ color: '#ef4444', marginBottom: '12px', fontSize: '13px' }}>{error}</div>}
             
             <form onSubmit={handleAddConductor}>
               <div className="form-group">
-                <label className="form-label">Full Name</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Full Name</label>
                 <input type="text" className="form-input" placeholder="e.g. Sunil Perera" value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
               
               <div className="form-group">
-                <label className="form-label">Email Address</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Email Address</label>
                 <input type="email" className="form-input" placeholder="e.g. sunil@lankaexpress.lk" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               
               <div className="form-group">
-                <label className="form-label">Mobile Number</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Mobile Number</label>
                 <input type="text" className="form-input" placeholder="e.g. 0775556667" value={phone} onChange={(e) => setPhone(e.target.value)} required />
               </div>
               
               <div className="form-group">
-                <label className="form-label">Console / Mobile Password</label>
+                <label className="form-label" style={{ color: 'var(--text-muted)' }}>Console / Mobile Password</label>
                 <input type="password" className="form-input" placeholder="Min 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)} style={{ flex: 1, marginTop: 0, padding: '12px', fontSize: '14px' }}>Cancel</button>
+                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)} style={{ flex: 1, marginTop: 0, padding: '12px', background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', fontSize: '14px' }}>Cancel</button>
                 <button type="submit" className="btn-primary" disabled={submitting} style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>
                   {submitting ? 'Registering...' : 'Register Staff'}
                 </button>

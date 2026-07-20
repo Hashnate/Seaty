@@ -5,9 +5,10 @@ interface CustomDatePickerProps {
   value: string; // YYYY-MM-DD
   onChange: (value: string) => void;
   style?: React.CSSProperties;
+  placement?: 'top' | 'bottom';
 }
 
-export default function CustomDatePicker({ value, onChange, style }: CustomDatePickerProps) {
+export default function CustomDatePicker({ value, onChange, style, placement = 'bottom' }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -137,22 +138,22 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
         style={{
           width: '100%',
           padding: '12px 16px',
-          background: '#1e293b',
-          border: isOpen ? '1.5px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
+          background: '#ffffff',
+          border: isOpen ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color)',
           borderRadius: '10px',
-          color: 'white',
+          color: 'var(--text-dark)',
           fontSize: '14px',
           cursor: 'pointer',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           userSelect: 'none',
-          boxShadow: isOpen ? '0 0 12px rgba(37, 99, 235, 0.25)' : 'none',
+          boxShadow: isOpen ? '0 0 12px rgba(37, 99, 235, 0.12)' : 'none',
           transition: 'all 0.15s ease'
         }}
       >
         <span>{getFormattedDisplayDate()}</span>
-        <CalendarIcon size={16} style={{ color: 'rgba(255,255,255,0.4)' }} />
+        <CalendarIcon size={16} style={{ color: 'var(--text-muted)' }} />
       </div>
 
       {/* Calendar Dropdown Popover */}
@@ -160,18 +161,20 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
         <div
           style={{
             position: 'absolute',
-            top: '100%',
+            top: placement === 'bottom' ? '100%' : 'auto',
+            bottom: placement === 'top' ? '100%' : 'auto',
             left: 0,
-            marginTop: '6px',
-            background: '#0b0f19',
-            border: '1px solid rgba(255,255,255,0.12)',
+            marginTop: placement === 'bottom' ? '6px' : '0',
+            marginBottom: placement === 'top' ? '6px' : '0',
+            background: '#ffffff',
+            border: '1px solid var(--border-color)',
             borderRadius: '16px',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.08)',
             zIndex: 1020,
             width: '280px',
             padding: '16px',
             userSelect: 'none',
-            color: 'white'
+            color: 'var(--text-dark)'
           }}
         >
           {/* Header (Prev, Month Year, Next) */}
@@ -180,9 +183,9 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
               type="button"
               onClick={handlePrevMonth}
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: 'white',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-dark)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 width: '32px',
@@ -192,8 +195,8 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                 justifyContent: 'center',
                 transition: 'all 0.15s ease'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
             >
               <ChevronLeft size={16} />
             </button>
@@ -204,9 +207,9 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
               type="button"
               onClick={handleNextMonth}
               style={{
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                color: 'white',
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-dark)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 width: '32px',
@@ -216,8 +219,8 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                 justifyContent: 'center',
                 transition: 'all 0.15s ease'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 0, 0, 0.05)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--bg-secondary)'}
             >
               <ChevronRight size={16} />
             </button>
@@ -226,7 +229,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
           {/* Weekday headers */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '8px' }}>
             {DAYS_OF_WEEK.map(day => (
-              <span key={day} style={{ fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase' }}>
+              <span key={day} style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 {day}
               </span>
             ))}
@@ -245,7 +248,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '12px',
-                  color: 'rgba(255,255,255,0.2)',
+                  color: 'rgba(10, 37, 64, 0.25)',
                   cursor: 'pointer',
                   borderRadius: '6px'
                 }}
@@ -264,7 +267,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                   onClick={() => selectDay(d)}
                   onMouseEnter={(e) => {
                     if (!active) {
-                      e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
+                      e.currentTarget.style.background = 'rgba(37, 99, 235, 0.05)';
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -280,10 +283,10 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                     fontSize: '12px',
                     cursor: 'pointer',
                     borderRadius: '6px',
-                    background: active ? '#2563eb' : 'transparent',
-                    color: 'white',
+                    background: active ? 'var(--color-primary)' : 'transparent',
+                    color: active ? 'white' : 'var(--text-dark)',
                     fontWeight: active || today ? 700 : 400,
-                    border: today && !active ? '1px solid #2563eb' : 'none',
+                    border: today && !active ? '1px solid var(--color-primary)' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >
@@ -303,7 +306,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '12px',
-                  color: 'rgba(255,255,255,0.2)',
+                  color: 'rgba(10, 37, 64, 0.25)',
                   cursor: 'pointer',
                   borderRadius: '6px'
                 }}
