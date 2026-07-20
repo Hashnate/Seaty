@@ -533,14 +533,14 @@ export default function MyTripsPage() {
                           {s.vehicle?.registration_number}
                         </div>
                         {(s as any).conductor && (
-                          <div style={{ fontSize: '11px', color: '#e65100', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2.5px' }}>
+                          <div style={{ fontSize: '11px', color: '#2563eb', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2.5px' }}>
                             <span>👤 {(s as any).conductor.full_name}</span>
                           </div>
                         )}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
-                          <MapPin size={13} color="#e65100" />
+                          <MapPin size={13} color="#2563eb" />
                           {s.route ? `${s.route.origin} → ${s.route.destination}` : '—'}
                         </div>
                       </td>
@@ -745,14 +745,14 @@ export default function MyTripsPage() {
                           {t.vehicle?.registration_number}
                         </div>
                         {(t as any).conductor && (
-                          <div style={{ fontSize: '11px', color: '#e65100', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2.5px' }}>
+                          <div style={{ fontSize: '11px', color: '#2563eb', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '2.5px' }}>
                             <span>👤 {(t as any).conductor.full_name}</span>
                           </div>
                         )}
                       </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}>
-                          <MapPin size={13} color="#e65100" />
+                          <MapPin size={13} color="#2563eb" />
                           {t.route ? `${t.route.origin} → ${t.route.destination}` : '—'}
                         </div>
                       </td>
@@ -760,7 +760,7 @@ export default function MyTripsPage() {
                         {new Date(t.departure_time).toLocaleString('en-LK', { dateStyle: 'medium', timeStyle: 'short' })}
                       </td>
                       <td>
-                        <div style={{ fontWeight: 'bold', color: '#e65100' }}>Rs. {t.price_per_seat.toLocaleString()}</div>
+                        <div style={{ fontWeight: 'bold', color: '#2563eb' }}>Rs. {t.price_per_seat.toLocaleString()}</div>
                       </td>
                       <td>
                         <span className={`badge ${t.status === 'scheduled' ? 'badge-success' : 'badge-warning'}`}>
@@ -796,8 +796,8 @@ export default function MyTripsPage() {
 
       {/* SCHEDULE MODAL (CREATE / EDIT) */}
       {showScheduleModal && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="table-card" style={{ width: '480px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, overflowY: 'auto', padding: '40px 20px' }}>
+          <div className="table-card" style={{ width: '480px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px', margin: 'auto' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '18px', color: 'white' }}>
               {editingScheduleId ? 'Edit Recurring Schedule' : 'Create Recurring Schedule'}
             </h3>
@@ -882,7 +882,7 @@ export default function MyTripsPage() {
               }}>
                 <div style={{ fontSize: '11px', color: '#9ca3af', textTransform: 'uppercase', fontWeight: 600 }}>Estimated Arrival Time</div>
                 <div style={{ fontSize: '15px', color: 'white', fontWeight: 700, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Clock size={15} style={{ color: '#e65100' }} />
+                  <Clock size={15} style={{ color: '#2563eb' }} />
                   {calculateArrivalTime(departureTime, durationHours, durationMinutes).display}
                 </div>
               </div>
@@ -890,7 +890,7 @@ export default function MyTripsPage() {
               <div className="form-group">
                 <label className="form-label" style={{ color: '#9ca3af' }}>Fare per Seat (LKR)</label>
                 <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '12px', top: '12px', color: '#e65100', fontWeight: 'bold' }}>Rs.</span>
+                  <span style={{ position: 'absolute', left: '12px', top: '12px', color: '#2563eb', fontWeight: 'bold' }}>Rs.</span>
                   <input type="number" className="form-input" style={{ backgroundColor: '#1e293b', color: 'white', border: '1px solid rgba(255,255,255,0.1)', paddingLeft: '40px' }} min="100" max="10000" value={price} onChange={(e) => setPrice(e.target.value)} required />
                 </div>
               </div>
@@ -928,7 +928,7 @@ export default function MyTripsPage() {
                             cursor: 'pointer',
                             border: '1px solid',
                             borderColor: isSelected ? 'var(--color-primary)' : 'rgba(255,255,255,0.1)',
-                            backgroundColor: isSelected ? 'rgba(230, 81, 0, 0.2)' : '#1e293b',
+                            backgroundColor: isSelected ? 'rgba(37, 99, 235, 0.2)' : '#1e293b',
                             color: isSelected ? 'white' : '#9ca3af',
                             transition: 'var(--transition-smooth)'
                           }}
@@ -952,9 +952,9 @@ export default function MyTripsPage() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => { setShowScheduleModal(false); }} style={{ padding: '8px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af' }}>Cancel</button>
-                <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: '8px 20px', width: 'auto', marginTop: 0 }}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowScheduleModal(false); }} style={{ flex: 1, marginTop: 0, padding: '12px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: '#9ca3af', fontSize: '14px' }}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={submitting} style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>
                   {submitting ? 'Saving...' : 'Save Schedule'}
                 </button>
               </div>
@@ -965,8 +965,8 @@ export default function MyTripsPage() {
 
       {/* OVERRIDES MODAL */}
       {showOverrideModal && selectedSchedule && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="table-card" style={{ width: '600px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, overflowY: 'auto', padding: '40px 20px' }}>
+          <div className="table-card" style={{ width: '600px', background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '16px', margin: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', color: 'white' }}>Bus Swap / Overrides</h3>
               <button 
@@ -979,8 +979,8 @@ export default function MyTripsPage() {
             </div>
             
             <div style={{ 
-              backgroundColor: 'rgba(230, 81, 0, 0.1)', 
-              border: '1px solid rgba(230, 81, 0, 0.2)', 
+              backgroundColor: 'rgba(37, 99, 235, 0.1)', 
+              border: '1px solid rgba(37, 99, 235, 0.2)', 
               borderRadius: '10px', 
               padding: '12px', 
               marginBottom: '20px',
@@ -1057,7 +1057,7 @@ export default function MyTripsPage() {
                         <div style={{ color: 'white', fontWeight: 600, fontSize: '13.5px' }}>
                           Date: {o.override_date}
                         </div>
-                        <div style={{ color: '#e65100', fontSize: '12.5px', marginTop: '2px', fontWeight: 500 }}>
+                        <div style={{ color: '#2563eb', fontSize: '12.5px', marginTop: '2px', fontWeight: 500 }}>
                           Replaced with: {o.replacement_vehicle?.name} ({o.replacement_vehicle?.registration_number})
                         </div>
                         {o.reason && (

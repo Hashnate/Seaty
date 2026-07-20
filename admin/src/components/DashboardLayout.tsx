@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import NotificationDrawer from './NotificationDrawer';
 import {
@@ -16,6 +16,7 @@ import {
   Contact,
   ChevronDown,
   Key,
+  ChevronRight,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -37,6 +38,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { logout, user, token } = useAuth();
 
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
+  const profileMenuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = React.useState(false);
   const [currentPassword, setCurrentPassword] = React.useState('');
   const [newPassword, setNewPassword] = React.useState('');
@@ -101,10 +113,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
-        <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px' }}>
-          <img src="/app_logo.png" alt="Seaty Logo" style={{ height: '28px', objectFit: 'contain' }} />
-          <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-dark)' }}>Seaty Admin Console</span>
-        </div>
+        <Link 
+          to="/"
+          className="sidebar-brand" 
+          style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            padding: '0', 
+            margin: '0 0 20px 0', 
+            cursor: 'pointer',
+            width: '100%',
+            textDecoration: 'none'
+          }}
+        >
+          <img src="/app_logo.png" alt="Seaty Logo" style={{ height: '120px', maxWidth: '100%', objectFit: 'contain' }} />
+        </Link>
         <ul className="sidebar-menu">
           {visibleNavItems.map(item => {
             const isActive = location.pathname === item.path;
@@ -131,98 +155,109 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '12px 24px',
-          background: 'var(--bg-card)',
-          borderBottom: '1px solid var(--border-color)',
-          borderRadius: '12px',
-          marginBottom: '24px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.02)'
+          padding: '14px 28px',
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          border: '1px solid rgba(255, 255, 255, 0.5)',
+          borderRadius: '16px',
+          marginBottom: '28px',
+          boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.6)'
         }}>
-          <div className="navbar-left">
-            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Console Control / </span>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-dark)' }}>
+          <div className="navbar-left" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, color: 'var(--text-muted)' }}>Console Control</span>
+            <ChevronRight size={13} style={{ color: 'var(--text-muted)', opacity: 0.4 }} />
+            <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-primary)' }}>
               {location.pathname === '/' ? 'Dashboard Overview' : visibleNavItems.find(item => item.path === location.pathname)?.label || 'Console'}
             </span>
           </div>
 
-          <div className="navbar-right" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div className="navbar-right" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginRight: '4px' }}>
             <NotificationDrawer />
-            <div className="profile-menu-container" style={{ position: 'relative' }}>
+            <div ref={profileMenuRef} className="profile-menu-container" style={{ position: 'relative' }}>
               <button 
                 onClick={() => setIsProfileOpen(!isProfileOpen)} 
                 className="profile-btn" 
                 style={{ 
                   display: 'flex', 
                   alignItems: 'center', 
-                  gap: '8px', 
-                  background: 'none', 
-                  border: 'none', 
+                  gap: '10px', 
+                  background: 'var(--bg-secondary)', 
+                  border: '1px solid var(--border-color)', 
                   cursor: 'pointer',
                   color: 'var(--text-dark)',
-                  padding: '4px 8px',
-                  borderRadius: '8px',
-                  transition: 'background 0.2s',
+                  padding: '6px 14px 6px 6px',
+                  borderRadius: '30px',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)',
+                  transition: 'all 0.2s ease',
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.03)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.3)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-color)';
+                  e.currentTarget.style.boxShadow = '0 2px 6px rgba(0, 0, 0, 0.02)';
+                }}
               >
                 <div style={{
                   width: '32px',
                   height: '32px',
                   borderRadius: '50%',
-                  background: 'var(--color-primary-light, #fff0e6)',
-                  color: 'var(--color-primary, #e65100)',
+                  background: 'linear-gradient(135deg, var(--color-primary-hover), var(--color-primary))',
+                  color: 'white',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontWeight: 'bold',
+                  fontWeight: 700,
                   fontSize: '14px',
-                  border: '1px solid var(--border-color)'
+                  boxShadow: '0 2px 8px rgba(37, 99, 235, 0.2)',
+                  border: '1.5px solid white'
                 }}>
                   {typedUser?.full_name ? String(typedUser.full_name).charAt(0).toUpperCase() : 'A'}
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left' }}>
-                  <span style={{ fontSize: '12px', fontWeight: 600 }}>{typedUser?.full_name || 'Admin User'}</span>
-                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{String(typedUser?.role || 'admin').toUpperCase()}</span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', textAlign: 'left', minWidth: '85px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-dark)' }}>{typedUser?.full_name || 'Admin User'}</span>
+                  <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '1px' }}>{String(typedUser?.role || 'admin')}</span>
                 </div>
-                <ChevronDown size={14} style={{ opacity: 0.7 }} />
+                <ChevronDown size={14} style={{ opacity: 0.5, marginLeft: '4px' }} />
               </button>
 
               {isProfileOpen && (
-                <>
-                  <div 
-                    onClick={() => setIsProfileOpen(false)} 
-                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} 
-                  />
                   <div className="profile-dropdown" style={{
                     position: 'absolute',
                     right: 0,
                     top: '100%',
                     marginTop: '8px',
                     width: '240px',
-                    background: 'var(--bg-card, #ffffff)',
-                    border: '1px solid var(--border-color)',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    backdropFilter: 'blur(20px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                    border: '1px solid rgba(10, 37, 64, 0.08)',
+                    borderRadius: '14px',
+                    boxShadow: '0 10px 30px rgba(10, 37, 64, 0.08)',
                     zIndex: 999,
+                    padding: '6px',
                     overflow: 'hidden'
                   }}>
-                    <div style={{ padding: '16px', borderBottom: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.01)' }}>
-                      <strong style={{ display: 'block', fontSize: '14px' }}>{typedUser?.full_name}</strong>
+                    <div style={{ padding: '12px 12px 10px 12px', borderBottom: '1px solid rgba(10, 37, 64, 0.04)' }}>
+                      <strong style={{ display: 'block', fontSize: '13.5px', color: 'var(--text-dark)' }}>{typedUser?.full_name}</strong>
                       <span style={{ display: 'block', fontSize: '11px', color: 'var(--text-muted)', wordBreak: 'break-all', marginTop: '2px' }}>{typedUser?.email}</span>
                       <span style={{ 
                         display: 'inline-block', 
                         fontSize: '9px', 
-                        fontWeight: 'bold', 
-                        background: 'var(--color-primary-light, #fff0e6)', 
-                        color: 'var(--color-primary, #e65100)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
+                        fontWeight: 700, 
+                        background: 'rgba(37, 99, 235, 0.08)', 
+                        color: 'var(--color-primary)',
+                        padding: '2px 8px',
+                        border: '1px solid rgba(37, 99, 235, 0.15)',
+                        borderRadius: '12px',
                         marginTop: '6px',
-                        textTransform: 'uppercase'
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.04em'
                       }}>{typedUser?.role}</span>
                     </div>
-                    <ul style={{ listStyle: 'none', padding: '6px 0', margin: 0 }}>
+                    <ul style={{ listStyle: 'none', padding: '4px 0 0 0', margin: 0 }}>
                       <li 
                         onClick={() => {
                           setIsProfileOpen(false);
@@ -232,15 +267,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           display: 'flex',
                           alignItems: 'center',
                           gap: '10px',
-                          padding: '10px 16px',
+                          padding: '10px 12px',
+                          margin: '2px 4px',
+                          borderRadius: '8px',
                           fontSize: '13px',
+                          fontWeight: 500,
+                          color: 'var(--text-dark)',
                           cursor: 'pointer',
-                          transition: 'background 0.2s',
+                          transition: 'all 0.15s ease',
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.03)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(37, 99, 235, 0.05)';
+                          e.currentTarget.style.color = 'var(--color-primary)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = 'var(--text-dark)';
+                        }}
                       >
-                        <Key size={16} style={{ color: 'var(--color-primary)' }} />
+                        <Key size={15} style={{ color: 'var(--color-primary)' }} />
                         Change Password
                       </li>
                       <li 
@@ -249,22 +294,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                           display: 'flex',
                           alignItems: 'center',
                           gap: '10px',
-                          padding: '10px 16px',
+                          padding: '10px 12px',
+                          margin: '2px 4px',
+                          borderRadius: '8px',
                           fontSize: '13px',
-                          cursor: 'pointer',
+                          fontWeight: 500,
                           color: '#ef4444',
-                          borderTop: '1px solid var(--border-color)',
-                          transition: 'background 0.2s',
+                          cursor: 'pointer',
+                          borderTop: '1px solid rgba(10, 37, 64, 0.03)',
+                          transition: 'all 0.15s ease',
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.05)';
+                          e.currentTarget.style.color = '#dc2626';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                          e.currentTarget.style.color = '#ef4444';
+                        }}
                       >
-                        <LogOut size={16} />
+                        <LogOut size={15} />
                         Sign Out
                       </li>
                     </ul>
                   </div>
-                </>
               )}
             </div>
           </div>
@@ -412,7 +465,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   disabled={isSubmittingPassword}
                   style={{
                     padding: '8px 16px',
-                    background: 'var(--color-primary, #e65100)',
+                    background: 'var(--color-primary, #2563eb)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',

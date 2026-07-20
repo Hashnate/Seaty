@@ -247,6 +247,15 @@ export async function markAllNotificationsRead(token: string) {
   return request('/notifications/read-all', { method: 'POST', token });
 }
 
+export async function broadcastNotification(token: string, title: string, message: string, targetRole: string) {
+  return request('/notifications/broadcast', {
+    method: 'POST',
+    body: { title, message, target_role: targetRole },
+    token,
+  });
+}
+
+
 // ==========================================
 // Recurring Trip Schedules (Owner/Admin)
 // ==========================================

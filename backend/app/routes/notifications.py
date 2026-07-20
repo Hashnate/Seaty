@@ -151,3 +151,47 @@ def mark_all_as_read(
     ).update({"is_read": True})
     db.commit()
     return {"status": "success", "message": "All notifications marked as read"}
+
+
+@router.post("/broadcast")
+async def broadcast_notification(
+    payload: schemas.NotificationBroadcast,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Broadcast a push notification to all users of a specific role, or all users."""
+    query = db.query(models.User)
+    if payload.target_role != "all":
+        query = query.filter(models.User.role == payload.target_role)
+    users = query.all()
+
+    db_notifications = []
+    for user in users:
+        db_noti = models.Notification(
+            user_id=user.id,
+            title=payload.title,
+            message=payload.message,
+            type="system",
+            is_read=False
+        )
+        db.add(db_noti)
+        db_notifications.append(db_noti)
+
+    db.commit()
+
+    # Refresh notifications to populate DB-generated fields before sending to WebSocket
+    for db_noti in db_notifications:
+        db.refresh(db_noti)
+        ws_payload = {
+            "id": str(db_noti.id),
+            "user_id": str(db_noti.user_id),
+            "title": db_noti.title,
+            "message": db_noti.message,
+            "type": db_noti.type,
+            "is_read": db_noti.is_read,
+            "created_at": db_noti.created_at.isoformat()
+        }
+        await manager.send_to_user(db_noti.user_id, ws_payload)
+
+    return {"status": "success", "message": f"Notification broadcasted to {len(users)} users"}
+

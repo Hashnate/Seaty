@@ -137,20 +137,20 @@ export default function BookingsPage() {
                           <div>
                             <strong>{b.passenger_details?.primary?.name || b.passenger?.full_name || 'Unknown'}</strong>
                             {b.passenger_details?.primary?.booking_type === 'other' && (
-                              <span style={{ fontSize: '10px', marginLeft: '6px', backgroundColor: 'rgba(230,81,0,0.15)', color: '#e65100', padding: '2px 6px', borderRadius: '4px' }}>For Others</span>
+                              <span style={{ fontSize: '10px', marginLeft: '6px', backgroundColor: 'rgba(37,99,235,0.15)', color: '#2563eb', padding: '2px 6px', borderRadius: '4px' }}>For Others</span>
                             )}
                           </div>
                           <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
                             {b.passenger_details?.primary?.phone || b.passenger?.phone_number}
                           </div>
                           {b.passenger_details?.primary?.nic && (
-                            <div style={{ fontSize: '11px', color: '#e65100', marginTop: '2px', fontWeight: '500' }}>
+                            <div style={{ fontSize: '11px', color: '#2563eb', marginTop: '2px', fontWeight: '500' }}>
                               NIC: {b.passenger_details.primary.nic}
                             </div>
                           )}
                         </td>
                         <td>
-                          <span style={{ fontFamily: 'monospace', color: '#e65100', fontWeight: 'bold', fontSize: '12px' }}>
+                          <span style={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 'bold', fontSize: '12px' }}>
                             TKT-{b.id.substring(0, 8).toUpperCase()}
                           </span>
                         </td>
@@ -182,7 +182,7 @@ export default function BookingsPage() {
                           <td colSpan={9} style={{ backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '16px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                               <div>
-                                <h4 style={{ margin: '0 0 12px 0', color: '#e65100', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Primary Passenger Info</h4>
+                                <h4 style={{ margin: '0 0 12px 0', color: '#2563eb', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Primary Passenger Info</h4>
                                 {b.passenger_details?.primary ? (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
                                     <div><span style={{ color: '#9ca3af' }}>Name:</span> <strong>{b.passenger_details.primary.name}</strong></div>
@@ -200,7 +200,7 @@ export default function BookingsPage() {
                                 )}
                               </div>
                               <div>
-                                <h4 style={{ margin: '0 0 12px 0', color: '#e65100', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Additional Seat Genders</h4>
+                                <h4 style={{ margin: '0 0 12px 0', color: '#2563eb', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Additional Seat Genders</h4>
                                 {b.passenger_details?.guests && b.passenger_details.guests.length > 0 ? (
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
                                     {b.passenger_details.guests.map((g, idx) => (

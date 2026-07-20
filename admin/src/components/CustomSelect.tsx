@@ -37,26 +37,26 @@ export default function CustomSelect({ options, value, onChange, placeholder, st
         style={{
           width: '100%',
           padding: '12px 16px',
-          background: '#1e293b',
-          border: isOpen ? '1.5px solid #e65100' : '1px solid rgba(255,255,255,0.1)',
+          background: '#ffffff',
+          border: isOpen ? '1.5px solid var(--color-primary)' : '1px solid var(--border-color)',
           borderRadius: '10px',
-          color: 'white',
+          color: 'var(--text-dark)',
           fontSize: '14px',
           cursor: 'pointer',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           userSelect: 'none',
-          boxShadow: isOpen ? '0 0 12px rgba(230, 81, 0, 0.25)' : 'none',
+          boxShadow: isOpen ? '0 0 12px rgba(37, 99, 235, 0.15)' : 'none',
           transition: 'all 0.15s ease'
         }}
       >
-        <span style={{ color: selectedOption ? 'white' : 'rgba(255,255,255,0.4)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+        <span style={{ color: selectedOption ? 'var(--text-dark)' : 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', fontWeight: 500 }}>
           {selectedOption ? selectedOption.label : (placeholder || '-- Choose --')}
         </span>
         <span style={{ 
           fontSize: '9px', 
-          color: 'rgba(255,255,255,0.4)', 
+          color: 'var(--text-muted)', 
           marginLeft: '8px',
           transition: 'transform 0.2s', 
           transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' 
@@ -74,13 +74,14 @@ export default function CustomSelect({ options, value, onChange, placeholder, st
             left: 0,
             right: 0,
             marginTop: '6px',
-            background: '#0b0f19',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: '10px',
-            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
+            background: '#ffffff',
+            border: '1px solid var(--border-color)',
+            borderRadius: '12px',
+            boxShadow: '0 10px 30px rgba(10, 37, 64, 0.08)',
             zIndex: 1010,
             maxHeight: '220px',
-            overflowY: 'auto'
+            overflowY: 'auto',
+            padding: '4px'
           }}
         >
           {options.map(opt => {
@@ -94,23 +95,27 @@ export default function CustomSelect({ options, value, onChange, placeholder, st
                 }}
                 onMouseEnter={(e) => {
                   if (!isSelected) {
-                    e.currentTarget.style.background = 'rgba(230, 81, 0, 0.08)';
+                    e.currentTarget.style.background = 'rgba(37, 99, 235, 0.05)';
+                    e.currentTarget.style.color = 'var(--color-primary)';
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!isSelected) {
                     e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--text-dark)';
                   }
                 }}
                 style={{
-                  padding: '12px 16px',
-                  background: isSelected ? '#e65100' : 'transparent',
-                  color: isSelected ? 'white' : 'rgba(255,255,255,0.8)',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  background: isSelected ? 'var(--color-primary)' : 'transparent',
+                  color: isSelected ? 'white' : 'var(--text-dark)',
                   cursor: 'pointer',
-                  fontSize: '13.5px',
-                  fontWeight: isSelected ? 600 : 400,
+                  fontSize: '13px',
+                  fontWeight: isSelected ? 600 : 500,
                   transition: 'all 0.15s ease',
-                  textAlign: 'left'
+                  textAlign: 'left',
+                  marginBottom: '2px'
                 }}
               >
                 {opt.label}

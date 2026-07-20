@@ -353,10 +353,10 @@ export default function MyFleetPage() {
       </div>
 
       {showAddModal && (
-        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-          <div className="table-card" style={{ width: '960px', maxWidth: '95vw', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.08)', padding: '28px', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)' }}>
+        <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, backdropFilter: 'blur(4px)', overflowY: 'auto', padding: '40px 20px' }}>
+          <div className="table-card" style={{ width: '960px', maxWidth: '95vw', background: '#0b0f19', border: '1px solid rgba(255,255,255,0.08)', padding: '28px', borderRadius: '24px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', margin: 'auto' }}>
             <h3 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Bus style={{ color: '#e65100' }} /> {editingVehicleId ? 'Edit Bus & Design Layout' : 'Register New Bus & Design Layout'}
+              <Bus style={{ color: '#2563eb' }} /> {editingVehicleId ? 'Edit Bus & Design Layout' : 'Register New Bus & Design Layout'}
             </h3>
             {error && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '13px', background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{error}</div>}
             
@@ -393,7 +393,7 @@ export default function MyFleetPage() {
                   </div>
                   <div>
                     <label className="form-label">Total Seats (Read-only)</label>
-                    <input type="text" className="form-input" style={{ background: 'rgba(255,255,255,0.02)', cursor: 'not-allowed', color: '#e65100', fontWeight: 'bold' }} value={`${seats} Seats`} readOnly />
+                    <input type="text" className="form-input" style={{ background: 'rgba(255,255,255,0.02)', cursor: 'not-allowed', color: '#2563eb', fontWeight: 'bold' }} value={`${seats} Seats`} readOnly />
                   </div>
                 </div>
                 
@@ -441,9 +441,9 @@ export default function MyFleetPage() {
                           key={ame}
                           onClick={() => toggleAmenity(ame)}
                           style={{
-                            background: active ? '#e65100' : 'rgba(255,255,255,0.04)',
+                            background: active ? '#2563eb' : 'rgba(255,255,255,0.04)',
                             color: active ? 'white' : 'rgba(255,255,255,0.6)',
-                            border: active ? '1px solid #e65100' : '1px solid rgba(255,255,255,0.1)',
+                            border: active ? '1px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
                             padding: '8px 12px',
                             borderRadius: '8px',
                             fontSize: '12px',
@@ -463,8 +463,8 @@ export default function MyFleetPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px', marginTop: 'auto', paddingTop: '20px' }}>
-                  <button type="button" className="btn-secondary" onClick={() => { setShowAddModal(false); setEditingVehicleId(null); }} style={{ flex: 1, padding: '12px 16px' }}>Cancel</button>
-                  <button type="submit" className="btn-primary" disabled={submitting || seats === 0} style={{ flex: 1.5, padding: '12px 20px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => { setShowAddModal(false); setEditingVehicleId(null); }} style={{ flex: 1, marginTop: 0, padding: '12px', fontSize: '14px' }}>Cancel</button>
+                  <button type="submit" className="btn-primary" disabled={submitting || seats === 0} style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>
                     {submitting ? (editingVehicleId ? 'Saving...' : 'Registering...') : (editingVehicleId ? 'Save Changes' : 'Register Bus')}
                   </button>
                 </div>
@@ -479,7 +479,7 @@ export default function MyFleetPage() {
                       Drag the template to grid cells, or click cells to toggle seats.
                     </p>
                   </div>
-                  <div style={{ padding: '6px 12px', background: 'rgba(230, 81, 0, 0.1)', border: '1px solid rgba(230, 81, 0, 0.2)', borderRadius: '8px', color: '#ff7043', fontSize: '12px', fontWeight: 600 }}>
+                  <div style={{ padding: '6px 12px', background: 'rgba(37, 99, 235, 0.1)', border: '1px solid rgba(37, 99, 235, 0.2)', borderRadius: '8px', color: '#ff7043', fontSize: '12px', fontWeight: 600 }}>
                     Seats placed: {seats}
                   </div>
                 </div>
@@ -495,7 +495,7 @@ export default function MyFleetPage() {
                       width: '100%',
                       padding: '12px 16px',
                       background: '#1e293b',
-                      border: isOpenPreset ? '1.5px solid #e65100' : '1px solid rgba(255,255,255,0.1)',
+                      border: isOpenPreset ? '1.5px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
                       borderRadius: '10px',
                       color: 'white',
                       fontSize: '15px',
@@ -504,7 +504,7 @@ export default function MyFleetPage() {
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       userSelect: 'none',
-                      boxShadow: isOpenPreset ? '0 0 12px rgba(230, 81, 0, 0.25)' : 'none',
+                      boxShadow: isOpenPreset ? '0 0 12px rgba(37, 99, 235, 0.25)' : 'none',
                       transition: 'all 0.15s ease'
                     }}
                   >
@@ -552,7 +552,7 @@ export default function MyFleetPage() {
                             }}
                             onMouseEnter={(e) => {
                               if (!isSelected) {
-                                e.currentTarget.style.background = 'rgba(230, 81, 0, 0.08)';
+                                e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
                               }
                             }}
                             onMouseLeave={(e) => {
@@ -562,7 +562,7 @@ export default function MyFleetPage() {
                             }}
                             style={{
                               padding: '12px 16px',
-                              background: isSelected ? '#e65100' : 'transparent',
+                              background: isSelected ? '#2563eb' : 'transparent',
                               color: isSelected ? 'white' : 'rgba(255,255,255,0.8)',
                               cursor: 'pointer',
                               fontSize: '14px',
@@ -587,7 +587,7 @@ export default function MyFleetPage() {
                     }}
                     style={{
                       padding: '8px 14px',
-                      background: '#e65100',
+                      background: '#2563eb',
                       borderRadius: '8px',
                       color: 'white',
                       fontWeight: 700,
@@ -679,8 +679,8 @@ export default function MyFleetPage() {
                                   height: '36px',
                                   border: seat ? 'none' : isAisle ? '1px dashed rgba(255,255,255,0.05)' : '1px dashed rgba(255,255,255,0.12)',
                                   borderRadius: '6px',
-                                  background: seat ? '#e65100' : isAisle ? 'rgba(255,255,255,0.02)' : 'transparent',
-                                  boxShadow: seat ? 'inset 0 -2px 0 rgba(0,0,0,0.2), 0 2px 4px rgba(230,81,0,0.15)' : 'none',
+                                  background: seat ? '#2563eb' : isAisle ? 'rgba(255,255,255,0.02)' : 'transparent',
+                                  boxShadow: seat ? 'inset 0 -2px 0 rgba(0,0,0,0.2), 0 2px 4px rgba(37,99,235,0.15)' : 'none',
                                   display: 'flex',
                                   justifyContent: 'center',
                                   alignItems: 'center',

@@ -138,7 +138,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
           width: '100%',
           padding: '12px 16px',
           background: '#1e293b',
-          border: isOpen ? '1.5px solid #e65100' : '1px solid rgba(255,255,255,0.1)',
+          border: isOpen ? '1.5px solid #2563eb' : '1px solid rgba(255,255,255,0.1)',
           borderRadius: '10px',
           color: 'white',
           fontSize: '14px',
@@ -147,7 +147,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
           justifyContent: 'space-between',
           alignItems: 'center',
           userSelect: 'none',
-          boxShadow: isOpen ? '0 0 12px rgba(230, 81, 0, 0.25)' : 'none',
+          boxShadow: isOpen ? '0 0 12px rgba(37, 99, 235, 0.25)' : 'none',
           transition: 'all 0.15s ease'
         }}
       >
@@ -264,7 +264,7 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                   onClick={() => selectDay(d)}
                   onMouseEnter={(e) => {
                     if (!active) {
-                      e.currentTarget.style.background = 'rgba(230, 81, 0, 0.08)';
+                      e.currentTarget.style.background = 'rgba(37, 99, 235, 0.08)';
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -280,10 +280,10 @@ export default function CustomDatePicker({ value, onChange, style }: CustomDateP
                     fontSize: '12px',
                     cursor: 'pointer',
                     borderRadius: '6px',
-                    background: active ? '#e65100' : 'transparent',
+                    background: active ? '#2563eb' : 'transparent',
                     color: 'white',
                     fontWeight: active || today ? 700 : 400,
-                    border: today && !active ? '1px solid #e65100' : 'none',
+                    border: today && !active ? '1px solid #2563eb' : 'none',
                     transition: 'all 0.15s ease'
                   }}
                 >

@@ -429,3 +429,9 @@ class NotificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NotificationBroadcast(BaseModel):
+    title: str
+    message: str
+    target_role: str = Field(default="passenger", description="passenger, owner, conductor, admin, or all")

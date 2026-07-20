@@ -130,7 +130,7 @@ export default function CompaniesPage() {
 
       <div className="stats-grid" style={{ marginBottom: '24px' }}>
         <div className="stat-card">
-          <div className="stat-header"><span>Total Companies</span><Building2 size={18} style={{ color: '#e65100' }} /></div>
+          <div className="stat-header"><span>Total Companies</span><Building2 size={18} style={{ color: '#2563eb' }} /></div>
           <div className="stat-value">{companies.length}</div>
         </div>
         <div className="stat-card">
@@ -354,7 +354,7 @@ export default function CompaniesPage() {
                   flex: 1, padding: '12px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '10px',
                   background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
                 }}>Cancel</button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Register Company</button>
+                <button type="submit" className="btn-primary" style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>Register Company</button>
               </div>
             </form>
           </div>
@@ -401,7 +401,7 @@ export default function CompaniesPage() {
                   flex: 1, padding: '12px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '10px',
                   background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
                 }}>Cancel</button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Save Changes</button>
+                <button type="submit" className="btn-primary" style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>Save Changes</button>
               </div>
             </form>
           </div>
@@ -466,7 +466,7 @@ export default function CompaniesPage() {
                   flex: 1, padding: '12px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '10px',
                   background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
                 }}>Close</button>
-                <button type="submit" className="btn-primary" disabled={ownerSubmitting} style={{ flex: 1 }}>
+                <button type="submit" className="btn-primary" disabled={ownerSubmitting} style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>
                   {ownerSubmitting ? 'Registering...' : 'Register Operator'}
                 </button>
               </div>

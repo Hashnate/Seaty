@@ -120,7 +120,7 @@ export default function ConductorsPage() {
                 <tr key={c.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 'bold' }}>
-                      <UserCheck size={16} color="#e65100" />
+                      <UserCheck size={16} color="#2563eb" />
                       {c.full_name}
                     </div>
                   </td>
@@ -242,9 +242,9 @@ export default function ConductorsPage() {
                 <input type="password" className="form-input" placeholder="Min 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)} style={{ padding: '8px 16px' }}>Cancel</button>
-                <button type="submit" className="btn-primary" disabled={submitting} style={{ padding: '8px 20px' }}>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)} style={{ flex: 1, marginTop: 0, padding: '12px', fontSize: '14px' }}>Cancel</button>
+                <button type="submit" className="btn-primary" disabled={submitting} style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>
                   {submitting ? 'Registering...' : 'Register Staff'}
                 </button>
               </div>

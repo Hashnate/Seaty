@@ -14,9 +14,25 @@ import MyFleetPage from './pages/MyFleetPage';
 import MyTripsPage from './pages/MyTripsPage';
 import ConductorsPage from './pages/ConductorsPage';
 
+import { Loader2 } from 'lucide-react';
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="flex flex-col items-center space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-indigo-600 dark:text-indigo-400" />
+        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading details...</p>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
+  const { token, user, isLoading } = useAuth();
+  
   if (!token) return <Navigate to="/login" replace />;
+  if (isLoading || !user) return <LoadingScreen />;
+  
   return <>{children}</>;
 }
 

@@ -146,7 +146,7 @@ export default function RoutesPage() {
                 <tr key={r.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <RouteIcon size={16} style={{ color: '#e65100' }} />
+                      <RouteIcon size={16} style={{ color: '#2563eb' }} />
                       <strong>{r.origin} &rarr; {r.destination}</strong>
                     </div>
                   </td>
@@ -157,12 +157,12 @@ export default function RoutesPage() {
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {r.stops.map((stop, i) => (
                           <span key={i} style={{ 
-                            background: 'rgba(230, 81, 0, 0.06)', 
-                            border: '1px solid rgba(230, 81, 0, 0.15)',
+                            background: 'rgba(37, 99, 235, 0.06)', 
+                            border: '1px solid rgba(37, 99, 235, 0.15)',
                             padding: '3px 8px', 
                             borderRadius: '20px', 
                             fontSize: '11px', 
-                            color: '#e65100',
+                            color: '#2563eb',
                             fontWeight: 600
                           }}>
                             {stop.name}
@@ -285,7 +285,7 @@ export default function RoutesPage() {
               {/* Stops Section */}
               <div className="form-group" style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)', marginBottom: '24px' }}>
                 <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <MapPin size={13} style={{ color: '#e65100' }} />
+                  <MapPin size={13} style={{ color: '#2563eb' }} />
                   Intermediate Stops (In Sequence Order)
                 </label>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px', marginBottom: '12px' }}>
@@ -336,7 +336,7 @@ export default function RoutesPage() {
                   flex: 1, padding: '12px', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '10px',
                   background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
                 }}>Cancel</button>
-                <button type="submit" className="btn-primary" style={{ flex: 1 }}>Save Template</button>
+                <button type="submit" className="btn-primary" style={{ flex: 1, marginTop: 0, padding: '12px', border: '1px solid transparent', fontSize: '14px' }}>Save Template</button>
               </div>
             </form>
           </div>

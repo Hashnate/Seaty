@@ -80,8 +80,8 @@ export default function OverviewPage() {
               : 'Real-time stats of luxury buses, companies, and booking revenue.'}
           </p>
         </div>
-        <div className="badge badge-info">
-          <Clock size={14} style={{ marginRight: '6px' }} />
+        <div className="badge" style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.15)', color: '#10b981' }}>
+          <span className="live-status-dot" />
           {loading ? 'Loading...' : 'Live Data'}
         </div>
       </div>
@@ -90,7 +90,7 @@ export default function OverviewPage() {
         <div className="stat-card">
           <div className="stat-header">
             <span>{userRole === 'owner' ? 'Gross Ticket Revenue' : 'Gross Ticket Revenue'}</span>
-            <DollarSign size={18} style={{ color: '#e65100' }} />
+            <DollarSign size={18} style={{ color: '#2563eb' }} />
           </div>
           <div className="stat-value">Rs. {s.total_revenue.toLocaleString()}</div>
           <div className="stat-trend up">
@@ -100,7 +100,7 @@ export default function OverviewPage() {
         <div className="stat-card">
           <div className="stat-header">
             <span>{userRole === 'owner' ? 'Company Fleet' : 'Bus Companies'}</span>
-            <Bus size={18} style={{ color: '#e65100' }} />
+            <Bus size={18} style={{ color: '#2563eb' }} />
           </div>
           <div className="stat-value">{userRole === 'owner' ? s.total_vehicles : s.total_companies}</div>
           <div className="stat-trend up">
@@ -185,8 +185,8 @@ export default function OverviewPage() {
 
         <div className="table-card" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <h3 className="table-title">{userRole === 'owner' ? 'Company Metrics' : 'Platform Metrics'}</h3>
-          <div style={{ display: 'flex', gap: '12px', background: 'rgba(230, 81, 0, 0.06)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(230, 81, 0, 0.15)' }}>
-            <DollarSign size={18} style={{ color: '#e65100', flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ display: 'flex', gap: '12px', background: 'rgba(37, 99, 235, 0.06)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(37, 99, 235, 0.15)' }}>
+            <DollarSign size={18} style={{ color: '#2563eb', flexShrink: 0, marginTop: '2px' }} />
             <div style={{ fontSize: '13px' }}>
               <strong>{userRole === 'owner' ? 'Gross Revenue' : 'Platform Revenue'}</strong>
               <div style={{ color: '#9ca3af', marginTop: '4px' }}>
