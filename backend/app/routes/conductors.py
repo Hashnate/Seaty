@@ -29,22 +29,18 @@ def create_conductor(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["owner"]))
 ):
-    """Add a new conductor staff member (conductor/driver) linked to the owner's company."""
+    """Add a new conductor staff member linked to the owner's company."""
     # Ensure owner has a company
     if not current_user.company_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current owner user is not associated with any bus company."
         )
+
+    # Auto-generate email from phone number (same pattern as /auth/phone/register)
+    email = f"{payload.phone_number}@seaty.lk"
         
-    # Check if user already exists
-    existing = db.query(models.User).filter(models.User.email == payload.email).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this email is already registered."
-        )
-        
+    # Check if conductor already exists with this phone
     existing_phone = db.query(models.User).filter(
         models.User.phone_number == payload.phone_number,
         models.User.role == "conductor"
@@ -52,13 +48,21 @@ def create_conductor(
     if existing_phone:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A staff member with this phone number is already registered."
+            detail="A conductor with this phone number is already registered."
+        )
+
+    # Check if email already taken
+    existing_email = db.query(models.User).filter(models.User.email == email).first()
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this identifier is already registered."
         )
 
     db_conductor = models.User(
         id=uuid.uuid4(),
-        email=payload.email,
-        hashed_password=auth.get_password_hash(payload.password),
+        email=email,
+        hashed_password=auth.get_password_hash("seaty_phone_auth_dummy_pass"),
         full_name=payload.full_name,
         phone_number=payload.phone_number,
         role="conductor",

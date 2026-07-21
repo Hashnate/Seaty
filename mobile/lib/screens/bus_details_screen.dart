@@ -13,17 +13,33 @@ class BusDetailsScreen extends ConsumerWidget {
 
     if (n.contains('wifi')) {
       iconData = Icons.wifi_rounded;
-    } else if (n.contains('charge') || n.contains('charging') || n.contains('plug') || n.contains('outlet')) {
+    } else if (n.contains('charge') ||
+        n.contains('charging') ||
+        n.contains('plug') ||
+        n.contains('outlet')) {
       iconData = Icons.power_rounded;
-    } else if (n.contains('tv') || n.contains('screen') || n.contains('video') || n.contains('hd tv')) {
+    } else if (n.contains('tv') ||
+        n.contains('screen') ||
+        n.contains('video') ||
+        n.contains('hd tv')) {
       iconData = Icons.tv_rounded;
-    } else if (n.contains('seat') || n.contains('recline') || n.contains('reclining')) {
+    } else if (n.contains('seat') ||
+        n.contains('recline') ||
+        n.contains('reclining')) {
       iconData = Icons.chair_rounded;
-    } else if (n.contains('restroom') || n.contains('toilet') || n.contains('wc')) {
+    } else if (n.contains('restroom') ||
+        n.contains('toilet') ||
+        n.contains('wc')) {
       iconData = Icons.wc_rounded;
-    } else if (n.contains('luggage') || n.contains('baggage') || n.contains('bag') || n.contains('space')) {
+    } else if (n.contains('luggage') ||
+        n.contains('baggage') ||
+        n.contains('bag') ||
+        n.contains('space')) {
       iconData = Icons.work_rounded;
-    } else if (n.contains('ac') || n.contains('air') || n.contains('cool') || n.contains('snowflake')) {
+    } else if (n.contains('ac') ||
+        n.contains('air') ||
+        n.contains('cool') ||
+        n.contains('snowflake')) {
       iconData = Icons.ac_unit_rounded;
     }
 
@@ -32,7 +48,9 @@ class BusDetailsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final String priceStr = double.tryParse(trip['price'].toString())?.toStringAsFixed(2) ?? trip['price'].toString();
+    final String priceStr =
+        double.tryParse(trip['price'].toString())?.toStringAsFixed(2) ??
+        trip['price'].toString();
     final int totalSeats = trip['total_seats'] as int? ?? 40;
     final int bookedCount = (trip['boarded_seats'] as List?)?.length ?? 0;
     final int seatsLeft = totalSeats - bookedCount;
@@ -95,7 +113,10 @@ class BusDetailsScreen extends ConsumerWidget {
                 SafeArea(
                   bottom: false,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -112,11 +133,18 @@ class BusDetailsScreen extends ConsumerWidget {
                                   color: Colors.white.withValues(alpha: 0.2),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+                                child: const Icon(
+                                  Icons.arrow_back_ios_new_rounded,
+                                  color: Colors.white,
+                                  size: 18,
+                                ),
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFE65100),
                                 borderRadius: BorderRadius.circular(6),
@@ -176,7 +204,10 @@ class BusDetailsScreen extends ConsumerWidget {
                   children: [
                     // ── Journey Details Card ──
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
@@ -197,7 +228,11 @@ class BusDetailsScreen extends ConsumerWidget {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              const Icon(Icons.circle_outlined, color: Color(0xFFE65100), size: 14),
+                              const Icon(
+                                Icons.circle_outlined,
+                                color: Color(0xFFE65100),
+                                size: 14,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
@@ -213,7 +248,11 @@ class BusDetailsScreen extends ConsumerWidget {
                                     ),
                                     Text(
                                       'Departure: ${trip['departure']}',
-                                      style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                      style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -230,7 +269,11 @@ class BusDetailsScreen extends ConsumerWidget {
                           ),
                           Row(
                             children: [
-                              const Icon(Icons.location_on_rounded, color: Color(0xFF0A2540), size: 14),
+                              const Icon(
+                                Icons.location_on_rounded,
+                                color: Color(0xFF0A2540),
+                                size: 14,
+                              ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
@@ -246,7 +289,11 @@ class BusDetailsScreen extends ConsumerWidget {
                                     ),
                                     const Text(
                                       'Arrival: Estimated 2 hrs duration',
-                                      style: TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -260,18 +307,29 @@ class BusDetailsScreen extends ConsumerWidget {
 
                     // ── Seat Availability Stats ──
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF0A2540).withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF0A2540).withValues(alpha: 0.08)),
+                        border: Border.all(
+                          color: const Color(
+                            0xFF0A2540,
+                          ).withValues(alpha: 0.08),
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.event_seat_rounded, color: Color(0xFF0A2540), size: 16),
+                              const Icon(
+                                Icons.event_seat_rounded,
+                                color: Color(0xFF0A2540),
+                                size: 16,
+                              ),
                               const SizedBox(width: 8),
                               Text(
                                 '$seatsLeft of $totalSeats Seats Available',
@@ -285,7 +343,11 @@ class BusDetailsScreen extends ConsumerWidget {
                           ),
                           const Row(
                             children: [
-                              Icon(Icons.verified_user_outlined, size: 12, color: Color(0xFF10B981)),
+                              Icon(
+                                Icons.verified_user_outlined,
+                                size: 12,
+                                color: Color(0xFF10B981),
+                              ),
                               SizedBox(width: 4),
                               Text(
                                 'Seaty Verified',
@@ -303,7 +365,8 @@ class BusDetailsScreen extends ConsumerWidget {
                     const SizedBox(height: 14),
 
                     // ── Amenities Grid ──
-                    if (trip['amenities'] != null && (trip['amenities'] as List).isNotEmpty) ...[
+                    if (trip['amenities'] != null &&
+                        (trip['amenities'] as List).isNotEmpty) ...[
                       const Text(
                         'Bus Amenities & Services',
                         style: TextStyle(
@@ -317,21 +380,27 @@ class BusDetailsScreen extends ConsumerWidget {
                       GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 3.5,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 10,
+                              mainAxisSpacing: 10,
+                              childAspectRatio: 3.5,
+                            ),
                         itemCount: (trip['amenities'] as List).length,
                         itemBuilder: (context, index) {
                           final name = trip['amenities'][index].toString();
                           return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -369,14 +438,23 @@ class BusDetailsScreen extends ConsumerWidget {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                            color: const Color(
+                              0xFF0A2540,
+                            ).withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.star_rounded, color: Color(0xFFE65100), size: 12),
+                              Icon(
+                                Icons.star_rounded,
+                                color: Color(0xFFE65100),
+                                size: 12,
+                              ),
                               SizedBox(width: 2),
                               Text(
                                 '4.8 (12)',
@@ -412,35 +490,57 @@ class BusDetailsScreen extends ConsumerWidget {
                                 children: [
                                   CircleAvatar(
                                     radius: 12,
-                                    backgroundColor: const Color(0xFFE65100).withValues(alpha: 0.1),
+                                    backgroundColor: const Color(
+                                      0xFFE65100,
+                                    ).withValues(alpha: 0.1),
                                     child: const Text(
                                       'S',
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFE65100)),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFE65100),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Saman Perera',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0A2540)),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF0A2540),
+                                    ),
                                   ),
                                 ],
                               ),
                               const Text(
                                 'Yesterday',
-                                style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
                           Row(
                             children: List.generate(5, (index) {
-                              return const Icon(Icons.star_rounded, color: Color(0xFFE65100), size: 10);
+                              return const Icon(
+                                Icons.star_rounded,
+                                color: Color(0xFFE65100),
+                                size: 10,
+                              );
                             }),
                           ),
                           const SizedBox(height: 4),
                           const Text(
                             'Very clean seats and arrived exactly on time. Highly recommended!',
-                            style: TextStyle(fontSize: 11, color: Color(0xFF475569), fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -465,22 +565,36 @@ class BusDetailsScreen extends ConsumerWidget {
                                 children: [
                                   CircleAvatar(
                                     radius: 12,
-                                    backgroundColor: const Color(0xFF0A2540).withValues(alpha: 0.1),
+                                    backgroundColor: const Color(
+                                      0xFF0A2540,
+                                    ).withValues(alpha: 0.1),
                                     child: const Text(
                                       'P',
-                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0A2540)),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF0A2540),
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 8),
                                   const Text(
                                     'Priyantha J.',
-                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF0A2540)),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF0A2540),
+                                    ),
                                   ),
                                 ],
                               ),
                               const Text(
                                 '3 days ago',
-                                style: TextStyle(fontSize: 9, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: Color(0xFF94A3B8),
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
@@ -489,7 +603,9 @@ class BusDetailsScreen extends ConsumerWidget {
                             children: List.generate(5, (index) {
                               return Icon(
                                 Icons.star_rounded,
-                                color: index < 4 ? const Color(0xFFE65100) : const Color(0xFFCBD5E1),
+                                color: index < 4
+                                    ? const Color(0xFFE65100)
+                                    : const Color(0xFFCBD5E1),
                                 size: 10,
                               );
                             }),
@@ -497,7 +613,11 @@ class BusDetailsScreen extends ConsumerWidget {
                           const SizedBox(height: 4),
                           const Text(
                             'Comfortable journey. Air conditioning was perfect and there was plenty of space for bags.',
-                            style: TextStyle(fontSize: 11, color: Color(0xFF475569), fontWeight: FontWeight.w500),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -534,9 +654,7 @@ class BusDetailsScreen extends ConsumerWidget {
                   offset: const Offset(0, -6),
                 ),
               ],
-              border: const Border(
-                top: BorderSide(color: Color(0xFFE2E8F0)),
-              ),
+              border: const Border(top: BorderSide(color: Color(0xFFE2E8F0))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -547,7 +665,11 @@ class BusDetailsScreen extends ConsumerWidget {
                   children: [
                     const Text(
                       'Total Price',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Row(
@@ -587,15 +709,23 @@ class BusDetailsScreen extends ConsumerWidget {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0A2540),
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                     elevation: 0,
                   ),
                   child: const Row(
                     children: [
                       Text(
                         'Choose Seat',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       SizedBox(width: 4),
                       Icon(Icons.arrow_forward_rounded, size: 14),

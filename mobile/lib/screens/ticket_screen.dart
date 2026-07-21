@@ -17,15 +17,25 @@ class PassengerBookingsTab extends ConsumerWidget {
       context: context,
       builder: (context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.qr_code_2_rounded, size: 84, color: Color(0xFFE65100)),
+              const Icon(
+                Icons.qr_code_2_rounded,
+                size: 84,
+                color: Color(0xFFE65100),
+              ),
               const SizedBox(height: 16),
               const Text(
                 'Ready to Board',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0A2540)),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0A2540),
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -46,11 +56,19 @@ class PassengerBookingsTab extends ConsumerWidget {
               const Text(
                 'Show this barcode to the driver/conductor during verification.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.black54,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
-          actionsPadding: const EdgeInsets.only(bottom: 16, left: 16, right: 16),
+          actionsPadding: const EdgeInsets.only(
+            bottom: 16,
+            left: 16,
+            right: 16,
+          ),
           actions: [
             Row(
               children: [
@@ -60,13 +78,22 @@ class PassengerBookingsTab extends ConsumerWidget {
                       Navigator.pop(context);
                       _generateAndSavePDF(context, b);
                     },
-                    icon: const Icon(Icons.download_rounded, size: 16, color: Colors.white),
-                    label: const Text('Save PDF', style: TextStyle(fontSize: 12)),
+                    icon: const Icon(
+                      Icons.download_rounded,
+                      size: 16,
+                      color: Colors.white,
+                    ),
+                    label: const Text(
+                      'Save PDF',
+                      style: TextStyle(fontSize: 12),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFFE65100),
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
@@ -78,26 +105,34 @@ class PassengerBookingsTab extends ConsumerWidget {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF0A2540),
                       side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     child: const Text('Close', style: TextStyle(fontSize: 12)),
                   ),
                 ),
               ],
-            )
+            ),
           ],
         );
       },
     );
   }
 
-  Future<void> _generateAndSavePDF(BuildContext context, Map<String, dynamic> b) async {
+  Future<void> _generateAndSavePDF(
+    BuildContext context,
+    Map<String, dynamic> b,
+  ) async {
     try {
       final pdf = pw.Document();
-      final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+      final ticketCode =
+          'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
       final seats = (b['seats'] as List).join(', ');
-      final formattedPrice = double.tryParse(b['price'].toString())?.toStringAsFixed(2) ?? b['price'].toString();
+      final formattedPrice =
+          double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
+          b['price'].toString();
 
       pdf.addPage(
         pw.Page(
@@ -117,17 +152,30 @@ class PassengerBookingsTab extends ConsumerWidget {
                     children: [
                       pw.Text(
                         'SEATY TRAVELS',
-                        style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
+                        style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.blue900,
+                        ),
                       ),
                       pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const pw.EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
                         decoration: const pw.BoxDecoration(
                           color: PdfColors.orange800,
-                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                          borderRadius: pw.BorderRadius.all(
+                            pw.Radius.circular(4),
+                          ),
                         ),
                         child: pw.Text(
                           'BOARDING PASS',
-                          style: pw.TextStyle(color: PdfColors.white, fontSize: 10, fontWeight: pw.FontWeight.bold),
+                          style: pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -141,15 +189,39 @@ class PassengerBookingsTab extends ConsumerWidget {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text('FROM', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text('${b['origin']}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                          pw.Text(
+                            'FROM',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            '${b['origin']}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
-                          pw.Text('TO', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text('${b['destination']}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                          pw.Text(
+                            'TO',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            '${b['destination']}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -161,21 +233,49 @@ class PassengerBookingsTab extends ConsumerWidget {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text('DEPARTURE', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text('${b['departure']}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                          pw.Text(
+                            'DEPARTURE',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            '${b['departure']}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
                         ],
                       ),
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.end,
                         children: [
-                          pw.Text('BUS REG', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text('${b['reg'] ?? 'WP-ND-8942'}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                          pw.Text(
+                            'BUS REG',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            '${b['reg'] ?? 'WP-ND-8942'}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
                         ],
                       ),
                     ],
                   ),
                   pw.SizedBox(height: 15),
-                  pw.Divider(thickness: 1, color: PdfColors.grey300, borderStyle: pw.BorderStyle.dashed),
+                  pw.Divider(
+                    thickness: 1,
+                    color: PdfColors.grey300,
+                    borderStyle: pw.BorderStyle.dashed,
+                  ),
                   pw.SizedBox(height: 15),
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -183,14 +283,50 @@ class PassengerBookingsTab extends ConsumerWidget {
                       pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text('TICKET CODE', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text(ticketCode, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.blueGrey800)),
+                          pw.Text(
+                            'TICKET CODE',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            ticketCode,
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.blueGrey800,
+                            ),
+                          ),
                           pw.SizedBox(height: 10),
-                          pw.Text('SEATS', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text(seats, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.orange900)),
+                          pw.Text(
+                            'SEATS',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            seats,
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColors.orange900,
+                            ),
+                          ),
                           pw.SizedBox(height: 10),
-                          pw.Text('TOTAL PRICE', style: pw.TextStyle(color: PdfColors.grey600, fontSize: 10)),
-                          pw.Text('Rs. $formattedPrice', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+                          pw.Text(
+                            'TOTAL PRICE',
+                            style: pw.TextStyle(
+                              color: PdfColors.grey600,
+                              fontSize: 10,
+                            ),
+                          ),
+                          pw.Text(
+                            'Rs. $formattedPrice',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                       pw.Container(
@@ -208,7 +344,11 @@ class PassengerBookingsTab extends ConsumerWidget {
                   pw.Center(
                     child: pw.Text(
                       'Please show this ticket PDF at the boarding point.',
-                      style: pw.TextStyle(fontSize: 9, color: PdfColors.grey500, fontStyle: pw.FontStyle.italic),
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey500,
+                        fontStyle: pw.FontStyle.italic,
+                      ),
                     ),
                   ),
                 ],
@@ -228,7 +368,9 @@ class PassengerBookingsTab extends ConsumerWidget {
             content: Text('Ticket PDF saved to Documents successfully!'),
             backgroundColor: const Color(0xFF00C853),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -239,7 +381,9 @@ class PassengerBookingsTab extends ConsumerWidget {
             content: Text('Failed to generate PDF: $e'),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -271,7 +415,10 @@ class PassengerBookingsTab extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE65100).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
@@ -295,22 +442,50 @@ class PassengerBookingsTab extends ConsumerWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.confirmation_num_outlined, size: 56, color: const Color(0xFF0A2540).withValues(alpha: 0.12)),
+                          Icon(
+                            Icons.confirmation_num_outlined,
+                            size: 56,
+                            color: const Color(
+                              0xFF0A2540,
+                            ).withValues(alpha: 0.12),
+                          ),
                           const SizedBox(height: 12),
-                          const Text('No tickets booked yet', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14, fontWeight: FontWeight.w500)),
+                          const Text(
+                            'No tickets booked yet',
+                            style: TextStyle(
+                              color: Color(0xFF94A3B8),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          const Text('Book a trip to see your tickets here.', style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12)),
+                          const Text(
+                            'Book a trip to see your tickets here.',
+                            style: TextStyle(
+                              color: Color(0xFFCBD5E1),
+                              fontSize: 12,
+                            ),
+                          ),
                         ],
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.only(left: 20, right: 20, bottom: 110),
+                      padding: const EdgeInsets.only(
+                        left: 20,
+                        right: 20,
+                        bottom: 110,
+                      ),
                       itemCount: state.bookings.length,
                       itemBuilder: (context, index) {
                         final b = state.bookings[index];
-                        final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+                        final ticketCode =
+                            'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
                         final seats = (b['seats'] as List).join(', ');
-                        final formattedPrice = double.tryParse(b['price'].toString())?.toStringAsFixed(2) ?? b['price'].toString();
+                        final formattedPrice =
+                            double.tryParse(
+                              b['price'].toString(),
+                            )?.toStringAsFixed(2) ??
+                            b['price'].toString();
 
                         return GestureDetector(
                           onTap: () => _showDownloadTicketDialog(context, b),
@@ -320,10 +495,14 @@ class PassengerBookingsTab extends ConsumerWidget {
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                                  color: const Color(
+                                    0xFF0A2540,
+                                  ).withValues(alpha: 0.05),
                                   blurRadius: 10,
                                   offset: const Offset(0, 4),
                                 ),
@@ -340,21 +519,33 @@ class PassengerBookingsTab extends ConsumerWidget {
                                       gradient: LinearGradient(
                                         colors: [
                                           Color(0xFFE65100), // Dark Orange
-                                          Color(0xFF802200), // Deep Burnt Rust Orange
+                                          Color(
+                                            0xFF802200,
+                                          ), // Deep Burnt Rust Orange
                                         ],
                                         begin: Alignment.topLeft,
                                         end: Alignment.bottomRight,
                                       ),
                                     ),
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 16,
+                                    ),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            const Icon(Icons.directions_bus_rounded, color: Colors.white70, size: 24),
+                                            const Icon(
+                                              Icons.directions_bus_rounded,
+                                              color: Colors.white70,
+                                              size: 24,
+                                            ),
                                             const SizedBox(height: 14),
                                             Text(
                                               '${b['origin']}',
@@ -367,7 +558,11 @@ class PassengerBookingsTab extends ConsumerWidget {
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
-                                            const Icon(Icons.arrow_downward_rounded, color: Colors.white54, size: 14),
+                                            const Icon(
+                                              Icons.arrow_downward_rounded,
+                                              color: Colors.white54,
+                                              size: 14,
+                                            ),
                                             Text(
                                               '${b['destination']}',
                                               style: const TextStyle(
@@ -395,50 +590,74 @@ class PassengerBookingsTab extends ConsumerWidget {
                                     ),
                                   ),
                                 ),
-                                
+
                                 // ── Right Block (White, Coords, Cores, Details) ──
                                 Expanded(
                                   flex: 6,
                                   child: Padding(
                                     padding: const EdgeInsets.all(12.0),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         // Top row: Coords / Seats and QR Code
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
                                                     '${b['departure']}',
                                                     style: const TextStyle(
                                                       color: Color(0xFF0A2540),
-                                                      fontWeight: FontWeight.w800,
+                                                      fontWeight:
+                                                          FontWeight.w800,
                                                       fontSize: 12,
                                                     ),
                                                     maxLines: 2,
-                                                    overflow: TextOverflow.ellipsis,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
                                                   const SizedBox(height: 6),
                                                   Row(
                                                     children: [
-                                                      Icon(Icons.event_seat_rounded, size: 12, color: const Color(0xFF0A2540).withValues(alpha: 0.6)),
+                                                      Icon(
+                                                        Icons
+                                                            .event_seat_rounded,
+                                                        size: 12,
+                                                        color:
+                                                            const Color(
+                                                              0xFF0A2540,
+                                                            ).withValues(
+                                                              alpha: 0.6,
+                                                            ),
+                                                      ),
                                                       const SizedBox(width: 4),
                                                       Expanded(
                                                         child: Text(
                                                           'Seats: $seats',
                                                           style: TextStyle(
-                                                            color: const Color(0xFF0A2540).withValues(alpha: 0.8),
+                                                            color:
+                                                                const Color(
+                                                                  0xFF0A2540,
+                                                                ).withValues(
+                                                                  alpha: 0.8,
+                                                                ),
                                                             fontSize: 11,
-                                                            fontWeight: FontWeight.w600,
+                                                            fontWeight:
+                                                                FontWeight.w600,
                                                           ),
                                                           maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
                                                         ),
                                                       ),
                                                     ],
@@ -448,7 +667,8 @@ class PassengerBookingsTab extends ConsumerWidget {
                                                     'Fare: Rs. $formattedPrice',
                                                     style: const TextStyle(
                                                       color: Color(0xFF0A2540),
-                                                      fontWeight: FontWeight.w800,
+                                                      fontWeight:
+                                                          FontWeight.w800,
                                                       fontSize: 12,
                                                     ),
                                                   ),
@@ -463,8 +683,13 @@ class PassengerBookingsTab extends ConsumerWidget {
                                               padding: const EdgeInsets.all(2),
                                               decoration: BoxDecoration(
                                                 color: Colors.white,
-                                                borderRadius: BorderRadius.circular(8),
-                                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: const Color(
+                                                    0xFFE2E8F0,
+                                                  ),
+                                                ),
                                               ),
                                               child: QrImageView(
                                                 data: b['id'].toString(),
@@ -476,20 +701,28 @@ class PassengerBookingsTab extends ConsumerWidget {
                                         ),
                                         // Bottom Row: Ticket Code & Reg
                                         Container(
-                                          padding: const EdgeInsets.only(top: 8),
+                                          padding: const EdgeInsets.only(
+                                            top: 8,
+                                          ),
                                           decoration: const BoxDecoration(
                                             border: Border(
-                                              top: BorderSide(color: Color(0xFFF1F5F9), width: 1),
+                                              top: BorderSide(
+                                                color: Color(0xFFF1F5F9),
+                                                width: 1,
+                                              ),
                                             ),
                                           ),
                                           child: Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Text(
                                                 ticketCode,
                                                 style: TextStyle(
                                                   fontFamily: 'monospace',
-                                                  color: const Color(0xFF0A2540).withValues(alpha: 0.5),
+                                                  color: const Color(
+                                                    0xFF0A2540,
+                                                  ).withValues(alpha: 0.5),
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.w700,
                                                 ),
@@ -498,7 +731,9 @@ class PassengerBookingsTab extends ConsumerWidget {
                                                 '${b['reg']}',
                                                 style: TextStyle(
                                                   fontFamily: 'monospace',
-                                                  color: const Color(0xFF0A2540).withValues(alpha: 0.6),
+                                                  color: const Color(
+                                                    0xFF0A2540,
+                                                  ).withValues(alpha: 0.6),
                                                   fontSize: 9,
                                                   fontWeight: FontWeight.w600,
                                                 ),
@@ -516,7 +751,7 @@ class PassengerBookingsTab extends ConsumerWidget {
                         );
                       },
                     ),
-            )
+            ),
           ],
         ),
       ),

@@ -27,8 +27,6 @@ class UserLogin(BaseModel):
     password: str
 
 class ConductorCreate(BaseModel):
-    email: EmailStr
-    password: str
     full_name: str
     phone_number: str
 

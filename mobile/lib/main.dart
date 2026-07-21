@@ -16,13 +16,14 @@ import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
 import 'package:seaty/screens/bus_details_screen.dart';
+import 'package:seaty/screens/owner/owner_main_screen.dart';
 
 // =====================================================================
 // 1. STATE MANAGEMENT (PROVIDER)
 // =====================================================================
 class AppState extends ChangeNotifier {
   final SharedPreferences _prefs;
-  
+
   String _role = 'passenger'; // 'passenger' | 'owner'
   bool _isAuthenticated = false;
   String _userName = 'Guest User';
@@ -30,12 +31,12 @@ class AppState extends ChangeNotifier {
   String _userNic = '';
   String _userGender = '';
   String _userPhone = '';
-  
+
   String get token => _token;
   String get userNic => _userNic;
   String get userGender => _userGender;
   String get userPhone => _userPhone;
-  
+
   // API URL Config
   String apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
   String wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
@@ -46,6 +47,7 @@ class AppState extends ChangeNotifier {
     loadTrips();
     if (_isAuthenticated) {
       loadVehicles();
+      loadConductors();
       loadBookings();
       loadProfile();
       fetchNotifications();
@@ -61,11 +63,16 @@ class AppState extends ChangeNotifier {
     _userNic = _prefs.getString('userNic') ?? '';
     _userGender = _prefs.getString('userGender') ?? '';
     _userPhone = _prefs.getString('userPhone') ?? '';
-    apiBaseUrl = _prefs.getString('apiBaseUrl') ?? 'https://api.seaty.hashnate.com/api/v1';
-    wsBaseUrl = _prefs.getString('wsBaseUrl') ?? 'wss://api.seaty.hashnate.com/api/v1/ws';
-    
+    apiBaseUrl =
+        _prefs.getString('apiBaseUrl') ??
+        'https://api.seaty.hashnate.com/api/v1';
+    wsBaseUrl =
+        _prefs.getString('wsBaseUrl') ??
+        'wss://api.seaty.hashnate.com/api/v1/ws';
+
     // Auto-override outdated placeholder IP to avoid socket timeouts
-    if (apiBaseUrl.contains('192.168.1.195') || apiBaseUrl.contains('localhost')) {
+    if (apiBaseUrl.contains('192.168.1.195') ||
+        apiBaseUrl.contains('localhost')) {
       apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
       wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
       _saveSession();
@@ -84,8 +91,6 @@ class AppState extends ChangeNotifier {
     _prefs.setString('wsBaseUrl', wsBaseUrl);
   }
 
-
-
   void updateServerIp(String ip) {
     apiBaseUrl = 'http://$ip:8000/api/v1';
     wsBaseUrl = 'ws://$ip:8000/api/v1/ws';
@@ -100,7 +105,7 @@ class AppState extends ChangeNotifier {
       'reg': 'WP-ND-8942',
       'total_seats': 40,
       'is_verified': true,
-    }
+    },
   ];
 
   final List<Map<String, dynamic>> _trips = [
@@ -111,7 +116,7 @@ class AppState extends ChangeNotifier {
       'departure': '2026-07-13 14:00',
       'price': 1600.0,
       'bus_name': 'Colombo Express VIP',
-      'reg': 'WP-ND-8942'
+      'reg': 'WP-ND-8942',
     },
     {
       'id': 't2',
@@ -120,12 +125,12 @@ class AppState extends ChangeNotifier {
       'departure': '2026-07-13 16:30',
       'price': 1800.0,
       'bus_name': 'Kandy Intercity Deluxe',
-      'reg': 'CP-NB-7721'
-    }
+      'reg': 'CP-NB-7721',
+    },
   ];
 
   final List<Map<String, dynamic>> _bookings = [];
-  
+
   // Selected seats state
   final List<String> _selectedSeats = [];
   final Map<String, String> _selectedSeatGenders = {};
@@ -165,70 +170,77 @@ class AppState extends ChangeNotifier {
   bool get isTracking => _isTracking;
   bool get isStreamingGPS => _isStreamingGPS;
   List<Map<String, dynamic>> get notifications => _notifications;
-  int get unreadNotificationsCount => _notifications.where((n) => n['is_read'] == false || n['is_read'] == 0).length;
+  int get unreadNotificationsCount => _notifications
+      .where((n) => n['is_read'] == false || n['is_read'] == 0)
+      .length;
 
-  // Simulated registered users database
-  final List<Map<String, String>> _registeredUsers = [
-    {
-      'phone': '0771234567',
-      'name': 'Saman Perera',
-      'role': 'passenger',
-    },
-    {
-      'phone': '0777654321',
-      'name': 'Ranasinghe Bandara',
-      'role': 'owner',
-    },
-    {
-      'phone': '0775555555',
-      'name': 'Conductor 1',
-      'role': 'conductor',
-    }
-  ];
+  // Registered users database from real REST API backend
+  final List<Map<String, String>> _registeredUsers = [];
 
   List<Map<String, String>> get registeredUsers => _registeredUsers;
 
-  Future<Map<String, dynamic>> checkPhoneDB(String phone, String role) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/auth/phone/check'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'phone_number': phone, 'role': role}),
-      ).timeout(const Duration(seconds: 2));
+  Future<Map<String, dynamic>> checkPhoneDB(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    final rolesToCheck = ['owner', 'passenger', 'conductor'];
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return {'exists': data['exists'], 'name': data['name']};
+    try {
+      final results = await Future.wait(
+        rolesToCheck.map((role) async {
+          try {
+            final response = await http
+                .post(
+                  Uri.parse('$apiBaseUrl/auth/phone/check'),
+                  headers: {'Content-Type': 'application/json'},
+                  body: json.encode({'phone_number': cleanPhone, 'role': role}),
+                )
+                .timeout(const Duration(seconds: 4));
+
+            if (response.statusCode >= 200 && response.statusCode < 300) {
+              final dynamic data = json.decode(response.body);
+              if (data is Map<String, dynamic> && data['exists'] == true) {
+                final String name = (data['name'] ?? 'User').toString();
+                return {'exists': true, 'name': name, 'role': role};
+              }
+            }
+          } catch (e) {
+            debugPrint('API check error for $role: $e');
+          }
+          return null;
+        }),
+      );
+
+      for (final res in results) {
+        if (res != null && res['exists'] == true) {
+          return res;
+        }
       }
     } catch (e) {
-      debugPrint('API Error: $e. Falling back to local state.');
+      debugPrint('Error during parallel phone check: $e');
     }
-    
-    final roles = role == 'conductor' ? ['owner', 'conductor'] : [role];
-    final exists = _registeredUsers.any((u) => u['phone'] == phone && roles.contains(u['role']));
-    final user = _registeredUsers.firstWhere(
-      (u) => u['phone'] == phone && roles.contains(u['role']),
-      orElse: () => {'name': 'Guest User'},
-    );
-    return {'exists': exists, 'name': user['name']};
+
+    return {'exists': false, 'name': 'Guest User', 'role': 'passenger'};
   }
 
   Future<bool> registerPhoneDB(String name, String phone, String role) async {
-    if (!_registeredUsers.any((u) => u['phone'] == phone && u['role'] == role)) {
-      _registeredUsers.add({'phone': phone, 'name': name, 'role': role});
-      notifyListeners();
-    }
-
+    const assignedRole = 'passenger';
     try {
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/auth/phone/register'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'phone_number': phone, 'full_name': name, 'role': role}),
-      ).timeout(const Duration(seconds: 2));
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/auth/phone/register'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': phone,
+              'full_name': name,
+              'role': assignedRole,
+            }),
+          )
+          .timeout(const Duration(seconds: 2));
 
       return response.statusCode == 201;
     } catch (e) {
-      debugPrint('API Registration Error: $e. Local registration fallback used.');
+      debugPrint(
+        'API Registration Error: $e. Local registration fallback used.',
+      );
       return true;
     }
   }
@@ -244,16 +256,18 @@ class AppState extends ChangeNotifier {
     _userName = name;
     _role = roleSelected;
     _isAuthenticated = true;
-    
+
     try {
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/auth/phone/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({
-          'phone_number': phoneNumber,
-          'role': roleSelected,
-        }),
-      ).timeout(const Duration(seconds: 2));
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/auth/phone/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': phoneNumber,
+              'role': roleSelected,
+            }),
+          )
+          .timeout(const Duration(seconds: 2));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -266,6 +280,7 @@ class AppState extends ChangeNotifier {
 
     _saveSession();
     loadVehicles();
+    loadConductors();
     loadTrips();
     loadBookings();
     loadProfile();
@@ -277,13 +292,15 @@ class AppState extends ChangeNotifier {
   Future<void> fetchNotifications() async {
     if (_token.isEmpty || _token.startsWith('simulated')) return;
     try {
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/notifications'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-      ).timeout(const Duration(seconds: 2));
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/notifications'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+          )
+          .timeout(const Duration(seconds: 2));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -297,7 +314,9 @@ class AppState extends ChangeNotifier {
 
   Future<void> markNotificationAsRead(String notificationId) async {
     if (_token.isEmpty || _token.startsWith('simulated')) {
-      final notiIndex = _notifications.indexWhere((n) => n['id'] == notificationId);
+      final notiIndex = _notifications.indexWhere(
+        (n) => n['id'] == notificationId,
+      );
       if (notiIndex != -1) {
         _notifications[notiIndex]['is_read'] = true;
         notifyListeners();
@@ -314,7 +333,9 @@ class AppState extends ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
-        final notiIndex = _notifications.indexWhere((n) => n['id'] == notificationId);
+        final notiIndex = _notifications.indexWhere(
+          (n) => n['id'] == notificationId,
+        );
         if (notiIndex != -1) {
           _notifications[notiIndex]['is_read'] = true;
           notifyListeners();
@@ -356,7 +377,7 @@ class AppState extends ChangeNotifier {
   void startNotificationsListener() {
     stopNotificationsListener();
     if (_token.isEmpty) return;
-    
+
     _isNotiListenerConnected = true;
     try {
       final cleanWsBase = wsBaseUrl.endsWith('/ws')
@@ -364,30 +385,34 @@ class AppState extends ChangeNotifier {
           : wsBaseUrl;
       final wsUrl = '$cleanWsBase/notifications/ws?token=$_token';
       _notificationsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
-      
-      _notificationsChannel!.stream.listen((message) {
-        try {
-          final data = json.decode(message);
-          _notifications.insert(0, data);
-          notifyListeners();
 
-          final context = navigatorKey.currentContext;
-          if (context != null) {
-            SeatyNotifications.show(
-              context,
-              data['message'] ?? '',
-              isError: data['type'] == 'error' || data['type'] == 'failure',
-              isWarning: data['type'] == 'warning',
-            );
+      _notificationsChannel!.stream.listen(
+        (message) {
+          try {
+            final data = json.decode(message);
+            _notifications.insert(0, data);
+            notifyListeners();
+
+            final context = navigatorKey.currentContext;
+            if (context != null) {
+              SeatyNotifications.show(
+                context,
+                data['message'] ?? '',
+                isError: data['type'] == 'error' || data['type'] == 'failure',
+                isWarning: data['type'] == 'warning',
+              );
+            }
+          } catch (e) {
+            debugPrint('Error parsing notification message: $e');
           }
-        } catch (e) {
-          debugPrint('Error parsing notification message: $e');
-        }
-      }, onError: (err) {
-        debugPrint('Notification WS error: $err');
-      }, onDone: () {
-        _isNotiListenerConnected = false;
-      });
+        },
+        onError: (err) {
+          debugPrint('Notification WS error: $err');
+        },
+        onDone: () {
+          _isNotiListenerConnected = false;
+        },
+      );
     } catch (e) {
       debugPrint('Notification WS connection failed: $e');
       _isNotiListenerConnected = false;
@@ -403,10 +428,12 @@ class AppState extends ChangeNotifier {
   Future<void> loadProfile() async {
     if (_token.isEmpty || _token.startsWith('simulated')) return;
     try {
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/auth/me'),
-        headers: {'Authorization': 'Bearer $_token'},
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/auth/me'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -422,7 +449,12 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProfile(String name, String nic, String gender, String phone) async {
+  Future<bool> updateProfile(
+    String name,
+    String nic,
+    String gender,
+    String phone,
+  ) async {
     // Local updates
     _userName = name;
     _userNic = nic;
@@ -433,19 +465,21 @@ class AppState extends ChangeNotifier {
 
     if (_token.isEmpty || _token.startsWith('simulated')) return true;
     try {
-      final response = await http.put(
-        Uri.parse('$apiBaseUrl/auth/profile'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $_token',
-        },
-        body: json.encode({
-          'full_name': name,
-          'nic_number': nic,
-          'gender': gender,
-          'phone_number': phone,
-        }),
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .put(
+            Uri.parse('$apiBaseUrl/auth/profile'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+            body: json.encode({
+              'full_name': name,
+              'nic_number': nic,
+              'gender': gender,
+              'phone_number': phone,
+            }),
+          )
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -482,12 +516,12 @@ class AppState extends ChangeNotifier {
   // Load vehicles from backend
   Future<void> loadVehicles() async {
     try {
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/vehicles'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-        },
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/vehicles'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -504,6 +538,100 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---- CONDUCTORS (Owner's crew) ----
+  final List<Map<String, dynamic>> _conductorsList = [];
+  List<Map<String, dynamic>> get conductorsList => _conductorsList;
+
+  Future<void> loadConductors() async {
+    if (_token.isEmpty || _token.startsWith('simulated')) return;
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/conductors'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        _conductorsList.clear();
+        for (var item in data) {
+          _conductorsList.add(item as Map<String, dynamic>);
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error loading conductors: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> addConductor(String name, String phone) async {
+    if (_token.isEmpty || _token.startsWith('simulated')) {
+      // Offline fallback: add locally
+      _conductorsList.add({
+        'id': 'local-${DateTime.now().millisecondsSinceEpoch}',
+        'full_name': name,
+        'phone_number': phone,
+        'role': 'conductor',
+      });
+      notifyListeners();
+      return _conductorsList.last;
+    }
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/conductors'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_token',
+            },
+            body: json.encode({'full_name': name, 'phone_number': phone}),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        _conductorsList.add(data);
+        notifyListeners();
+        return data;
+      } else {
+        final errorBody = json.decode(response.body);
+        throw Exception(errorBody['detail'] ?? 'Failed to add conductor');
+      }
+    } catch (e) {
+      debugPrint('Error adding conductor: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> deleteConductor(String conductorId) async {
+    if (_token.isEmpty || _token.startsWith('simulated')) {
+      _conductorsList.removeWhere((c) => c['id'].toString() == conductorId);
+      notifyListeners();
+      return true;
+    }
+    try {
+      final response = await http
+          .delete(
+            Uri.parse('$apiBaseUrl/conductors/$conductorId'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 204 || response.statusCode == 200) {
+        _conductorsList.removeWhere((c) => c['id'].toString() == conductorId);
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      debugPrint('Error deleting conductor: $e');
+    }
+    return false;
+  }
+
   // Load trips from backend
   Future<void> loadTrips() async {
     try {
@@ -511,11 +639,11 @@ class AppState extends ChangeNotifier {
       if (_token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $_token';
       }
-      final today = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/trips?date=$today'),
-        headers: headers,
-      ).timeout(const Duration(seconds: 3));
+      final today =
+          '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
+      final response = await http
+          .get(Uri.parse('$apiBaseUrl/trips?date=$today'), headers: headers)
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -528,8 +656,14 @@ class AppState extends ChangeNotifier {
             'origin': tripMap['route']?['origin'] ?? 'Colombo Fort',
             'destination': tripMap['route']?['destination'] ?? 'Galle',
             'route': tripMap['route'],
-            'departure': tripMap['departure_time']?.toString().replaceAll('T', ' ').substring(0, 16) ?? '2026-07-13 14:00',
-            'price': double.tryParse(tripMap['price_per_seat'].toString()) ?? 1600.0,
+            'departure':
+                tripMap['departure_time']
+                    ?.toString()
+                    .replaceAll('T', ' ')
+                    .substring(0, 16) ??
+                '2026-07-13 14:00',
+            'price':
+                double.tryParse(tripMap['price_per_seat'].toString()) ?? 1600.0,
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
             'total_seats': vehicle['total_seats'] ?? 40,
@@ -549,12 +683,12 @@ class AppState extends ChangeNotifier {
   Future<void> loadBookings() async {
     if (_token.isEmpty || _token.startsWith('simulated')) return;
     try {
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/bookings'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-        },
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/bookings'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -568,7 +702,12 @@ class AppState extends ChangeNotifier {
             'trip_id': b['trip_id'],
             'origin': trip['route']?['origin'] ?? 'Colombo Fort',
             'destination': trip['route']?['destination'] ?? 'Galle',
-            'departure': trip['departure_time']?.toString().replaceAll('T', ' ').substring(0, 16) ?? '2026-07-13 14:00',
+            'departure':
+                trip['departure_time']
+                    ?.toString()
+                    .replaceAll('T', ' ')
+                    .substring(0, 16) ??
+                '2026-07-13 14:00',
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
             'seats': List<String>.from(b['selected_seats'] ?? []),
@@ -596,9 +735,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/seat-holds/trip/$tripId'),
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(Uri.parse('$apiBaseUrl/seat-holds/trip/$tripId'))
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -617,12 +756,12 @@ class AppState extends ChangeNotifier {
   // Fetch detailed manifest for conductors
   Future<Map<String, dynamic>?> fetchTripManifest(String tripId) async {
     try {
-      final response = await http.get(
-        Uri.parse('$apiBaseUrl/trips/$tripId/manifest'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-        },
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/trips/$tripId/manifest'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         return json.decode(response.body);
@@ -636,12 +775,12 @@ class AppState extends ChangeNotifier {
   // Toggle boarding status of a seat
   Future<List<String>?> toggleBoarding(String tripId, String seat) async {
     try {
-      final response = await http.post(
-        Uri.parse('$apiBaseUrl/trips/$tripId/toggle-board?seat=$seat'),
-        headers: {
-          'Authorization': 'Bearer $_token',
-        },
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/trips/$tripId/toggle-board?seat=$seat'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -654,9 +793,12 @@ class AppState extends ChangeNotifier {
   }
 
   // Initiate Booking (creates pending booking and holds seats)
-  Future<Map<String, dynamic>?> initiateBooking(String tripId, Map<String, dynamic> passengerDetails) async {
+  Future<Map<String, dynamic>?> initiateBooking(
+    String tripId,
+    Map<String, dynamic> passengerDetails,
+  ) async {
     if (_selectedSeats.isEmpty) return null;
-    
+
     try {
       final response = await http.post(
         Uri.parse('$apiBaseUrl/bookings'),
@@ -692,9 +834,7 @@ class AppState extends ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_token',
         },
-        body: json.encode({
-          'booking_id': bookingId,
-        }),
+        body: json.encode({'booking_id': bookingId}),
       );
 
       if (response.statusCode == 201) {
@@ -753,7 +893,11 @@ class AppState extends ChangeNotifier {
           'name': name,
           'registration_number': reg,
           'type': 'bus',
-          'seat_layout': {'rows': (capacity / 4).ceil(), 'columns': 4, 'aisle_after_column': 2},
+          'seat_layout': {
+            'rows': (capacity / 4).ceil(),
+            'columns': 4,
+            'aisle_after_column': 2,
+          },
           'total_seats': capacity,
           'amenities': ['AC', 'WiFi', 'Charging Ports', 'Reclining Seats'],
         }),
@@ -772,17 +916,26 @@ class AppState extends ChangeNotifier {
       'name': name,
       'reg': reg,
       'total_seats': capacity,
-      'is_verified': false
+      'is_verified': false,
     });
     notifyListeners();
   }
 
   // Add trip
-  void scheduleTrip(String vehicleId, String origin, String destination, String time, double price) async {
+  void scheduleTrip(
+    String vehicleId,
+    String origin,
+    String destination,
+    String time,
+    double price,
+  ) async {
     try {
       // Find the vehicle UUID from our list of vehicles
-      final v = _vehicles.firstWhere((x) => x['id'] == vehicleId || x['reg'] == vehicleId, orElse: () => _vehicles[0]);
-      
+      final v = _vehicles.firstWhere(
+        (x) => x['id'] == vehicleId || x['reg'] == vehicleId,
+        orElse: () => _vehicles[0],
+      );
+
       // We need a route. We can fetch or create a route, or post to trips.
       // Let's create/retrieve a route first
       final routeResponse = await http.post(
@@ -798,11 +951,11 @@ class AppState extends ChangeNotifier {
           'estimated_duration_seconds': 7200,
         }),
       );
-      
+
       if (routeResponse.statusCode == 201) {
         final routeData = json.decode(routeResponse.body);
         final routeId = routeData['id'];
-        
+
         final tripResponse = await http.post(
           Uri.parse('$apiBaseUrl/trips'),
           headers: {
@@ -812,12 +965,16 @@ class AppState extends ChangeNotifier {
           body: json.encode({
             'vehicle_id': v['id'],
             'route_id': routeId,
-            'departure_time': DateTime.parse(time.replaceAll(' ', 'T') + ':00Z').toUtc().toIso8601String(),
-            'arrival_time': DateTime.parse(time.replaceAll(' ', 'T') + ':00Z').add(const Duration(hours: 2)).toUtc().toIso8601String(),
+            'departure_time': DateTime.parse(
+              time.replaceAll(' ', 'T') + ':00Z',
+            ).toUtc().toIso8601String(),
+            'arrival_time': DateTime.parse(
+              time.replaceAll(' ', 'T') + ':00Z',
+            ).add(const Duration(hours: 2)).toUtc().toIso8601String(),
             'price_per_seat': price,
           }),
         );
-        
+
         if (tripResponse.statusCode == 201) {
           await loadTrips();
           return;
@@ -828,7 +985,10 @@ class AppState extends ChangeNotifier {
     }
 
     // Local fallback
-    final v = _vehicles.firstWhere((x) => x['id'] == vehicleId || x['reg'] == vehicleId, orElse: () => _vehicles[0]);
+    final v = _vehicles.firstWhere(
+      (x) => x['id'] == vehicleId || x['reg'] == vehicleId,
+      orElse: () => _vehicles[0],
+    );
     _trips.add({
       'id': 't-${DateTime.now().millisecondsSinceEpoch}',
       'origin': origin,
@@ -837,7 +997,9 @@ class AppState extends ChangeNotifier {
       'price': price,
       'bus_name': v['name'],
       'reg': v['reg'],
-      'amenities': List<String>.from(v['amenities'] ?? ['AC', 'WiFi', 'Charging Ports', 'Reclining Seats']),
+      'amenities': List<String>.from(
+        v['amenities'] ?? ['AC', 'WiFi', 'Charging Ports', 'Reclining Seats'],
+      ),
     });
     notifyListeners();
   }
@@ -866,7 +1028,7 @@ class AppState extends ChangeNotifier {
   // Local fallback confirmation
   void bookTicket(Map<String, dynamic> trip) {
     if (_selectedSeats.isEmpty) return;
-    
+
     _bookings.insert(0, {
       'id': 'b-${DateTime.now().millisecondsSinceEpoch}',
       'trip_id': trip['id'],
@@ -877,7 +1039,7 @@ class AppState extends ChangeNotifier {
       'reg': trip['reg'],
       'seats': List<String>.from(_selectedSeats),
       'price': trip['price'] * _selectedSeats.length,
-      'status': 'confirmed'
+      'status': 'confirmed',
     });
     _selectedSeats.clear();
     notifyListeners();
@@ -918,41 +1080,72 @@ class AppState extends ChangeNotifier {
       'latitude': startLat,
       'longitude': startLon,
       'speed': 0.0,
-      'heading': 0.0
+      'heading': 0.0,
     };
     notifyListeners();
 
     bool connected = false;
     try {
-      final wsUrl = '$wsBaseUrl/tracking/$vehicleId?role=passenger&token=$_token';
+      final wsUrl =
+          '$wsBaseUrl/tracking/$vehicleId?role=passenger&token=$_token';
       _trackingChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
-      _trackingChannel!.stream.listen((message) {
-        connected = true;
-        final data = json.decode(message);
-        _trackedBusLocation = data;
-        notifyListeners();
-      }, onError: (err) {
-        debugPrint('Tracking socket error: $err');
-        if (!connected) {
-          _startLocalTrackingSimulation(vehicleId, startLat, startLon, destLat, destLon);
-        }
-      }, onDone: () {
-        if (!connected) {
-          _startLocalTrackingSimulation(vehicleId, startLat, startLon, destLat, destLon);
-        } else {
-          _isTracking = false;
-          _trackedBusLocation = null;
+      _trackingChannel!.stream.listen(
+        (message) {
+          connected = true;
+          final data = json.decode(message);
+          _trackedBusLocation = data;
           notifyListeners();
-        }
-      });
+        },
+        onError: (err) {
+          debugPrint('Tracking socket error: $err');
+          if (!connected) {
+            _startLocalTrackingSimulation(
+              vehicleId,
+              startLat,
+              startLon,
+              destLat,
+              destLon,
+            );
+          }
+        },
+        onDone: () {
+          if (!connected) {
+            _startLocalTrackingSimulation(
+              vehicleId,
+              startLat,
+              startLon,
+              destLat,
+              destLon,
+            );
+          } else {
+            _isTracking = false;
+            _trackedBusLocation = null;
+            notifyListeners();
+          }
+        },
+      );
     } catch (e) {
-      debugPrint('WebSocket connection failed: $e. Starting simulation fallback.');
-      _startLocalTrackingSimulation(vehicleId, startLat, startLon, destLat, destLon);
+      debugPrint(
+        'WebSocket connection failed: $e. Starting simulation fallback.',
+      );
+      _startLocalTrackingSimulation(
+        vehicleId,
+        startLat,
+        startLon,
+        destLat,
+        destLon,
+      );
     }
   }
 
-  void _startLocalTrackingSimulation(String vehicleId, double startLat, double startLon, double destLat, double destLon) {
+  void _startLocalTrackingSimulation(
+    String vehicleId,
+    double startLat,
+    double startLon,
+    double destLat,
+    double destLon,
+  ) {
     _trackingTimer?.cancel();
     double currentLat = startLat;
     double currentLon = startLon;
@@ -971,7 +1164,8 @@ class AppState extends ChangeNotifier {
       currentLon += lonStep;
 
       // Reset to start if near destination
-      if ((currentLat - destLat).abs() < 0.02 && (currentLon - destLon).abs() < 0.02) {
+      if ((currentLat - destLat).abs() < 0.02 &&
+          (currentLon - destLon).abs() < 0.02) {
         currentLat = startLat;
         currentLon = startLon;
       }
@@ -1022,22 +1216,19 @@ class AppState extends ChangeNotifier {
         }
         startLat += 0.003;
         startLon += 0.002;
-        
+
         final payload = {
           'latitude': startLat,
           'longitude': startLon,
           'speed': 65.5,
-          'heading': 145.0
+          'heading': 145.0,
         };
 
         // Send to WebSocket
         _streamingChannel?.sink.add(json.encode(payload));
-        
+
         // Also update local tracking state in case passenger is on the same device
-        _trackedBusLocation = {
-          'vehicle_id': vehicleId,
-          ...payload
-        };
+        _trackedBusLocation = {'vehicle_id': vehicleId, ...payload};
         notifyListeners();
       });
     } else {
@@ -1059,22 +1250,23 @@ class AppState extends ChangeNotifier {
         }
       }
 
-      _positionStreamSubscription = Geolocator.getPositionStream(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          distanceFilter: 10,
-        ),
-      ).listen((Position position) {
-        final payload = {
-          'latitude': position.latitude,
-          'longitude': position.longitude,
-          'speed': position.speed * 3.6, // m/s to km/h
-          'heading': position.heading
-        };
+      _positionStreamSubscription =
+          Geolocator.getPositionStream(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              distanceFilter: 10,
+            ),
+          ).listen((Position position) {
+            final payload = {
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'speed': position.speed * 3.6, // m/s to km/h
+              'heading': position.heading,
+            };
 
-        _streamingChannel?.sink.add(json.encode(payload));
-        notifyListeners();
-      });
+            _streamingChannel?.sink.add(json.encode(payload));
+            notifyListeners();
+          });
     }
   }
 
@@ -1093,25 +1285,25 @@ class AppState extends ChangeNotifier {
 // =====================================================================
 class SeatyNotifications {
   static void show(
-    BuildContext context, 
+    BuildContext context,
     String message, {
-    bool isError = false, 
+    bool isError = false,
     bool isWarning = false,
     Duration duration = const Duration(seconds: 3),
   }) {
     ScaffoldMessenger.of(context).clearSnackBars();
-    
-    final Color bgColor = isError 
+
+    final Color bgColor = isError
         ? const Color(0xFFEF4444) // Soft Red
-        : isWarning 
-            ? const Color(0xFFF59E0B) // Amber/Orange
-            : const Color(0xFF10B981); // Emerald Green
-            
-    final IconData icon = isError 
-        ? Icons.error_outline_rounded 
-        : isWarning 
-            ? Icons.warning_amber_rounded 
-            : Icons.check_circle_outline_rounded;
+        : isWarning
+        ? const Color(0xFFF59E0B) // Amber/Orange
+        : const Color(0xFF10B981); // Emerald Green
+
+    final IconData icon = isError
+        ? Icons.error_outline_rounded
+        : isWarning
+        ? Icons.warning_amber_rounded
+        : Icons.check_circle_outline_rounded;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -1161,7 +1353,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void setupPushNotifications() async {
   final messaging = FirebaseMessaging.instance;
-  
+
   // Request permission for iOS/Android 13+
   final settings = await messaging.requestPermission(
     alert: true,
@@ -1172,9 +1364,9 @@ void setupPushNotifications() async {
     provisional: false,
     sound: true,
   );
-  
+
   debugPrint('User granted permission: ${settings.authorizationStatus}');
-  
+
   // Get FCM token
   try {
     final token = await messaging.getToken();
@@ -1182,7 +1374,7 @@ void setupPushNotifications() async {
   } catch (e) {
     debugPrint('Error getting FCM token: $e');
   }
-  
+
   // Listen to foreground messages
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     debugPrint('Got a message whilst in the foreground!');
@@ -1191,7 +1383,9 @@ void setupPushNotifications() async {
       if (context != null) {
         SeatyNotifications.show(
           context,
-          message.notification!.body ?? message.notification!.title ?? 'New Notification',
+          message.notification!.body ??
+              message.notification!.title ??
+              'New Notification',
           isWarning: false,
         );
       }
@@ -1209,11 +1403,7 @@ void main() async {
     debugPrint('Firebase initialization failed: $e');
   }
   globalPrefs = await SharedPreferences.getInstance();
-  runApp(
-    const ProviderScope(
-      child: SeatyApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: SeatyApp()));
 }
 
 class SeatyApp extends StatelessWidget {
@@ -1271,7 +1461,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
 
@@ -1334,9 +1525,16 @@ class AuthWrapper extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appStateProvider);
     if (!state.isAuthenticated) {
-      return const AuthScreen();
+      return const PhoneAuthScreen();
     }
-    return state.role == 'passenger' ? const PassengerMainScreen() : const OwnerMainScreen();
+    final userRole = state.role.toLowerCase();
+    if (userRole == 'owner') {
+      return const OwnerMainScreen();
+    } else if (userRole == 'conductor') {
+      return const ConductorMainScreen();
+    } else {
+      return const PassengerMainScreen();
+    }
   }
 }
 
@@ -1365,7 +1563,7 @@ class AuthScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 48),
-              
+
               const Text(
                 'Select Your Account Role',
                 style: TextStyle(
@@ -1380,7 +1578,7 @@ class AuthScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.grey, fontSize: 13),
               ),
               const SizedBox(height: 36),
-              
+
               // Role selection cards
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 380),
@@ -1392,11 +1590,16 @@ class AuthScreen extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const PhoneAuthScreen(role: 'passenger')),
+                            MaterialPageRoute(
+                              builder: (context) => const PhoneAuthScreen(),
+                            ),
                           );
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 8,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF4F6F9),
                             border: Border.all(color: Colors.black12),
@@ -1408,11 +1611,12 @@ class AuthScreen extends StatelessWidget {
                                 'assets/images/passenger_icon.png',
                                 height: 85,
                                 fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => const Icon(
-                                  Icons.directions_bus_rounded,
-                                  size: 48,
-                                  color: Color(0xFF0A2540),
-                                ),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                      Icons.directions_bus_rounded,
+                                      size: 48,
+                                      color: Color(0xFF0A2540),
+                                    ),
                               ),
                               const SizedBox(height: 12),
                               const Text(
@@ -1427,7 +1631,10 @@ class AuthScreen extends StatelessWidget {
                               const Text(
                                 'Book & track luxury buses',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 10, color: Colors.black54),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ],
                           ),
@@ -1435,17 +1642,22 @@ class AuthScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    // Conductor Card
+                    // Owner Card
                     Expanded(
                       child: InkWell(
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const PhoneAuthScreen(role: 'conductor')),
+                            MaterialPageRoute(
+                              builder: (context) => const PhoneAuthScreen(),
+                            ),
                           );
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 8,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF4F6F9),
                             border: Border.all(color: Colors.black12),
@@ -1457,15 +1669,16 @@ class AuthScreen extends StatelessWidget {
                                 'assets/images/owner_icon.png',
                                 height: 85,
                                 fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => const Icon(
-                                  Icons.airport_shuttle_rounded,
-                                  size: 48,
-                                  color: Color(0xFF0A2540),
-                                ),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Icon(
+                                      Icons.airport_shuttle_rounded,
+                                      size: 48,
+                                      color: Color(0xFF0A2540),
+                                    ),
                               ),
                               const SizedBox(height: 12),
                               const Text(
-                                'Conductor',
+                                'Owner',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
@@ -1476,7 +1689,10 @@ class AuthScreen extends StatelessWidget {
                               const Text(
                                 'Confirm & manage bookings',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 10, color: Colors.black54),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black54,
+                                ),
                               ),
                             ],
                           ),
@@ -1500,8 +1716,7 @@ class AuthScreen extends StatelessWidget {
 enum PhoneAuthState { enterPhone, register, verifyOtp }
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
-  final String role;
-  const PhoneAuthScreen({super.key, required this.role});
+  const PhoneAuthScreen({super.key});
 
   @override
   ConsumerState<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
@@ -1515,6 +1730,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   String _generatedOtp = '';
   bool _isNewUser = false;
   String _currentUserName = '';
+  String _dynamicRole = 'passenger';
 
   void _generateAndSendOtp(BuildContext context, String name, String phone) {
     final random = DateTime.now().millisecondsSinceEpoch % 1000000;
@@ -1558,27 +1774,32 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.chevron_left_rounded, color: Color(0xFF0A2540), size: 36),
-          onPressed: () {
-            FocusScope.of(context).unfocus();
-            if (_authState == PhoneAuthState.enterPhone) {
-              Navigator.pop(context);
-            } else if (_authState == PhoneAuthState.register) {
-              setState(() => _authState = PhoneAuthState.enterPhone);
-            } else if (_authState == PhoneAuthState.verifyOtp) {
-              if (_isNewUser) {
-                setState(() => _authState = PhoneAuthState.register);
-              } else {
-                setState(() => _authState = PhoneAuthState.enterPhone);
-              }
-            }
-          },
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      appBar: _authState == PhoneAuthState.enterPhone
+          ? null
+          : AppBar(
+              automaticallyImplyLeading: false,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.chevron_left_rounded,
+                  color: Color(0xFF0A2540),
+                  size: 36,
+                ),
+                onPressed: () {
+                  FocusScope.of(context).unfocus();
+                  if (_authState == PhoneAuthState.register) {
+                    setState(() => _authState = PhoneAuthState.enterPhone);
+                  } else if (_authState == PhoneAuthState.verifyOtp) {
+                    if (_isNewUser) {
+                      setState(() => _authState = PhoneAuthState.register);
+                    } else {
+                      setState(() => _authState = PhoneAuthState.enterPhone);
+                    }
+                  }
+                },
+              ),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+            ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28.0),
@@ -1608,9 +1829,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              widget.role == 'passenger' ? 'Passenger Login' : 'Conductor Login',
-              style: const TextStyle(
+            const Text(
+              'Welcome to Seaty',
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Color(0xFF0A2540),
@@ -1630,7 +1851,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               decoration: InputDecoration(
                 labelText: 'Mobile Number',
                 hintText: 'e.g. 0771234567',
-                prefixIcon: const Icon(Icons.phone_iphone_rounded, color: Color(0xFF0A2540)),
+                prefixIcon: const Icon(
+                  Icons.phone_iphone_rounded,
+                  color: Color(0xFF0A2540),
+                ),
                 filled: true,
                 fillColor: const Color(0xFFF4F6F9),
                 border: OutlineInputBorder(
@@ -1639,7 +1863,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFF0A2540), width: 1.5),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0A2540),
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -1648,16 +1875,25 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               onPressed: () async {
                 final phone = _phoneController.text.trim();
                 if (phone.length < 9) {
-                  SeatyNotifications.show(context, 'Please enter a valid mobile number.', isError: true);
+                  SeatyNotifications.show(
+                    context,
+                    'Please enter a valid mobile number.',
+                    isError: true,
+                  );
                   return;
                 }
 
                 // Show loading SnackBar or call API
-                SeatyNotifications.show(context, 'Verifying number...', duration: const Duration(milliseconds: 600));
+                SeatyNotifications.show(
+                  context,
+                  'Verifying number...',
+                  duration: const Duration(milliseconds: 600),
+                );
 
-                final checkResult = await state.checkPhoneDB(phone, widget.role);
+                final checkResult = await state.checkPhoneDB(phone);
                 final bool exists = checkResult['exists'] ?? false;
                 final String name = checkResult['name'] ?? 'Guest User';
+                _dynamicRole = checkResult['role'] ?? 'passenger';
 
                 if (exists) {
                   _isNewUser = false;
@@ -1665,16 +1901,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   _generateAndSendOtp(context, name, phone);
                   setState(() => _authState = PhoneAuthState.verifyOtp);
                 } else {
-                  if (widget.role == 'conductor') {
-                    SeatyNotifications.show(context, 'This number is not registered as a Conductor. Please contact the administrator.', isError: true);
-                  } else {
-                    FocusScope.of(context).unfocus();
-                    setState(() {
-                      _isNewUser = true;
-                      _nameController.clear();
-                      _authState = PhoneAuthState.register;
-                    });
-                  }
+                  FocusScope.of(context).unfocus();
+                  setState(() {
+                    _isNewUser = true;
+                    _dynamicRole = 'passenger';
+                    _nameController.clear();
+                    _authState = PhoneAuthState.register;
+                  });
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -1685,14 +1918,20 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Continue', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              child: const Text(
+                'Continue',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
             ),
-            if (widget.role == 'passenger') ...[
+            if (_dynamicRole == 'passenger') ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Don't have an account? ", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const Text(
+                    "Don't have an account? ",
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
                   TextButton(
                     onPressed: () {
                       FocusScope.of(context).unfocus();
@@ -1704,7 +1943,11 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                     },
                     child: const Text(
                       'Register Now',
-                      style: TextStyle(color: Color(0xFF0A2540), fontWeight: FontWeight.bold, fontSize: 13),
+                      style: TextStyle(
+                        color: Color(0xFF0A2540),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
                 ],
@@ -1750,7 +1993,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               decoration: InputDecoration(
                 labelText: 'Full Name',
                 hintText: 'Enter your full name',
-                prefixIcon: const Icon(Icons.person_rounded, color: Color(0xFF0A2540)),
+                prefixIcon: const Icon(
+                  Icons.person_rounded,
+                  color: Color(0xFF0A2540),
+                ),
                 filled: true,
                 fillColor: const Color(0xFFF4F6F9),
                 border: OutlineInputBorder(
@@ -1759,7 +2005,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFF0A2540), width: 1.5),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0A2540),
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -1770,7 +2019,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               style: const TextStyle(color: Colors.black87),
               decoration: InputDecoration(
                 labelText: 'Mobile Number',
-                prefixIcon: const Icon(Icons.phone_iphone_rounded, color: Color(0xFF0A2540)),
+                prefixIcon: const Icon(
+                  Icons.phone_iphone_rounded,
+                  color: Color(0xFF0A2540),
+                ),
                 filled: true,
                 fillColor: const Color(0xFFF4F6F9),
                 border: OutlineInputBorder(
@@ -1779,7 +2031,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFF0A2540), width: 1.5),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0A2540),
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -1789,19 +2044,32 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 final name = _nameController.text.trim();
                 final phone = _phoneController.text.trim();
                 if (name.isEmpty) {
-                  SeatyNotifications.show(context, 'Please enter your full name.', isError: true);
+                  SeatyNotifications.show(
+                    context,
+                    'Please enter your full name.',
+                    isError: true,
+                  );
                   return;
                 }
                 if (phone.length < 9) {
-                  SeatyNotifications.show(context, 'Please enter a valid mobile number.', isError: true);
+                  SeatyNotifications.show(
+                    context,
+                    'Please enter a valid mobile number.',
+                    isError: true,
+                  );
                   return;
                 }
 
                 FocusScope.of(context).unfocus();
                 // Show loading SnackBar or call API
-                SeatyNotifications.show(context, 'Creating account...', duration: const Duration(milliseconds: 600));
+                SeatyNotifications.show(
+                  context,
+                  'Creating account...',
+                  duration: const Duration(milliseconds: 600),
+                );
 
-                await state.registerPhoneDB(name, phone, widget.role);
+                _dynamicRole = 'passenger';
+                await state.registerPhoneDB(name, phone, 'passenger');
                 _isNewUser = true;
                 _currentUserName = name;
                 _generateAndSendOtp(context, name, phone);
@@ -1815,13 +2083,19 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Register & Verify', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              child: const Text(
+                'Register & Verify',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
             ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text("Already have an account? ", style: TextStyle(color: Colors.grey, fontSize: 13)),
+                const Text(
+                  "Already have an account? ",
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
                 TextButton(
                   onPressed: () {
                     FocusScope.of(context).unfocus();
@@ -1832,7 +2106,11 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   },
                   child: const Text(
                     'Login',
-                    style: TextStyle(color: Color(0xFF0A2540), fontWeight: FontWeight.bold, fontSize: 13),
+                    style: TextStyle(
+                      color: Color(0xFF0A2540),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
@@ -1873,12 +2151,20 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
             TextField(
               controller: _otpController,
               keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.black87, letterSpacing: 8, fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.black87,
+                letterSpacing: 8,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
               maxLength: 6,
               decoration: InputDecoration(
                 hintText: '••••••',
-                hintStyle: const TextStyle(letterSpacing: 8, color: Colors.grey),
+                hintStyle: const TextStyle(
+                  letterSpacing: 8,
+                  color: Colors.grey,
+                ),
                 counterText: '',
                 filled: true,
                 fillColor: const Color(0xFFF4F6F9),
@@ -1888,7 +2174,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(color: Color(0xFF0A2540), width: 1.5),
+                  borderSide: const BorderSide(
+                    color: Color(0xFF0A2540),
+                    width: 1.5,
+                  ),
                 ),
               ),
             ),
@@ -1897,16 +2186,20 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               onPressed: () {
                 final otp = _otpController.text.trim();
                 if (otp != _generatedOtp) {
-                  SeatyNotifications.show(context, 'Invalid verification code. Please check the SMS.', isError: true);
+                  SeatyNotifications.show(
+                    context,
+                    'Invalid verification code. Please check the SMS.',
+                    isError: true,
+                  );
                   return;
                 }
 
                 final phone = _phoneController.text.trim();
-                final name = _currentUserName.isNotEmpty ? _currentUserName : 'User';
-                state.login(name, widget.role, phone);
-                
+                final name = _currentUserName.isNotEmpty
+                    ? _currentUserName
+                    : 'User';
+                state.login(name, _dynamicRole, phone);
                 _otpController.clear();
-                Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0A2540),
@@ -1916,21 +2209,29 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Verify & Login', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              child: const Text(
+                'Verify & Login',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
             ),
             const SizedBox(height: 16),
             TextButton(
               onPressed: () {
                 final phone = _phoneController.text.trim();
-                final name = _currentUserName.isNotEmpty ? _currentUserName : 'User';
+                final name = _currentUserName.isNotEmpty
+                    ? _currentUserName
+                    : 'User';
                 _generateAndSendOtp(context, name, phone);
                 SeatyNotifications.show(context, 'A new OTP has been sent.');
               },
               child: const Text(
                 'Resend Code',
-                style: TextStyle(color: Color(0xFF0A2540), fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Color(0xFF0A2540),
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            )
+            ),
           ],
         );
     }
@@ -1944,7 +2245,8 @@ class PassengerMainScreen extends ConsumerStatefulWidget {
   const PassengerMainScreen({super.key});
 
   @override
-  ConsumerState<PassengerMainScreen> createState() => _PassengerMainScreenState();
+  ConsumerState<PassengerMainScreen> createState() =>
+      _PassengerMainScreenState();
 }
 
 class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
@@ -1960,7 +2262,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    
+
     return Scaffold(
       backgroundColor: Colors.white,
       extendBody: true, // Let content scroll behind the floating capsule
@@ -1991,15 +2293,35 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
-          _buildNavItem(1, Icons.near_me_outlined, Icons.near_me_rounded, 'Tracker'),
-          _buildNavItem(2, Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Tickets'),
-          _buildNavItem(3, Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
+          _buildNavItem(
+            1,
+            Icons.near_me_outlined,
+            Icons.near_me_rounded,
+            'Tracker',
+          ),
+          _buildNavItem(
+            2,
+            Icons.receipt_long_outlined,
+            Icons.receipt_long_rounded,
+            'Tickets',
+          ),
+          _buildNavItem(
+            3,
+            Icons.person_outline_rounded,
+            Icons.person_rounded,
+            'Profile',
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData outlineIcon, IconData solidIcon, String label) {
+  Widget _buildNavItem(
+    int index,
+    IconData outlineIcon,
+    IconData solidIcon,
+    String label,
+  ) {
     final isSelected = _currentIndex == index;
     final activeColor = Colors.white;
     final activeBgColor = const Color(0xFFE65100); // Matte Orange
@@ -2011,7 +2333,10 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOutQuint,
-        padding: EdgeInsets.symmetric(horizontal: isSelected ? 16 : 12, vertical: 12),
+        padding: EdgeInsets.symmetric(
+          horizontal: isSelected ? 16 : 12,
+          vertical: 12,
+        ),
         decoration: BoxDecoration(
           color: isSelected ? activeBgColor : Colors.transparent,
           borderRadius: BorderRadius.circular(24),
@@ -2055,7 +2380,8 @@ class PassengerTripsTab extends ConsumerStatefulWidget {
   ConsumerState<PassengerTripsTab> createState() => _PassengerTripsTabState();
 }
 
-class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with WidgetsBindingObserver {
+class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
+    with WidgetsBindingObserver {
   String _selectedFrom = 'All';
   String _selectedTo = 'All';
   DateTime? _selectedDate;
@@ -2093,19 +2419,23 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
   }
 
   void _initVideoBackground() {
-    _videoController = VideoPlayerController.asset(
-      'assets/videos/bg_travel.mp4',
-      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-    )..initialize().then((_) {
-        if (mounted) {
-          setState(() {});
-          _videoController?.setLooping(true);
-          _videoController?.setVolume(0.0);
-          _videoController?.play();
-        }
-      }).catchError((e) {
-        debugPrint('Error loading bg video: $e');
-      });
+    _videoController =
+        VideoPlayerController.asset(
+            'assets/videos/bg_travel.mp4',
+            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+          )
+          ..initialize()
+              .then((_) {
+                if (mounted) {
+                  setState(() {});
+                  _videoController?.setLooping(true);
+                  _videoController?.setVolume(0.0);
+                  _videoController?.play();
+                }
+              })
+              .catchError((e) {
+                debugPrint('Error loading bg video: $e');
+              });
   }
 
   void _onFocusChange() {
@@ -2160,10 +2490,19 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
     Icons.place_rounded,
   ];
 
-  List<Map<String, dynamic>> _getDestinations(List<Map<String, dynamic>> trips) {
-    final topDestinations = ['Colombo', 'Kandy', 'Galle', 'Ella', 'Trincomalee', 'Anuradhapura'];
+  List<Map<String, dynamic>> _getDestinations(
+    List<Map<String, dynamic>> trips,
+  ) {
+    final topDestinations = [
+      'Colombo',
+      'Kandy',
+      'Galle',
+      'Ella',
+      'Trincomalee',
+      'Anuradhapura',
+    ];
     final result = <Map<String, dynamic>>[];
-    
+
     for (int i = 0; i < topDestinations.length; i++) {
       final idx = i % _colorPalette.length;
       result.add({
@@ -2171,7 +2510,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
         'color1': _colorPalette[idx][0],
         'color2': _colorPalette[idx][1],
         'icon': _iconPool[idx % _iconPool.length],
-        'asset': 'assets/images/destinations/${topDestinations[i].toLowerCase()}.jpg',
+        'asset':
+            'assets/images/destinations/${topDestinations[i].toLowerCase()}.jpg',
       });
     }
     return result;
@@ -2180,13 +2520,15 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    final headerContentColor = Color.lerp(Colors.white, Colors.black, _headerOpacity) ?? Colors.white;
+    final headerContentColor =
+        Color.lerp(Colors.white, Colors.black, _headerOpacity) ?? Colors.white;
 
     final allTrips = state.trips;
     final Set<String> placesSet = {'All'};
     for (final trip in allTrips) {
       if (trip['origin'] != null) placesSet.add(trip['origin'].toString());
-      if (trip['destination'] != null) placesSet.add(trip['destination'].toString());
+      if (trip['destination'] != null)
+        placesSet.add(trip['destination'].toString());
       final routeObj = trip['route'];
       if (routeObj != null && routeObj['stops'] != null) {
         for (final stop in routeObj['stops'] as List<dynamic>) {
@@ -2195,15 +2537,18 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
         }
       }
     }
-    final List<String> allPlaces = placesSet.toList()..sort((a, b) {
-      if (a == 'All') return -1;
-      if (b == 'All') return 1;
-      return a.compareTo(b);
-    });
+    final List<String> allPlaces = placesSet.toList()
+      ..sort((a, b) {
+        if (a == 'All') return -1;
+        if (b == 'All') return 1;
+        return a.compareTo(b);
+      });
 
     final filteredTrips = state.trips.where((trip) {
-      final hasFrom = _selectedFrom.isNotEmpty && _selectedFrom.toLowerCase() != 'all';
-      final hasTo = _selectedTo.isNotEmpty && _selectedTo.toLowerCase() != 'all';
+      final hasFrom =
+          _selectedFrom.isNotEmpty && _selectedFrom.toLowerCase() != 'all';
+      final hasTo =
+          _selectedTo.isNotEmpty && _selectedTo.toLowerCase() != 'all';
       final hasDate = _selectedDate != null;
       if (!hasFrom && !hasTo && !hasDate) return true;
 
@@ -2215,7 +2560,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
         final normDest = trip['destination']?.toString().toLowerCase() ?? '';
 
         if (normOrigin.contains(normSearch)) return -1;
-        
+
         // Check intermediate stops if route details are present
         final routeObj = trip['route'];
         if (routeObj != null && routeObj['stops'] != null) {
@@ -2227,7 +2572,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
             }
           }
         }
-        
+
         if (normDest.contains(normSearch)) return 100000;
         return null;
       }
@@ -2258,8 +2603,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
         final departureStr = trip['departure']?.toString() ?? '';
         if (departureStr.isNotEmpty) {
           try {
-            final datePart = departureStr.split(' ')[0].trim(); // e.g., '2026-07-13'
-            final selectedDateStr = "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
+            final datePart = departureStr
+                .split(' ')[0]
+                .trim(); // e.g., '2026-07-13'
+            final selectedDateStr =
+                "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}";
             if (datePart != selectedDateStr) {
               match = false;
             }
@@ -2285,322 +2633,439 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
               child: Stack(
                 children: [
                   // Background Video Player / Fallback Gradient
-              SizedBox(
-                height: 320,
-                width: double.infinity,
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      if (_videoController != null && _videoController!.value.isInitialized)
-                        FittedBox(
-                          fit: BoxFit.cover,
-                          child: SizedBox(
-                            width: _videoController!.value.size.width,
-                            height: _videoController!.value.size.height,
-                            child: VideoPlayer(_videoController!),
-                          ),
-                        )
-                      else
-                        Container(
-                          decoration: const BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                            ),
-                          ),
-                        ),
-                      // Dark overlay to ensure text readability over the video
-                      Container(
-                        color: Colors.black.withOpacity(0.4),
+                  SizedBox(
+                    height: 320,
+                    width: double.infinity,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(32),
+                        bottomRight: Radius.circular(32),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              // Content
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Spacer for sticky header
-                      const SizedBox(height: 64),
-                      const SizedBox(height: 12),
-                      // Greeting + Search prompt
-                      Text(
-                        'Hello, ${state.userName} 👋',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.7)),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Where are you\ntraveling today?',
-                        style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: Colors.white, height: 1.1, letterSpacing: -1),
-                      ),
-                      const SizedBox(height: 32),
-                      
-                      // Glassmorphic Search Bar
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A).withOpacity(0.85),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white.withOpacity(0.15)),
-                            ),
-                            child: Column(
-                              children: [
-                                _buildGlassField(
-                                  icon: Icons.my_location_rounded,
-                                  label: 'From',
-                                  controller: _fromController,
-                                  focusNode: _fromFocusNode,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _selectedFrom = val;
-                                    });
-                                  },
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (_videoController != null &&
+                              _videoController!.value.isInitialized)
+                            FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: _videoController!.value.size.width,
+                                height: _videoController!.value.size.height,
+                                child: VideoPlayer(_videoController!),
+                              ),
+                            )
+                          else
+                            Container(
+                              decoration: const BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFF0F172A),
+                                    Color(0xFF1E293B),
+                                  ],
                                 ),
-                                if (_fromFocusNode.hasFocus)
-                                  _buildSuggestionsList(
-                                    query: _selectedFrom,
-                                    places: allPlaces,
-                                    onSelected: (val) {
-                                      setState(() {
-                                        _selectedFrom = val;
-                                        _fromController.text = val;
-                                        _fromFocusNode.unfocus();
-                                      });
-                                    },
+                              ),
+                            ),
+                          // Dark overlay to ensure text readability over the video
+                          Container(color: Colors.black.withOpacity(0.4)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Content
+                  SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Spacer for sticky header
+                          const SizedBox(height: 64),
+                          const SizedBox(height: 12),
+                          // Greeting + Search prompt
+                          Text(
+                            'Hello, ${state.userName} 👋',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Where are you\ntraveling today?',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                              letterSpacing: -1,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+
+                          // Glassmorphic Search Bar
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF0F172A,
+                                  ).withOpacity(0.85),
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.15),
                                   ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  child: Row(
-                                    children: [
-                                      const SizedBox(width: 20),
-                                      Expanded(
-                                        child: Container(height: 1, color: Colors.white.withOpacity(0.1)),
-                                      ),
-                                      GestureDetector(
-                                        onTap: () {
+                                ),
+                                child: Column(
+                                  children: [
+                                    _buildGlassField(
+                                      icon: Icons.my_location_rounded,
+                                      label: 'From',
+                                      controller: _fromController,
+                                      focusNode: _fromFocusNode,
+                                      onChanged: (val) {
+                                        setState(() {
+                                          _selectedFrom = val;
+                                        });
+                                      },
+                                    ),
+                                    if (_fromFocusNode.hasFocus)
+                                      _buildSuggestionsList(
+                                        query: _selectedFrom,
+                                        places: allPlaces,
+                                        onSelected: (val) {
                                           setState(() {
-                                            final temp = _selectedFrom;
-                                            _selectedFrom = _selectedTo;
-                                            _selectedTo = temp;
-                                            _fromController.text = _selectedFrom;
-                                            _toController.text = _selectedTo;
+                                            _selectedFrom = val;
+                                            _fromController.text = val;
+                                            _fromFocusNode.unfocus();
                                           });
                                         },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(6),
-                                          margin: const EdgeInsets.symmetric(horizontal: 12),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFE65100),
-                                            shape: BoxShape.circle,
-                                            boxShadow: [
-                                              BoxShadow(color: const Color(0xFFE65100).withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 4)),
-                                            ],
-                                          ),
-                                          child: const Icon(Icons.swap_vert_rounded, size: 16, color: Colors.white),
-                                        ),
                                       ),
-                                      Expanded(
-                                        child: Container(height: 1, color: Colors.white.withOpacity(0.1)),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                _buildGlassField(
-                                  icon: Icons.location_on_rounded,
-                                  label: 'To',
-                                  controller: _toController,
-                                  focusNode: _toFocusNode,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _selectedTo = val;
-                                    });
-                                  },
-                                ),
-                                if (_toFocusNode.hasFocus)
-                                  _buildSuggestionsList(
-                                    query: _selectedTo,
-                                    places: allPlaces,
-                                    onSelected: (val) {
-                                      setState(() {
-                                        _selectedTo = val;
-                                        _toController.text = val;
-                                        _toFocusNode.unfocus();
-                                      });
-                                    },
-                                  ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  child: Container(height: 1, color: Colors.white.withOpacity(0.1)),
-                                ),
-                                _buildGlassDateField(
-                                  icon: Icons.calendar_today_rounded,
-                                  label: 'Departure Date',
-                                  controller: _dateController,
-                                  onTap: () async {
-                                    final DateTime? picked = await showDatePicker(
-                                      context: context,
-                                      initialDate: _selectedDate ?? DateTime.now(),
-                                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-                                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                                      builder: (context, child) {
-                                        return Theme(
-                                          data: Theme.of(context).copyWith(
-                                            colorScheme: const ColorScheme.dark(
-                                              primary: Color(0xFFE65100),
-                                              onPrimary: Colors.white,
-                                              surface: Color(0xFF0F172A),
-                                              onSurface: Colors.white,
+                                      child: Row(
+                                        children: [
+                                          const SizedBox(width: 20),
+                                          Expanded(
+                                            child: Container(
+                                              height: 1,
+                                              color: Colors.white.withOpacity(
+                                                0.1,
+                                              ),
                                             ),
-                                            dialogBackgroundColor: const Color(0xFF0F172A),
                                           ),
-                                          child: child!,
-                                        );
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                final temp = _selectedFrom;
+                                                _selectedFrom = _selectedTo;
+                                                _selectedTo = temp;
+                                                _fromController.text =
+                                                    _selectedFrom;
+                                                _toController.text =
+                                                    _selectedTo;
+                                              });
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(6),
+                                              margin:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 12,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFE65100),
+                                                shape: BoxShape.circle,
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: const Color(
+                                                      0xFFE65100,
+                                                    ).withOpacity(0.4),
+                                                    blurRadius: 8,
+                                                    offset: const Offset(0, 4),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: const Icon(
+                                                Icons.swap_vert_rounded,
+                                                size: 16,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: Container(
+                                              height: 1,
+                                              color: Colors.white.withOpacity(
+                                                0.1,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    _buildGlassField(
+                                      icon: Icons.location_on_rounded,
+                                      label: 'To',
+                                      controller: _toController,
+                                      focusNode: _toFocusNode,
+                                      onChanged: (val) {
+                                        setState(() {
+                                          _selectedTo = val;
+                                        });
                                       },
-                                    );
-                                    if (picked != null) {
-                                      setState(() {
-                                        _selectedDate = picked;
-                                        _dateController.text = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                      });
-                                    }
-                                  },
-                                  onClear: () {
-                                    setState(() {
-                                      _selectedDate = null;
-                                      _dateController.text = 'All Dates';
-                                    });
-                                  },
+                                    ),
+                                    if (_toFocusNode.hasFocus)
+                                      _buildSuggestionsList(
+                                        query: _selectedTo,
+                                        places: allPlaces,
+                                        onSelected: (val) {
+                                          setState(() {
+                                            _selectedTo = val;
+                                            _toController.text = val;
+                                            _toFocusNode.unfocus();
+                                          });
+                                        },
+                                      ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 8,
+                                      ),
+                                      child: Container(
+                                        height: 1,
+                                        color: Colors.white.withOpacity(0.1),
+                                      ),
+                                    ),
+                                    _buildGlassDateField(
+                                      icon: Icons.calendar_today_rounded,
+                                      label: 'Departure Date',
+                                      controller: _dateController,
+                                      onTap: () async {
+                                        final DateTime?
+                                        picked = await showDatePicker(
+                                          context: context,
+                                          initialDate:
+                                              _selectedDate ?? DateTime.now(),
+                                          firstDate: DateTime.now().subtract(
+                                            const Duration(days: 365),
+                                          ),
+                                          lastDate: DateTime.now().add(
+                                            const Duration(days: 365),
+                                          ),
+                                          builder: (context, child) {
+                                            return Theme(
+                                              data: Theme.of(context).copyWith(
+                                                colorScheme:
+                                                    const ColorScheme.dark(
+                                                      primary: Color(
+                                                        0xFFE65100,
+                                                      ),
+                                                      onPrimary: Colors.white,
+                                                      surface: Color(
+                                                        0xFF0F172A,
+                                                      ),
+                                                      onSurface: Colors.white,
+                                                    ),
+                                                dialogBackgroundColor:
+                                                    const Color(0xFF0F172A),
+                                              ),
+                                              child: child!,
+                                            );
+                                          },
+                                        );
+                                        if (picked != null) {
+                                          setState(() {
+                                            _selectedDate = picked;
+                                            _dateController.text =
+                                                "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                          });
+                                        }
+                                      },
+                                      onClear: () {
+                                        setState(() {
+                                          _selectedDate = null;
+                                          _dateController.text = 'All Dates';
+                                        });
+                                      },
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // ─── Popular Destinations Carousel ───
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 32, bottom: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    'Popular Destinations',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: -0.5),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 140,
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(context).copyWith(
-                      dragDevices: {
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.mouse,
-                        PointerDeviceKind.trackpad,
-                      },
-                    ),
-                    child: ListView.builder(
-                      physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemBuilder: (context, index) {
-                        final destinations = _getDestinations(state.trips);
-                        if (index == 0) {
-                          final isSelected = _selectedTo == 'All';
-                          return _buildDestinationCard('All', 'Everywhere', 0xFFF1F5F9, 0xFFE2E8F0, isSelected, true);
-                        }
-                        if (destinations.isEmpty) return const SizedBox.shrink();
-                        final dest = destinations[index - 1];
-                        final isSelected = _selectedTo == dest['name'];
-                        return _buildDestinationCard(dest['name'] as String, 'Explore', dest['color1'] as int, dest['color2'] as int, isSelected, false, icon: dest['icon'] as IconData, assetImage: dest['asset'] as String);
-                      },
-                      itemCount: _getDestinations(state.trips).length + 1,
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // ─── Ride Results Title ───
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${filteredTrips.length} Rides Found',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: -0.5),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // ─── Floating Neumorphic Trip Cards ───
-        if (filteredTrips.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 100, height: 100,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 20)],
-                    ),
-                    child: const Icon(Icons.search_off_rounded, size: 40, color: Color(0xFFCBD5E1)),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text('No rides found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                  const SizedBox(height: 8),
-                  const Text('Try adjusting your search criteria', style: TextStyle(color: Color(0xFF64748B))),
                 ],
               ),
             ),
-          )
-        else
-          SliverPadding(
-            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 120),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return _buildModernTripCard(context, filteredTrips[index]);
-                },
-                childCount: filteredTrips.length,
+
+            // ─── Popular Destinations Carousel ───
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 32, bottom: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        'Popular Destinations',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 140,
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(
+                          dragDevices: {
+                            PointerDeviceKind.touch,
+                            PointerDeviceKind.mouse,
+                            PointerDeviceKind.trackpad,
+                          },
+                        ),
+                        child: ListView.builder(
+                          physics: const BouncingScrollPhysics(
+                            parent: AlwaysScrollableScrollPhysics(),
+                          ),
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemBuilder: (context, index) {
+                            final destinations = _getDestinations(state.trips);
+                            if (index == 0) {
+                              final isSelected = _selectedTo == 'All';
+                              return _buildDestinationCard(
+                                'All',
+                                'Everywhere',
+                                0xFFF1F5F9,
+                                0xFFE2E8F0,
+                                isSelected,
+                                true,
+                              );
+                            }
+                            if (destinations.isEmpty)
+                              return const SizedBox.shrink();
+                            final dest = destinations[index - 1];
+                            final isSelected = _selectedTo == dest['name'];
+                            return _buildDestinationCard(
+                              dest['name'] as String,
+                              'Explore',
+                              dest['color1'] as int,
+                              dest['color2'] as int,
+                              isSelected,
+                              false,
+                              icon: dest['icon'] as IconData,
+                              assetImage: dest['asset'] as String,
+                            );
+                          },
+                          itemCount: _getDestinations(state.trips).length + 1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+
+            // ─── Ride Results Title ───
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '${filteredTrips.length} Rides Found',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF0F172A),
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ─── Floating Neumorphic Trip Cards ───
+            if (filteredTrips.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.02),
+                              blurRadius: 20,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.search_off_rounded,
+                          size: 40,
+                          color: Color(0xFFCBD5E1),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'No rides found',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Try adjusting your search criteria',
+                        style: TextStyle(color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  bottom: 120,
+                ),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate((context, index) {
+                    return _buildModernTripCard(context, filteredTrips[index]);
+                  }, childCount: filteredTrips.length),
+                ),
+              ),
           ],
         ),
         // Sticky Header with content-color scroll transition
@@ -2613,7 +3078,10 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -2626,22 +3094,27 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                           height: 28,
                           color: headerContentColor,
                           fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE65100),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(Icons.directions_bus_rounded, color: headerContentColor, size: 16),
-                          ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE65100),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.directions_bus_rounded,
+                                  color: headerContentColor,
+                                  size: 16,
+                                ),
+                              ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Seaty',
                           style: TextStyle(
-                            fontSize: 20, 
-                            fontWeight: FontWeight.w900, 
-                            color: headerContentColor, 
+                            fontSize: 20,
+                            fontWeight: FontWeight.w900,
+                            color: headerContentColor,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -2655,11 +3128,18 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                             IconButton(
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
-                              icon: Icon(Icons.notifications_outlined, color: headerContentColor, size: 24),
+                              icon: Icon(
+                                Icons.notifications_outlined,
+                                color: headerContentColor,
+                                size: 24,
+                              ),
                               onPressed: () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const NotificationsScreen(),
+                                  ),
                                 );
                               },
                             ),
@@ -2717,19 +3197,34 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.6))),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white.withOpacity(0.6),
+                ),
+              ),
               const SizedBox(height: 4),
               TextField(
                 controller: controller,
                 focusNode: focusNode,
                 onChanged: onChanged,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
                 decoration: InputDecoration(
                   border: InputBorder.none,
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(vertical: 6),
                   hintText: 'Type place...',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 16, fontWeight: FontWeight.bold),
+                  hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.3),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -2757,14 +3252,25 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.6))),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withOpacity(0.6),
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     Expanded(
                       child: Text(
                         controller.text,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     if (controller.text != 'All Dates')
@@ -2772,10 +3278,18 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                         onTap: () {
                           onClear();
                         },
-                        child: Icon(Icons.close_rounded, color: Colors.white.withOpacity(0.6), size: 18),
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: Colors.white.withOpacity(0.6),
+                          size: 18,
+                        ),
                       )
                     else
-                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white.withOpacity(0.5), size: 20),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white.withOpacity(0.5),
+                        size: 20,
+                      ),
                   ],
                 ),
               ],
@@ -2818,10 +3332,17 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
               behavior: HitTestBehavior.opaque,
               onTapDown: (_) => onSelected(place),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
-                    const Icon(Icons.location_on_outlined, color: Colors.white70, size: 18),
+                    const Icon(
+                      Icons.location_on_outlined,
+                      color: Colors.white70,
+                      size: 18,
+                    ),
                     const SizedBox(width: 12),
                     Text(
                       place,
@@ -2841,24 +3362,41 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
     );
   }
 
-  Widget _buildDestinationCard(String name, String subtitle, int color1, int color2, bool isSelected, bool isLight, {IconData? icon, String? assetImage}) {
+  Widget _buildDestinationCard(
+    String name,
+    String subtitle,
+    int color1,
+    int color2,
+    bool isSelected,
+    bool isLight, {
+    IconData? icon,
+    String? assetImage,
+  }) {
     // City-specific icon mapping
-    final IconData cardIcon = icon ?? (isLight ? Icons.directions_bus_rounded : Icons.place_rounded);
-    
+    final IconData cardIcon =
+        icon ?? (isLight ? Icons.directions_bus_rounded : Icons.place_rounded);
+
     ImageProvider imgProvider;
     if (assetImage != null) {
       imgProvider = AssetImage(assetImage);
     } else {
-      final String cleanName = name.replaceAll(RegExp(r'[^a-zA-Z]'), '').toLowerCase();
-      imgProvider = NetworkImage(name == 'All'
-          ? 'https://loremflickr.com/400/400/srilanka,travel/all?lock=100'
-          : 'https://loremflickr.com/400/400/$cleanName,srilanka/all?lock=${cleanName.hashCode.abs()}');
+      final String cleanName = name
+          .replaceAll(RegExp(r'[^a-zA-Z]'), '')
+          .toLowerCase();
+      imgProvider = NetworkImage(
+        name == 'All'
+            ? 'https://loremflickr.com/400/400/srilanka,travel/all?lock=100'
+            : 'https://loremflickr.com/400/400/$cleanName,srilanka/all?lock=${cleanName.hashCode.abs()}',
+      );
     }
 
     final DecorationImage bgImage = DecorationImage(
       image: imgProvider,
       fit: BoxFit.cover,
-      colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.4), BlendMode.darken),
+      colorFilter: ColorFilter.mode(
+        Colors.black.withOpacity(0.4),
+        BlendMode.darken,
+      ),
     );
 
     return GestureDetector(
@@ -2881,12 +3419,25 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
               : null,
           image: bgImage,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: isSelected && isLight ? const Color(0xFFE65100) : Colors.transparent, width: 2),
+          border: Border.all(
+            color: isSelected && isLight
+                ? const Color(0xFFE65100)
+                : Colors.transparent,
+            width: 2,
+          ),
           boxShadow: [
             if (isSelected && !isLight)
-              BoxShadow(color: Color(color2).withOpacity(0.4), blurRadius: 16, offset: const Offset(0, 8))
+              BoxShadow(
+                color: Color(color2).withOpacity(0.4),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              )
             else
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
           ],
         ),
         child: Column(
@@ -2910,14 +3461,23 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
               subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10, color: isLight ? const Color(0xFF64748B) : Colors.white.withOpacity(0.7)),
+              style: TextStyle(
+                fontSize: 10,
+                color: isLight
+                    ? const Color(0xFF64748B)
+                    : Colors.white.withOpacity(0.7),
+              ),
             ),
             const SizedBox(height: 2),
             Text(
               name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: isLight ? const Color(0xFF0F172A) : Colors.white),
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isLight ? const Color(0xFF0F172A) : Colors.white,
+              ),
             ),
           ],
         ),
@@ -2931,17 +3491,33 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
 
     if (n.contains('wifi')) {
       iconData = Icons.wifi_rounded;
-    } else if (n.contains('charge') || n.contains('charging') || n.contains('plug') || n.contains('outlet')) {
+    } else if (n.contains('charge') ||
+        n.contains('charging') ||
+        n.contains('plug') ||
+        n.contains('outlet')) {
       iconData = Icons.power_rounded;
-    } else if (n.contains('tv') || n.contains('screen') || n.contains('video') || n.contains('hd tv')) {
+    } else if (n.contains('tv') ||
+        n.contains('screen') ||
+        n.contains('video') ||
+        n.contains('hd tv')) {
       iconData = Icons.tv_rounded;
-    } else if (n.contains('seat') || n.contains('recline') || n.contains('reclining')) {
+    } else if (n.contains('seat') ||
+        n.contains('recline') ||
+        n.contains('reclining')) {
       iconData = Icons.chair_rounded;
-    } else if (n.contains('restroom') || n.contains('toilet') || n.contains('wc')) {
+    } else if (n.contains('restroom') ||
+        n.contains('toilet') ||
+        n.contains('wc')) {
       iconData = Icons.wc_rounded;
-    } else if (n.contains('luggage') || n.contains('baggage') || n.contains('bag') || n.contains('space')) {
+    } else if (n.contains('luggage') ||
+        n.contains('baggage') ||
+        n.contains('bag') ||
+        n.contains('space')) {
       iconData = Icons.work_rounded;
-    } else if (n.contains('ac') || n.contains('air') || n.contains('cool') || n.contains('snowflake')) {
+    } else if (n.contains('ac') ||
+        n.contains('air') ||
+        n.contains('cool') ||
+        n.contains('snowflake')) {
       iconData = Icons.ac_unit_rounded;
     }
 
@@ -2949,7 +3525,9 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
   }
 
   Widget _buildModernTripCard(BuildContext context, Map<String, dynamic> trip) {
-    final String priceStr = double.tryParse(trip['price'].toString())?.toStringAsFixed(0) ?? trip['price'].toString();
+    final String priceStr =
+        double.tryParse(trip['price'].toString())?.toStringAsFixed(0) ??
+        trip['price'].toString();
     final int totalSeats = trip['total_seats'] as int? ?? 40;
     final int bookedCount = (trip['boarded_seats'] as List?)?.length ?? 0;
     final int seatsLeft = totalSeats - bookedCount;
@@ -2984,10 +3562,16 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0A2540).withValues(alpha: 0.06),
+                            color: const Color(
+                              0xFF0A2540,
+                            ).withValues(alpha: 0.06),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.directions_bus_rounded, color: Color(0xFF0A2540), size: 18),
+                          child: const Icon(
+                            Icons.directions_bus_rounded,
+                            color: Color(0xFF0A2540),
+                            size: 18,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Column(
@@ -3006,7 +3590,9 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                               trip['reg'],
                               style: TextStyle(
                                 fontSize: 10,
-                                color: const Color(0xFF0A2540).withValues(alpha: 0.5),
+                                color: const Color(
+                                  0xFF0A2540,
+                                ).withValues(alpha: 0.5),
                                 fontFamily: 'monospace',
                                 fontWeight: FontWeight.bold,
                               ),
@@ -3016,7 +3602,10 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                       ],
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFE65100),
                         borderRadius: BorderRadius.circular(8),
@@ -3047,7 +3636,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(Icons.east_rounded, color: Color(0xFFE65100), size: 16),
+                    const Icon(
+                      Icons.east_rounded,
+                      color: Color(0xFFE65100),
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -3074,14 +3667,23 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                       children: [
                         // Time Tag
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                            color: const Color(
+                              0xFF0A2540,
+                            ).withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.schedule_rounded, size: 12, color: Color(0xFF0A2540)),
+                              const Icon(
+                                Icons.schedule_rounded,
+                                size: 12,
+                                color: Color(0xFF0A2540),
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 trip['departure'],
@@ -3097,14 +3699,23 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                         const SizedBox(width: 6),
                         // Seats Left Tag
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                            color: const Color(
+                              0xFF0A2540,
+                            ).withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.event_seat_rounded, size: 12, color: Color(0xFF0A2540)),
+                              const Icon(
+                                Icons.event_seat_rounded,
+                                size: 12,
+                                color: Color(0xFF0A2540),
+                              ),
                               const SizedBox(width: 4),
                               Text(
                                 '$seatsLeft seats left',
@@ -3120,9 +3731,12 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                       ],
                     ),
                     // Amenities Icon Only Wrap (monochromatic gray)
-                    if (trip['amenities'] != null && (trip['amenities'] as List).isNotEmpty)
+                    if (trip['amenities'] != null &&
+                        (trip['amenities'] as List).isNotEmpty)
                       Row(
-                        children: (trip['amenities'] as List).map<Widget>((ame) {
+                        children: (trip['amenities'] as List).map<Widget>((
+                          ame,
+                        ) {
                           return Padding(
                             padding: const EdgeInsets.only(left: 6.0),
                             child: Tooltip(
@@ -3143,9 +3757,13 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(20),
+              ),
               border: Border(
-                top: BorderSide(color: const Color(0xFFE2E8F0).withValues(alpha: 0.6)),
+                top: BorderSide(
+                  color: const Color(0xFFE2E8F0).withValues(alpha: 0.6),
+                ),
               ),
             ),
             child: Row(
@@ -3153,7 +3771,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.verified_user_outlined, size: 14, color: Color(0xFF10B981)),
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 14,
+                      color: Color(0xFF10B981),
+                    ),
                     SizedBox(width: 4),
                     Text(
                       'Seaty Verified',
@@ -3169,21 +3791,31 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => BusDetailsScreen(trip: trip)),
+                      MaterialPageRoute(
+                        builder: (context) => BusDetailsScreen(trip: trip),
+                      ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF0A2540),
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: const Row(
                     children: [
                       Text(
                         'Book Seats',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       SizedBox(width: 4),
                       Icon(Icons.arrow_forward_rounded, size: 14),
@@ -3199,7 +3831,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab> with Widg
   }
 }
 
-
 // Seat Selector Screen
 class SeatSelectorScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> trip;
@@ -3209,7 +3840,8 @@ class SeatSelectorScreen extends ConsumerStatefulWidget {
   ConsumerState<SeatSelectorScreen> createState() => _SeatSelectorScreenState();
 }
 
-class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with TickerProviderStateMixin {
+class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
+    with TickerProviderStateMixin {
   bool _isLoading = true;
   bool _isBookingInProgress = false;
   late AnimationController _introController;
@@ -3225,13 +3857,22 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
       duration: const Duration(milliseconds: 1400),
     );
     _perspectiveAnimation = Tween<double>(begin: -0.7, end: 0.0).animate(
-      CurvedAnimation(parent: _introController, curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic)),
+      CurvedAnimation(
+        parent: _introController,
+        curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic),
+      ),
     );
     _scaleAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _introController, curve: const Interval(0.0, 0.85, curve: Curves.easeOutCubic)),
+      CurvedAnimation(
+        parent: _introController,
+        curve: const Interval(0.0, 0.85, curve: Curves.easeOutCubic),
+      ),
     );
     _slideAnimation = Tween<double>(begin: 350.0, end: 0.0).animate(
-      CurvedAnimation(parent: _introController, curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn)),
+      CurvedAnimation(
+        parent: _introController,
+        curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn),
+      ),
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -3257,15 +3898,25 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
     }
   }
 
-  void _handleConfirmAndBook(AppState state, Map<String, dynamic> passengerDetails) async {
+  void _handleConfirmAndBook(
+    AppState state,
+    Map<String, dynamic> passengerDetails,
+  ) async {
     setState(() => _isBookingInProgress = true);
-    
+
     // 1. Create booking (Pending)
-    final booking = await state.initiateBooking(widget.trip['id'].toString(), passengerDetails);
+    final booking = await state.initiateBooking(
+      widget.trip['id'].toString(),
+      passengerDetails,
+    );
     if (booking == null) {
       if (mounted) {
         setState(() => _isBookingInProgress = false);
-        SeatyNotifications.show(context, 'Failed to hold seats. They may have just been booked.', isError: true);
+        SeatyNotifications.show(
+          context,
+          'Failed to hold seats. They may have just been booked.',
+          isError: true,
+        );
       }
       return;
     }
@@ -3275,7 +3926,11 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
     if (payment == null) {
       if (mounted) {
         setState(() => _isBookingInProgress = false);
-        SeatyNotifications.show(context, 'Failed to initiate payment session.', isError: true);
+        SeatyNotifications.show(
+          context,
+          'Failed to initiate payment session.',
+          isError: true,
+        );
       }
       return;
     }
@@ -3301,11 +3956,13 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
     if (selectedSeats.isEmpty) return;
 
     String bookingFor = 'self'; // 'self' or 'other'
-    
+
     final nameController = TextEditingController(text: state.userName);
     final phoneController = TextEditingController(text: state.userPhone);
     final nicController = TextEditingController(text: state.userNic);
-    String primaryGender = state.selectedSeatGenders[selectedSeats.first] ?? (state.userGender.isEmpty ? 'Male' : state.userGender);
+    String primaryGender =
+        state.selectedSeatGenders[selectedSeats.first] ??
+        (state.userGender.isEmpty ? 'Male' : state.userGender);
 
     final Map<String, String> guestGenders = {};
     for (int i = 1; i < selectedSeats.length; i++) {
@@ -3326,7 +3983,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
         return StatefulBuilder(
           builder: (context, setModalState) {
             final isSelf = bookingFor == 'self';
-            
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,
@@ -3352,15 +4009,22 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                           ),
                         ),
                       ),
-                      
+
                       const Text(
                         'Passenger Details',
-                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         'Confirm details for your seat: ${selectedSeats.first}',
-                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 13),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.6),
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 20),
 
@@ -3369,7 +4033,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withOpacity(0.1)),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.1),
+                          ),
                         ),
                         child: Row(
                           children: [
@@ -3381,19 +4047,28 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                                     nameController.text = state.userName;
                                     phoneController.text = state.userPhone;
                                     nicController.text = state.userNic;
-                                    primaryGender = state.userGender.isEmpty ? 'Male' : state.userGender;
+                                    primaryGender = state.userGender.isEmpty
+                                        ? 'Male'
+                                        : state.userGender;
                                   });
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: isSelf ? const Color(0xFFE65100) : Colors.transparent,
+                                    color: isSelf
+                                        ? const Color(0xFFE65100)
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   alignment: Alignment.center,
                                   child: const Text(
                                     'For Me',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3410,15 +4085,22 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                                   });
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 10,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: !isSelf ? const Color(0xFFE65100) : Colors.transparent,
+                                    color: !isSelf
+                                        ? const Color(0xFFE65100)
+                                        : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   alignment: Alignment.center,
                                   child: const Text(
                                     'For Others',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -3432,8 +4114,13 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                       TextFormField(
                         controller: nameController,
                         style: const TextStyle(color: Colors.white),
-                        decoration: _buildInputDec('Enter passenger\'s full name', Icons.person_outline),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Name is required' : null,
+                        decoration: _buildInputDec(
+                          'Enter passenger\'s full name',
+                          Icons.person_outline,
+                        ),
+                        validator: (val) => val == null || val.trim().isEmpty
+                            ? 'Name is required'
+                            : null,
                       ),
                       const SizedBox(height: 16),
 
@@ -3442,8 +4129,13 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                         controller: phoneController,
                         keyboardType: TextInputType.phone,
                         style: const TextStyle(color: Colors.white),
-                        decoration: _buildInputDec('Enter phone number', Icons.phone_android_outlined),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Phone number is required' : null,
+                        decoration: _buildInputDec(
+                          'Enter phone number',
+                          Icons.phone_android_outlined,
+                        ),
+                        validator: (val) => val == null || val.trim().isEmpty
+                            ? 'Phone number is required'
+                            : null,
                       ),
                       const SizedBox(height: 16),
 
@@ -3451,8 +4143,13 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                       TextFormField(
                         controller: nicController,
                         style: const TextStyle(color: Colors.white),
-                        decoration: _buildInputDec('e.g. 199912345678 or 991234567V', Icons.badge_outlined),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'NIC is required' : null,
+                        decoration: _buildInputDec(
+                          'e.g. 199912345678 or 991234567V',
+                          Icons.badge_outlined,
+                        ),
+                        validator: (val) => val == null || val.trim().isEmpty
+                            ? 'NIC is required'
+                            : null,
                       ),
                       const SizedBox(height: 16),
 
@@ -3461,24 +4158,41 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                         value: primaryGender,
                         dropdownColor: const Color(0xFF0F172A),
                         borderRadius: BorderRadius.circular(16),
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                        decoration: _buildInputDec('Select Gender', Icons.face_outlined),
-                        items: ['Male', 'Female'].map((g) => DropdownMenuItem(
-                          value: g,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Text(g, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                          ),
-                        )).toList(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                        decoration: _buildInputDec(
+                          'Select Gender',
+                          Icons.face_outlined,
+                        ),
+                        items: ['Male', 'Female']
+                            .map(
+                              (g) => DropdownMenuItem(
+                                value: g,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4.0,
+                                  ),
+                                  child: Text(
+                                    g,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
                         onChanged: (val) {
                           if (val != null) {
                             setModalState(() => primaryGender = val);
                           }
                         },
                       ),
-                      
 
-                      
                       const SizedBox(height: 32),
 
                       SizedBox(
@@ -3487,7 +4201,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                         child: ElevatedButton(
                           onPressed: () {
                             if (!formKey.currentState!.validate()) return;
-                            
+
                             Navigator.pop(context);
 
                             final Map<String, dynamic> primaryDetails = {
@@ -3500,10 +4214,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
 
                             final List<Map<String, String>> guests = [];
                             guestGenders.forEach((seat, gender) {
-                              guests.add({
-                                'seat': seat,
-                                'gender': gender,
-                              });
+                              guests.add({'seat': seat, 'gender': gender});
                             });
 
                             final Map<String, dynamic> fullDetails = {
@@ -3516,9 +4227,17 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFE65100),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: const Text('Continue to Payment', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Continue to Payment',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -3537,7 +4256,11 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
       padding: const EdgeInsets.only(bottom: 6.0, left: 4.0),
       child: Text(
         label,
-        style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w500),
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }
@@ -3572,7 +4295,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -3581,28 +4304,50 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFFE65100)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFE65100)),
+            )
           : Column(
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12.0,
+                    horizontal: 16.0,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(widget.trip['bus_name'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      Text(widget.trip['reg'], style: const TextStyle(fontSize: 12, color: Colors.grey, fontFamily: 'monospace')),
+                      Text(
+                        widget.trip['bus_name'],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        widget.trip['reg'],
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const Divider(height: 1),
-                
+
                 // Legend Bar
                 Padding(
                   padding: const EdgeInsets.all(12.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      _buildLegendItem(const Color(0xFFF4F6F9), 'Available', border: Colors.black12),
+                      _buildLegendItem(
+                        const Color(0xFFF4F6F9),
+                        'Available',
+                        border: Colors.black12,
+                      ),
                       _buildLegendItem(const Color(0xFFE65100), 'Selected'),
                       _buildLegendItem(const Color(0xFF0F2C59), 'Male'),
                       _buildLegendItem(const Color(0xFFF472B6), 'Female'),
@@ -3610,11 +4355,13 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                     ],
                   ),
                 ),
-                
+
                 // Seat Grid with Cinematic 3D Fly-In Intro Animation (No scrolling, auto-fits one view)
                 Builder(
                   builder: (context) {
-                    final layout = widget.trip['seat_layout'] ?? {'rows': 10, 'columns': 4, 'aisle_after_column': 2};
+                    final layout =
+                        widget.trip['seat_layout'] ??
+                        {'rows': 10, 'columns': 4, 'aisle_after_column': 2};
                     final int rows = layout['rows'] ?? 10;
                     final int columns = layout['columns'] ?? 4;
                     final int aisleAfter = layout['aisle_after_column'] ?? 2;
@@ -3622,7 +4369,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                     return Expanded(
                       child: Container(
                         width: double.infinity,
-                        color: const Color(0xFFF1F5F9), // Light bus cabin floor color
+                        color: const Color(
+                          0xFFF1F5F9,
+                        ), // Light bus cabin floor color
                         child: AnimatedBuilder(
                           animation: _introController,
                           builder: (context, child) {
@@ -3639,40 +4388,61 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                             );
                           },
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 12,
+                            ),
                             child: LayoutBuilder(
                               builder: (context, constraints) {
                                 final double gridHeight = constraints.maxHeight;
                                 // We subtract cockpit height (approx 44px) + vertical margins/spacing (approx 16px)
-                                final double availableGridHeight = gridHeight - 60.0;
-                                final double rowHeight = (availableGridHeight / rows).clamp(32.0, 56.0);
-                                final double seatHeight = (rowHeight - 6.0).clamp(26.0, 48.0);
-                                final double seatWidth = (seatHeight * 1.35).clamp(42.0, 58.0);
+                                final double availableGridHeight =
+                                    gridHeight - 60.0;
+                                final double rowHeight =
+                                    (availableGridHeight / rows).clamp(
+                                      32.0,
+                                      56.0,
+                                    );
+                                final double seatHeight = (rowHeight - 6.0)
+                                    .clamp(26.0, 48.0);
+                                final double seatWidth = (seatHeight * 1.35)
+                                    .clamp(42.0, 58.0);
 
                                 return Column(
                                   children: [
                                     _buildCabinFront(),
                                     const SizedBox(height: 8),
                                     Expanded(
-                                      child: _buildFlatGrid(state, layout, rows, columns, aisleAfter, seatWidth, seatHeight),
+                                      child: _buildFlatGrid(
+                                        state,
+                                        layout,
+                                        rows,
+                                        columns,
+                                        aisleAfter,
+                                        seatWidth,
+                                        seatHeight,
+                                      ),
                                     ),
                                   ],
                                 );
-                              }
+                              },
                             ),
                           ),
                         ),
                       ),
                     );
-                  }
+                  },
                 ),
-                
+
                 // Checkout Info Bar
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: const BoxDecoration(
                     color: Color(0xFF0A2540),
-                    borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -3684,21 +4454,32 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                             child: SingleChildScrollView(
                               scrollDirection: Axis.horizontal,
                               child: Text(
-                                state.selectedSeats.isEmpty ? 'No seats selected' : 'Seats: ${state.selectedSeats.join(', ')}', 
-                                style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w500)
+                                state.selectedSeats.isEmpty
+                                    ? 'No seats selected'
+                                    : 'Seats: ${state.selectedSeats.join(', ')}',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 16),
                           Text(
                             'Rs. ${(widget.trip['price'] * state.selectedSeats.length).toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFE65100)),
-                          )
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFE65100),
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: (state.selectedSeats.isEmpty || _isBookingInProgress)
+                        onPressed:
+                            (state.selectedSeats.isEmpty ||
+                                _isBookingInProgress)
                             ? null
                             : () => _showPassengerDetailsSheet(context, state),
                         style: ElevatedButton.styleFrom(
@@ -3707,19 +4488,27 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                           disabledBackgroundColor: Colors.grey.shade800,
                           disabledForegroundColor: Colors.white30,
                           minimumSize: const Size.fromHeight(50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         child: _isBookingInProgress
                             ? const SizedBox(
                                 height: 20,
                                 width: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
                               )
-                            : const Text('Confirm & Book Seats', style: TextStyle(fontWeight: FontWeight.bold)),
-                      )
+                            : const Text(
+                                'Confirm & Book Seats',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                      ),
                     ],
                   ),
-                )
+                ),
               ],
             ),
     );
@@ -3733,10 +4522,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
         color: const Color(0xFF0A2540),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 8,
-          ),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
         ],
       ),
       child: Row(
@@ -3750,14 +4536,28 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                   color: Colors.white.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.circle_outlined, color: Colors.white, size: 20),
+                child: const Icon(
+                  Icons.circle_outlined,
+                  color: Colors.white,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 8),
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Cockpit Area', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                  Text('Driver Seat', style: TextStyle(color: Colors.white54, fontSize: 9)),
+                  Text(
+                    'Cockpit Area',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Driver Seat',
+                    style: TextStyle(color: Colors.white54, fontSize: 9),
+                  ),
                 ],
               ),
             ],
@@ -3770,13 +4570,25 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Icon(Icons.sensor_door_rounded, color: Colors.white54, size: 18),
+          const Icon(
+            Icons.sensor_door_rounded,
+            color: Colors.white54,
+            size: 18,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildFlatGrid(AppState state, Map<String, dynamic> layout, int rows, int columns, int aisleAfter, double seatWidth, double seatHeight) {
+  Widget _buildFlatGrid(
+    AppState state,
+    Map<String, dynamic> layout,
+    int rows,
+    int columns,
+    int aisleAfter,
+    double seatWidth,
+    double seatHeight,
+  ) {
     final List<dynamic>? customSeatsList = layout['seats'];
     final int gridColumns = aisleAfter > 0 ? columns + 1 : columns;
 
@@ -3792,9 +4604,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                   width: 20,
                   child: Center(
                     child: Icon(
-                      Icons.arrow_upward_rounded, 
-                      color: const Color(0xFF0A2540).withValues(alpha: 0.15), 
-                      size: 14
+                      Icons.arrow_upward_rounded,
+                      color: const Color(0xFF0A2540).withValues(alpha: 0.15),
+                      size: 14,
                     ),
                   ),
                 );
@@ -3816,12 +4628,14 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                 if (customSeat == null) return SizedBox(width: seatWidth);
               }
 
-              String seatLabel = customSeat != null ? customSeat['label'] : '${String.fromCharCode(65 + seatColIndex)}$row';
+              String seatLabel = customSeat != null
+                  ? customSeat['label']
+                  : '${String.fromCharCode(65 + seatColIndex)}$row';
 
               bool isSelected = state.selectedSeats.contains(seatLabel);
               bool isBooked = state.bookedSeats.contains(seatLabel);
               bool isHeld = state.heldSeats.contains(seatLabel);
-              
+
               String gender = '';
               if (isBooked) {
                 gender = state.seatGenders[seatLabel]?.toString() ?? '';
@@ -3855,13 +4669,19 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
     );
   }
 
-  void _showGenderSelectionDialog(BuildContext context, AppState state, String seatLabel) {
+  void _showGenderSelectionDialog(
+    BuildContext context,
+    AppState state,
+    String seatLabel,
+  ) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return Dialog(
           backgroundColor: const Color(0xFF0F172A),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: Column(
@@ -3869,7 +4689,11 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
               children: [
                 Text(
                   'Select Passenger for Seat $seatLabel',
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 Row(
@@ -3884,15 +4708,31 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
-                            border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+                            color: const Color(
+                              0xFF3B82F6,
+                            ).withValues(alpha: 0.1),
+                            border: Border.all(
+                              color: const Color(0xFF3B82F6),
+                              width: 1.5,
+                            ),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Column(
                             children: [
-                              Icon(Icons.face_rounded, color: Color(0xFF3B82F6), size: 36),
+                              Icon(
+                                Icons.face_rounded,
+                                color: Color(0xFF3B82F6),
+                                size: 36,
+                              ),
                               SizedBox(height: 8),
-                              Text('Boy', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(
+                                'Boy',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -3909,15 +4749,31 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF472B6).withValues(alpha: 0.1),
-                            border: Border.all(color: const Color(0xFFF472B6), width: 1.5),
+                            color: const Color(
+                              0xFFF472B6,
+                            ).withValues(alpha: 0.1),
+                            border: Border.all(
+                              color: const Color(0xFFF472B6),
+                              width: 1.5,
+                            ),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: const Column(
                             children: [
-                              Icon(Icons.face_3_rounded, color: Color(0xFFF472B6), size: 36),
+                              Icon(
+                                Icons.face_3_rounded,
+                                color: Color(0xFFF472B6),
+                                size: 36,
+                              ),
                               SizedBox(height: 8),
-                              Text('Girl', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text(
+                                'Girl',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -3946,7 +4802,14 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> with Ti
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ),
       ],
     );
   }
@@ -3978,7 +4841,8 @@ class Animated3DSeat extends StatefulWidget {
   State<Animated3DSeat> createState() => _Animated3DSeatState();
 }
 
-class _Animated3DSeatState extends State<Animated3DSeat> with SingleTickerProviderStateMixin {
+class _Animated3DSeatState extends State<Animated3DSeat>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _elevation;
   late Animation<double> _scale;
@@ -3990,21 +4854,20 @@ class _Animated3DSeatState extends State<Animated3DSeat> with SingleTickerProvid
       vsync: this,
       duration: const Duration(milliseconds: 250),
     );
-    _elevation = Tween<double>(begin: 0.0, end: 6.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeOut,
-      ),
-    );
+    _elevation = Tween<double>(
+      begin: 0.0,
+      end: 6.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _scale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween<double>(begin: 1.0, end: 1.15), weight: 50),
-      TweenSequenceItem(tween: Tween<double>(begin: 1.15, end: 1.0), weight: 50),
-    ]).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: Curves.easeInOut,
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.0, end: 1.15),
+        weight: 50,
       ),
-    );
+      TweenSequenceItem(
+        tween: Tween<double>(begin: 1.15, end: 1.0),
+        weight: 50,
+      ),
+    ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     if (widget.isSelected) {
       _controller.value = 1.0;
@@ -4105,9 +4968,11 @@ class _Animated3DSeatState extends State<Animated3DSeat> with SingleTickerProvid
                         borderRadius: BorderRadius.circular(6),
                         boxShadow: [
                           BoxShadow(
-                            color: widget.isSelected 
-                                ? glowColor 
-                                : Colors.black.withValues(alpha: 0.12 + (elevVal * 0.015)),
+                            color: widget.isSelected
+                                ? glowColor
+                                : Colors.black.withValues(
+                                    alpha: 0.12 + (elevVal * 0.015),
+                                  ),
                             blurRadius: 4 + elevVal,
                             offset: Offset(0, 2 + (elevVal * 0.5)),
                           ),
@@ -4167,7 +5032,12 @@ class _Animated3DSeatState extends State<Animated3DSeat> with SingleTickerProvid
                                   gradient: LinearGradient(
                                     colors: [
                                       mainColor,
-                                      Color.lerp(mainColor, Colors.white, 0.15) ?? mainColor
+                                      Color.lerp(
+                                            mainColor,
+                                            Colors.white,
+                                            0.15,
+                                          ) ??
+                                          mainColor,
                                     ],
                                     begin: Alignment.bottomCenter,
                                     end: Alignment.topCenter,
@@ -4177,7 +5047,10 @@ class _Animated3DSeatState extends State<Animated3DSeat> with SingleTickerProvid
                                 child: Text(
                                   widget.label,
                                   style: TextStyle(
-                                    fontSize: (widget.height * 0.24).clamp(8.0, 12.0),
+                                    fontSize: (widget.height * 0.24).clamp(
+                                      8.0,
+                                      12.0,
+                                    ),
                                     fontWeight: FontWeight.w900,
                                     color: textColor,
                                   ),
@@ -4204,10 +5077,12 @@ class ConductorTripDetailsScreen extends ConsumerStatefulWidget {
   const ConductorTripDetailsScreen({super.key, required this.trip});
 
   @override
-  ConsumerState<ConductorTripDetailsScreen> createState() => _ConductorTripDetailsScreenState();
+  ConsumerState<ConductorTripDetailsScreen> createState() =>
+      _ConductorTripDetailsScreenState();
 }
 
-class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetailsScreen> {
+class _ConductorTripDetailsScreenState
+    extends ConsumerState<ConductorTripDetailsScreen> {
   bool _isLoading = true;
   Map<String, dynamic>? _manifestData;
 
@@ -4223,7 +5098,9 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
     setState(() => _isLoading = true);
     final state = ref.read(appStateProvider);
     await state.loadSeatAvailability(widget.trip['id'].toString());
-    final manifest = await state.fetchTripManifest(widget.trip['id'].toString());
+    final manifest = await state.fetchTripManifest(
+      widget.trip['id'].toString(),
+    );
     if (mounted) {
       setState(() {
         _manifestData = manifest;
@@ -4232,13 +5109,19 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
     }
   }
 
-  void _showPassengerDetails(Map<String, dynamic> passenger, AppState state, List<String> boardedSeats) {
+  void _showPassengerDetails(
+    Map<String, dynamic> passenger,
+    AppState state,
+    List<String> boardedSeats,
+  ) {
     bool isBoarded = boardedSeats.contains(passenger['seat']);
-    
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF0A2540),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -4247,49 +5130,88 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Seat ${passenger['seat']}', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                  Text(
+                    'Seat ${passenger['seat']}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Column(
                       children: [
                         _buildDetailRow('Name', passenger['name']),
-                        _buildDetailRow('Gender', passenger['gender'].toString().toUpperCase()),
-                        _buildDetailRow('Phone', passenger['phone'].toString().isEmpty ? 'N/A' : passenger['phone']),
-                        _buildDetailRow('Booking ID', passenger['booking_id'].toString().substring(0, 8) + '...'),
+                        _buildDetailRow(
+                          'Gender',
+                          passenger['gender'].toString().toUpperCase(),
+                        ),
+                        _buildDetailRow(
+                          'Phone',
+                          passenger['phone'].toString().isEmpty
+                              ? 'N/A'
+                              : passenger['phone'],
+                        ),
+                        _buildDetailRow(
+                          'Booking ID',
+                          passenger['booking_id'].toString().substring(0, 8) +
+                              '...',
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: () async {
-                      final updatedBoarded = await state.toggleBoarding(widget.trip['id'].toString(), passenger['seat']);
+                      final updatedBoarded = await state.toggleBoarding(
+                        widget.trip['id'].toString(),
+                        passenger['seat'],
+                      );
                       if (updatedBoarded != null) {
                         setState(() {
                           _manifestData!['boarded_seats'] = updatedBoarded;
                         });
                         setModalState(() {
-                          isBoarded = updatedBoarded.contains(passenger['seat']);
+                          isBoarded = updatedBoarded.contains(
+                            passenger['seat'],
+                          );
                         });
                         if (mounted) Navigator.pop(context);
-                        SeatyNotifications.show(context, isBoarded ? 'Passenger Marked as Boarded' : 'Boarding Undone');
+                        SeatyNotifications.show(
+                          context,
+                          isBoarded
+                              ? 'Passenger Marked as Boarded'
+                              : 'Boarding Undone',
+                        );
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: isBoarded ? Colors.red.shade400 : const Color(0xFF2E7D32),
+                      backgroundColor: isBoarded
+                          ? Colors.red.shade400
+                          : const Color(0xFF2E7D32),
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(50),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: Text(isBoarded ? 'Undo Boarding' : 'Mark as Boarded', style: const TextStyle(fontWeight: FontWeight.bold)),
-                  )
+                    child: Text(
+                      isBoarded ? 'Undo Boarding' : 'Mark as Boarded',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
                 ],
               ),
             );
-          }
+          },
         );
-      }
+      },
     );
   }
 
@@ -4300,7 +5222,13 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: Colors.white54)),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -4309,7 +5237,9 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    final layout = widget.trip['seat_layout'] ?? {'rows': 10, 'columns': 4, 'aisle_after_column': 2};
+    final layout =
+        widget.trip['seat_layout'] ??
+        {'rows': 10, 'columns': 4, 'aisle_after_column': 2};
     final int rows = layout['rows'] ?? 10;
     final int columns = layout['columns'] ?? 4;
     final int aisleAfter = layout['aisle_after_column'] ?? 2;
@@ -4317,8 +5247,12 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
     final int totalGridItems = rows * gridColumns;
     final List<dynamic>? customSeatsList = layout['seats'];
 
-    List<String> boardedSeats = _manifestData != null ? List<String>.from(_manifestData!['boarded_seats'] ?? []) : [];
-    List<dynamic> manifestList = _manifestData != null ? _manifestData!['manifest'] ?? [] : [];
+    List<String> boardedSeats = _manifestData != null
+        ? List<String>.from(_manifestData!['boarded_seats'] ?? [])
+        : [];
+    List<dynamic> manifestList = _manifestData != null
+        ? _manifestData!['manifest'] ?? []
+        : [];
 
     int totalBooked = state.bookedSeats.length;
     int totalBoarded = boardedSeats.length;
@@ -4331,145 +5265,199 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFFE65100)))
-        : Column(
-            children: [
-              // Summary Bar
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: const Color(0xFF0A2540),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildStat('Capacity', capacity.toString(), Colors.white),
-                    _buildStat('Booked', totalBooked.toString(), Colors.blue.shade200),
-                    _buildStat('Boarded', totalBoarded.toString(), Colors.green.shade400),
-                  ],
-                ),
-              ),
-              
-              // Legend
-              Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildLegendItem(const Color(0xFFF4F6F9), 'Empty', border: Colors.black12),
-                    _buildLegendItem(const Color(0xFF0F2C59), 'Male'),
-                    _buildLegendItem(const Color(0xFFF472B6), 'Female'),
-                    _buildLegendItem(const Color(0xFF2E7D32), 'Boarded'),
-                  ],
-                ),
-              ),
-
-              // Bus Grid
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(28),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: gridColumns,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                  ),
-                  itemCount: totalGridItems,
-                  itemBuilder: (context, index) {
-                    int colIndex = index % gridColumns;
-                    int row = index ~/ gridColumns + 1;
-
-                    Map<String, dynamic>? customSeat;
-                    if (customSeatsList != null) {
-                      for (var s in customSeatsList) {
-                        if (s is Map && s['row'] == row && s['col'] == colIndex) {
-                          customSeat = Map<String, dynamic>.from(s);
-                          break;
-                        }
-                      }
-                      if (customSeat == null) {
-                        if (aisleAfter > 0 && colIndex == aisleAfter) {
-                          return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
-                        }
-                        return const SizedBox.shrink();
-                      }
-                    } else {
-                      if (aisleAfter > 0 && colIndex == aisleAfter) {
-                        return const Center(child: Icon(Icons.unfold_more, color: Colors.black12));
-                      }
-                    }
-
-                    int seatColIndex = colIndex;
-                    if (customSeat == null && aisleAfter > 0 && colIndex > aisleAfter) {
-                      seatColIndex = colIndex - 1;
-                    }
-                    String seatLabel = customSeat != null ? customSeat['label'] : '${String.fromCharCode(65 + seatColIndex)}$row';
-
-                    bool isBooked = state.bookedSeats.contains(seatLabel);
-                    bool isBoarded = boardedSeats.contains(seatLabel);
-
-                    Color seatColor = const Color(0xFFF4F6F9);
-                    Color textColor = const Color(0xFF0A2540);
-                    Color borderColor = Colors.black12;
-
-                    if (isBoarded) {
-                      seatColor = const Color(0xFF2E7D32);
-                      textColor = Colors.white;
-                      borderColor = const Color(0xFF2E7D32);
-                    } else if (isBooked) {
-                      final gender = state.seatGenders[seatLabel]?.toLowerCase() ?? '';
-                      if (gender == 'male') {
-                        seatColor = const Color(0xFF0F2C59);
-                        textColor = Colors.white;
-                        borderColor = const Color(0xFF0F2C59);
-                      } else if (gender == 'female') {
-                        seatColor = const Color(0xFFF472B6);
-                        textColor = Colors.white;
-                        borderColor = const Color(0xFFF472B6);
-                      } else {
-                        seatColor = Colors.grey.shade400;
-                        textColor = Colors.white;
-                        borderColor = Colors.grey.shade500;
-                      }
-                    }
-
-                    return InkWell(
-                      onTap: isBooked ? () {
-                        // Find passenger in manifest
-                        final passenger = manifestList.firstWhere(
-                          (p) => p['seat'] == seatLabel, 
-                          orElse: () => <String, dynamic>{}
-                        );
-                        if (passenger.isNotEmpty) {
-                          _showPassengerDetails(passenger, state, boardedSeats);
-                        } else {
-                          SeatyNotifications.show(context, 'Passenger details not found in manifest.');
-                        }
-                      } : null,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: seatColor,
-                          border: Border.all(color: borderColor, width: 1.5),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          seatLabel,
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
-                        ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFFE65100)),
+            )
+          : Column(
+              children: [
+                // Summary Bar
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  color: const Color(0xFF0A2540),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStat('Capacity', capacity.toString(), Colors.white),
+                      _buildStat(
+                        'Booked',
+                        totalBooked.toString(),
+                        Colors.blue.shade200,
                       ),
-                    );
-                  },
+                      _buildStat(
+                        'Boarded',
+                        totalBoarded.toString(),
+                        Colors.green.shade400,
+                      ),
+                    ],
+                  ),
                 ),
-              )
-            ],
-          )
+
+                // Legend
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildLegendItem(
+                        const Color(0xFFF4F6F9),
+                        'Empty',
+                        border: Colors.black12,
+                      ),
+                      _buildLegendItem(const Color(0xFF0F2C59), 'Male'),
+                      _buildLegendItem(const Color(0xFFF472B6), 'Female'),
+                      _buildLegendItem(const Color(0xFF2E7D32), 'Boarded'),
+                    ],
+                  ),
+                ),
+
+                // Bus Grid
+                Expanded(
+                  child: GridView.builder(
+                    padding: const EdgeInsets.all(28),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: gridColumns,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                    ),
+                    itemCount: totalGridItems,
+                    itemBuilder: (context, index) {
+                      int colIndex = index % gridColumns;
+                      int row = index ~/ gridColumns + 1;
+
+                      Map<String, dynamic>? customSeat;
+                      if (customSeatsList != null) {
+                        for (var s in customSeatsList) {
+                          if (s is Map &&
+                              s['row'] == row &&
+                              s['col'] == colIndex) {
+                            customSeat = Map<String, dynamic>.from(s);
+                            break;
+                          }
+                        }
+                        if (customSeat == null) {
+                          if (aisleAfter > 0 && colIndex == aisleAfter) {
+                            return const Center(
+                              child: Icon(
+                                Icons.unfold_more,
+                                color: Colors.black12,
+                              ),
+                            );
+                          }
+                          return const SizedBox.shrink();
+                        }
+                      } else {
+                        if (aisleAfter > 0 && colIndex == aisleAfter) {
+                          return const Center(
+                            child: Icon(
+                              Icons.unfold_more,
+                              color: Colors.black12,
+                            ),
+                          );
+                        }
+                      }
+
+                      int seatColIndex = colIndex;
+                      if (customSeat == null &&
+                          aisleAfter > 0 &&
+                          colIndex > aisleAfter) {
+                        seatColIndex = colIndex - 1;
+                      }
+                      String seatLabel = customSeat != null
+                          ? customSeat['label']
+                          : '${String.fromCharCode(65 + seatColIndex)}$row';
+
+                      bool isBooked = state.bookedSeats.contains(seatLabel);
+                      bool isBoarded = boardedSeats.contains(seatLabel);
+
+                      Color seatColor = const Color(0xFFF4F6F9);
+                      Color textColor = const Color(0xFF0A2540);
+                      Color borderColor = Colors.black12;
+
+                      if (isBoarded) {
+                        seatColor = const Color(0xFF2E7D32);
+                        textColor = Colors.white;
+                        borderColor = const Color(0xFF2E7D32);
+                      } else if (isBooked) {
+                        final gender =
+                            state.seatGenders[seatLabel]?.toLowerCase() ?? '';
+                        if (gender == 'male') {
+                          seatColor = const Color(0xFF0F2C59);
+                          textColor = Colors.white;
+                          borderColor = const Color(0xFF0F2C59);
+                        } else if (gender == 'female') {
+                          seatColor = const Color(0xFFF472B6);
+                          textColor = Colors.white;
+                          borderColor = const Color(0xFFF472B6);
+                        } else {
+                          seatColor = Colors.grey.shade400;
+                          textColor = Colors.white;
+                          borderColor = Colors.grey.shade500;
+                        }
+                      }
+
+                      return InkWell(
+                        onTap: isBooked
+                            ? () {
+                                // Find passenger in manifest
+                                final passenger = manifestList.firstWhere(
+                                  (p) => p['seat'] == seatLabel,
+                                  orElse: () => <String, dynamic>{},
+                                );
+                                if (passenger.isNotEmpty) {
+                                  _showPassengerDetails(
+                                    passenger,
+                                    state,
+                                    boardedSeats,
+                                  );
+                                } else {
+                                  SeatyNotifications.show(
+                                    context,
+                                    'Passenger details not found in manifest.',
+                                  );
+                                }
+                              }
+                            : null,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: seatColor,
+                            border: Border.all(color: borderColor, width: 1.5),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            seatLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
   Widget _buildStat(String label, String value, Color color) {
     return Column(
       children: [
-        Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Colors.white70),
+        ),
       ],
     );
   }
@@ -4487,7 +5475,14 @@ class _ConductorTripDetailsScreenState extends ConsumerState<ConductorTripDetail
           ),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87)),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ),
       ],
     );
   }
@@ -4507,7 +5502,8 @@ class SandboxPaymentScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<SandboxPaymentScreen> createState() => _SandboxPaymentScreenState();
+  ConsumerState<SandboxPaymentScreen> createState() =>
+      _SandboxPaymentScreenState();
 }
 
 class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
@@ -4533,7 +5529,11 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
   }
 
   void _handleTimeout() {
-    SeatyNotifications.show(context, 'Seat hold expired. Please try booking again.', isError: true);
+    SeatyNotifications.show(
+      context,
+      'Seat hold expired. Please try booking again.',
+      isError: true,
+    );
     Navigator.pop(context);
   }
 
@@ -4557,7 +5557,11 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
         );
         Navigator.pop(context);
       } else {
-        SeatyNotifications.show(context, 'Something went wrong communicating with sandbox server.', isError: true);
+        SeatyNotifications.show(
+          context,
+          'Something went wrong communicating with sandbox server.',
+          isError: true,
+        );
       }
     }
   }
@@ -4576,10 +5580,16 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final selectedSeatsList = List<String>.from(widget.booking['selected_seats'] ?? []);
-    final double fare = double.tryParse(widget.booking['total_price'].toString()) ?? 0.0;
-    final double platformFee = double.tryParse(widget.payment['platform_fee'].toString()) ?? 25.0;
-    final double total = double.tryParse(widget.payment['amount'].toString()) ?? (fare + platformFee);
+    final selectedSeatsList = List<String>.from(
+      widget.booking['selected_seats'] ?? [],
+    );
+    final double fare =
+        double.tryParse(widget.booking['total_price'].toString()) ?? 0.0;
+    final double platformFee =
+        double.tryParse(widget.payment['platform_fee'].toString()) ?? 25.0;
+    final double total =
+        double.tryParse(widget.payment['amount'].toString()) ??
+        (fare + platformFee);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -4597,7 +5607,10 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
               children: [
                 // Hold Timer Capsule
                 Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 10,
+                    horizontal: 16,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.amber.shade50,
                     border: Border.all(color: Colors.amber.shade200),
@@ -4607,7 +5620,11 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.hourglass_bottom_rounded, color: Colors.amber.shade800, size: 16),
+                      Icon(
+                        Icons.hourglass_bottom_rounded,
+                        color: Colors.amber.shade800,
+                        size: 16,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Seats held for ${_formatTimer()}',
@@ -4635,22 +5652,52 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Booking Summary', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFF0A2540))),
+                        const Text(
+                          'Booking Summary',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 16,
+                            color: Color(0xFF0A2540),
+                          ),
+                        ),
                         const SizedBox(height: 16),
                         _buildRow('Bus Service', widget.trip['bus_name']),
-                        _buildRow('Route', '${widget.trip['origin']} → ${widget.trip['destination']}'),
-                        _buildRow('Selected Seats', selectedSeatsList.join(', ')),
+                        _buildRow(
+                          'Route',
+                          '${widget.trip['origin']} → ${widget.trip['destination']}',
+                        ),
+                        _buildRow(
+                          'Selected Seats',
+                          selectedSeatsList.join(', '),
+                        ),
                         const Divider(height: 24),
-                        _buildRow('Seat Fare', 'Rs. ${fare.toStringAsFixed(0)}'),
-                        _buildRow('Platform Fee', 'Rs. ${platformFee.toStringAsFixed(0)}'),
+                        _buildRow(
+                          'Seat Fare',
+                          'Rs. ${fare.toStringAsFixed(0)}',
+                        ),
+                        _buildRow(
+                          'Platform Fee',
+                          'Rs. ${platformFee.toStringAsFixed(0)}',
+                        ),
                         const Divider(height: 24),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Total Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0A2540))),
+                            const Text(
+                              'Total Amount',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Color(0xFF0A2540),
+                              ),
+                            ),
                             Text(
                               'Rs. ${total.toStringAsFixed(2)}',
-                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFFE65100)),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                color: Color(0xFFE65100),
+                              ),
                             ),
                           ],
                         ),
@@ -4670,11 +5717,18 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Icon(Icons.security, color: Color(0xFF10B981), size: 40),
+                      const Icon(
+                        Icons.security,
+                        color: Color(0xFF10B981),
+                        size: 40,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'Secure Sandbox Payment Portal',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -4684,7 +5738,9 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                       ),
                       const SizedBox(height: 24),
                       if (_isProcessing)
-                        const CircularProgressIndicator(color: Color(0xFFE65100))
+                        const CircularProgressIndicator(
+                          color: Color(0xFFE65100),
+                        )
                       else ...[
                         ElevatedButton(
                           onPressed: () => _processPayment(true),
@@ -4692,9 +5748,14 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                             backgroundColor: const Color(0xFF10B981),
                             foregroundColor: Colors.white,
                             minimumSize: const Size.fromHeight(50),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
-                          child: const Text('Authorize & Complete Payment', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Authorize & Complete Payment',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         TextButton(
@@ -4702,9 +5763,12 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                           style: TextButton.styleFrom(
                             foregroundColor: Colors.redAccent,
                           ),
-                          child: const Text('Cancel & Release Seats', style: TextStyle(fontWeight: FontWeight.bold)),
+                          child: const Text(
+                            'Cancel & Release Seats',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
                         ),
-                      ]
+                      ],
                     ],
                   ),
                 ),
@@ -4722,143 +5786,20 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.w500)),
-          Text(value, style: const TextStyle(color: Color(0xFF0A2540), fontSize: 13, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-}
-
-// =====================================================================
-// 5. VEHICLE OWNER MAIN SCREEN
-// =====================================================================
-class OwnerMainScreen extends ConsumerStatefulWidget {
-  const OwnerMainScreen({super.key});
-
-  @override
-  ConsumerState<OwnerMainScreen> createState() => _OwnerMainScreenState();
-}
-
-class _OwnerMainScreenState extends ConsumerState<OwnerMainScreen> {
-  int _currentIndex = 0;
-
-  final List<Widget> _tabs = [
-    const OwnerTripsTab(),
-    const OwnerScannerTab(),
-    const OwnerStreamingTab(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
-    
-    return Scaffold(
-      extendBody: true,
-      appBar: AppBar(
-        title: Text('Conductor Hub • ${state.userName}', style: const TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined, color: Color(0xFF0A2540), size: 28),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                  );
-                },
-              ),
-              if (state.unreadNotificationsCount > 0)
-                Positioned(
-                  right: 4,
-                  top: 4,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFEF4444),
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      '${state.unreadNotificationsCount}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 8),
-        ],
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
-      body: _tabs[_currentIndex],
-      bottomNavigationBar: Container(
-        margin: const EdgeInsets.only(left: 16, right: 16, bottom: 24),
-        height: 65,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0A2540), // Solid Dark Navy
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.15),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            _buildNavItem(0, Icons.calendar_month_outlined, Icons.calendar_month_rounded, 'Schedules'),
-            _buildNavItem(1, Icons.qr_code_scanner_outlined, Icons.qr_code_scanner_rounded, 'Verify QR'),
-            _buildNavItem(2, Icons.sensors_outlined, Icons.sensors_rounded, 'Live GPS Stream'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(int index, IconData outlineIcon, IconData solidIcon, String label) {
-    final isSelected = _currentIndex == index;
-    final activeColor = const Color(0xFFE65100); // Matte Orange
-    final inactiveColor = Colors.white.withOpacity(0.55);
-
-    return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: isSelected ? const Color(0xFFE65100).withOpacity(0.18) : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(
-              isSelected ? solidIcon : outlineIcon,
-              color: isSelected ? activeColor : inactiveColor,
-              size: 20,
-            ),
-          ),
-          const SizedBox(height: 2),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? activeColor : inactiveColor,
+            style: const TextStyle(
+              color: Colors.grey,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Color(0xFF0A2540),
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],
@@ -4866,6 +5807,8 @@ class _OwnerMainScreenState extends ConsumerState<OwnerMainScreen> {
     );
   }
 }
+
+// Owner Main Screen is imported from lib/screens/owner/owner_main_screen.dart
 
 // Owner Ticket Verification Tab
 class OwnerScannerTab extends ConsumerStatefulWidget {
@@ -4875,7 +5818,8 @@ class OwnerScannerTab extends ConsumerStatefulWidget {
   ConsumerState<OwnerScannerTab> createState() => _OwnerScannerTabState();
 }
 
-class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTickerProviderStateMixin {
+class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animController;
   String? _selectedBookingId;
   Map<String, dynamic>? _scannedTicket;
@@ -4899,7 +5843,7 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
 
   void _simulateScan(List<Map<String, dynamic>> bookings) {
     if (_selectedBookingId == null) return;
-    
+
     setState(() {
       _scanAttempted = false;
       _scannedTicket = null;
@@ -4908,7 +5852,9 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
     // Simulate scanning delay
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (!mounted) return;
-      final match = bookings.firstWhere((b) => b['id'].toString() == _selectedBookingId);
+      final match = bookings.firstWhere(
+        (b) => b['id'].toString() == _selectedBookingId,
+      );
       setState(() {
         _scanAttempted = true;
         _scannedTicket = match;
@@ -4922,7 +5868,9 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
 
     final tripId = _scannedTicket!['trip_id'].toString();
     final seats = List<String>.from(_scannedTicket!['seats'] ?? []);
-    List<String> currentBoarded = List<String>.from(_scannedTicket!['boarded_seats'] ?? []);
+    List<String> currentBoarded = List<String>.from(
+      _scannedTicket!['boarded_seats'] ?? [],
+    );
 
     for (var seat in seats) {
       if (!currentBoarded.contains(seat)) {
@@ -4950,9 +5898,9 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
       if (departureStr == null) return false;
       final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
       final now = DateTime.now();
-      
+
       final difference = departureTime.difference(now);
-      
+
       // Check-in becomes available if departure is 30 mins or less from now, OR has already started
       return difference.inMinutes <= 30;
     } catch (e) {
@@ -4964,7 +5912,11 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
   void _openCameraScanOverlay(AppState state) {
     final ownerBookings = state.bookings;
     if (ownerBookings.isEmpty) {
-      SeatyNotifications.show(context, 'No active passenger bookings to scan.', isError: true);
+      SeatyNotifications.show(
+        context,
+        'No active passenger bookings to scan.',
+        isError: true,
+      );
       return;
     }
 
@@ -4976,7 +5928,9 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: Container(
             height: MediaQuery.of(context).size.height * 0.76,
             decoration: const BoxDecoration(
@@ -4991,14 +5945,21 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                   child: Container(
                     width: 50,
                     height: 5,
-                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
                 const Center(
                   child: Text(
                     'Live QR Scanner Feed',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -5008,7 +5969,7 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
                 ),
-                
+
                 // Live Finder square
                 Expanded(
                   child: Center(
@@ -5016,7 +5977,10 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                       width: 200,
                       height: 200,
                       decoration: BoxDecoration(
-                        border: Border.all(color: const Color(0xFFE65100), width: 3),
+                        border: Border.all(
+                          color: const Color(0xFFE65100),
+                          width: 3,
+                        ),
                         borderRadius: BorderRadius.circular(24),
                       ),
                       clipBehavior: Clip.antiAlias,
@@ -5029,13 +5993,17 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                                 final List<Barcode> barcodes = capture.barcodes;
                                 if (barcodes.isNotEmpty) {
                                   final barcodeValue = barcodes.first.rawValue;
-                                  if (barcodeValue != null && barcodeValue.isNotEmpty) {
-                                    Navigator.pop(context); // Close scanning overlay
+                                  if (barcodeValue != null &&
+                                      barcodeValue.isNotEmpty) {
+                                    Navigator.pop(
+                                      context,
+                                    ); // Close scanning overlay
 
                                     // Validate if it belongs to ownerBookings
                                     String? actualMatchedId;
                                     for (var b in ownerBookings) {
-                                      if (b['id'].toString().toLowerCase() == barcodeValue.toLowerCase()) {
+                                      if (b['id'].toString().toLowerCase() ==
+                                          barcodeValue.toLowerCase()) {
                                         actualMatchedId = b['id'].toString();
                                         break;
                                       }
@@ -5046,7 +6014,9 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                                         _selectedBookingId = actualMatchedId;
                                         _scanAttempted = false;
                                       });
-                                      _simulateScan(ownerBookings); // It will load ticket detail
+                                      _simulateScan(
+                                        ownerBookings,
+                                      ); // It will load ticket detail
                                     } else {
                                       setState(() {
                                         _selectedBookingId = null;
@@ -5063,7 +6033,8 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                           AnimatedBuilder(
                             animation: _animController,
                             builder: (context, child) {
-                              final double dy = (_animController.value * 200) - 100;
+                              final double dy =
+                                  (_animController.value * 200) - 100;
                               return Positioned(
                                 top: 100 + dy,
                                 child: Container(
@@ -5073,11 +6044,13 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                                     color: Colors.redAccent,
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.redAccent.withOpacity(0.8),
+                                        color: Colors.redAccent.withOpacity(
+                                          0.8,
+                                        ),
                                         blurRadius: 10,
                                         spreadRadius: 3,
-                                      )
-                                    ]
+                                      ),
+                                    ],
                                   ),
                                 ),
                               );
@@ -5087,7 +6060,11 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                             bottom: 12,
                             child: Text(
                               'Align QR within box',
-                              style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ],
@@ -5095,20 +6072,27 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                     ),
                   ),
                 ),
-                
+
                 // Simulator control input in scanner view
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.02),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       const Text(
                         'SIMULATOR QR CODE INPUT',
-                        style: TextStyle(color: Color(0xFFE65100), fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                        style: TextStyle(
+                          color: Color(0xFFE65100),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.5,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 12),
@@ -5117,20 +6101,38 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
                           hintText: 'Enter Ticket ID (e.g. AFB4ED81)',
-                          hintStyle: const TextStyle(color: Colors.white30, fontSize: 13),
-                          prefixIcon: const Icon(Icons.qr_code_2_rounded, color: Colors.white70),
+                          hintStyle: const TextStyle(
+                            color: Colors.white30,
+                            fontSize: 13,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.qr_code_2_rounded,
+                            color: Colors.white70,
+                          ),
                           filled: true,
                           fillColor: Colors.white.withOpacity(0.05),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
                         onPressed: () {
-                          final input = qrInputController.text.trim().toLowerCase();
+                          final input = qrInputController.text
+                              .trim()
+                              .toLowerCase();
                           if (input.isEmpty) {
-                            SeatyNotifications.show(context, 'Please enter a ticket ID to scan.', isError: true);
+                            SeatyNotifications.show(
+                              context,
+                              'Please enter a ticket ID to scan.',
+                              isError: true,
+                            );
                             return;
                           }
 
@@ -5138,8 +6140,11 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                           String? matchedId;
                           for (var b in ownerBookings) {
                             final bId = b['id'].toString().toLowerCase();
-                            final passengerName = (b['passenger_name'] ?? '').toString().toLowerCase();
-                            if (bId.contains(input) || passengerName.contains(input)) {
+                            final passengerName = (b['passenger_name'] ?? '')
+                                .toString()
+                                .toLowerCase();
+                            if (bId.contains(input) ||
+                                passengerName.contains(input)) {
                               matchedId = b['id'].toString();
                               break;
                             }
@@ -5163,12 +6168,17 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                           }
                         },
                         icon: const Icon(Icons.qr_code_scanner_rounded),
-                        label: const Text('Simulate QR Code Detection', style: TextStyle(fontWeight: FontWeight.bold)),
+                        label: const Text(
+                          'Simulate QR Code Detection',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFE65100),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -5193,15 +6203,30 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(left: 16.0, right: 16.0, top: 16.0, bottom: 100.0),
+      padding: const EdgeInsets.only(
+        left: 16.0,
+        right: 16.0,
+        top: 16.0,
+        bottom: 100.0,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Ticket Scanner Console', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0A2540))),
+          const Text(
+            'Ticket Scanner Console',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0A2540),
+            ),
+          ),
           const SizedBox(height: 4),
-          const Text('Scan passenger QR tickets to verify boarding authorization.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const Text(
+            'Scan passenger QR tickets to verify boarding authorization.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
           const SizedBox(height: 20),
-          
+
           // 1. Scan Trigger Button (Interactive & Clean)
           Center(
             child: Padding(
@@ -5217,7 +6242,10 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                     ),
                     child: IconButton(
                       iconSize: 42,
-                      icon: const Icon(Icons.qr_code_scanner_rounded, color: Color(0xFFE65100)),
+                      icon: const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: Color(0xFFE65100),
+                      ),
                       onPressed: () => _openCameraScanOverlay(state),
                     ),
                   ),
@@ -5227,26 +6255,43 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0A2540),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: const Text('Start QR Code Scan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    child: const Text(
+                      'Start QR Code Scan',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          
+
           const Divider(),
           const SizedBox(height: 16),
-          
+
           // 2. Verification Output
           if (_scanAttempted && _scannedTicket != null) ...[
             Builder(
               builder: (context) {
-                final tripBoarded = List<String>.from(_scannedTicket!['boarded_seats'] ?? []);
-                final tktSeats = List<String>.from(_scannedTicket!['seats'] ?? []);
-                final bool isFullyBoarded = tktSeats.isNotEmpty && tktSeats.every((s) => tripBoarded.contains(s));
+                final tripBoarded = List<String>.from(
+                  _scannedTicket!['boarded_seats'] ?? [],
+                );
+                final tktSeats = List<String>.from(
+                  _scannedTicket!['seats'] ?? [],
+                );
+                final bool isFullyBoarded =
+                    tktSeats.isNotEmpty &&
+                    tktSeats.every((s) => tripBoarded.contains(s));
 
                 if (isFullyBoarded) {
                   return Container(
@@ -5274,21 +6319,45 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                                 color: Color(0xFFC62828),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close, color: Colors.white, size: 16),
+                              child: const Icon(
+                                Icons.close,
+                                color: Colors.white,
+                                size: 16,
+                              ),
                             ),
                             const SizedBox(width: 10),
-                            const Text('TICKET ALREADY USED', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFC62828), fontSize: 15)),
+                            const Text(
+                              'TICKET ALREADY USED',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFC62828),
+                                fontSize: 15,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 12),
                         const Text(
                           'This ticket was already checked in. It cannot be used for boarding again.',
-                          style: TextStyle(color: Colors.black87, fontSize: 13, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: 16),
-                        _buildTicketDetailRow('Passenger', _scannedTicket!['passenger_name']),
-                        _buildTicketDetailRow('Seats', _scannedTicket!['seats'].join(', ')),
-                        _buildTicketDetailRow('Route', '${_scannedTicket!['origin']} ➔ ${_scannedTicket!['destination']}'),
+                        _buildTicketDetailRow(
+                          'Passenger',
+                          _scannedTicket!['passenger_name'],
+                        ),
+                        _buildTicketDetailRow(
+                          'Seats',
+                          _scannedTicket!['seats'].join(', '),
+                        ),
+                        _buildTicketDetailRow(
+                          'Route',
+                          '${_scannedTicket!['origin']} ➔ ${_scannedTicket!['destination']}',
+                        ),
                         _buildPassengerManifestDetails(_scannedTicket!),
                       ],
                     ),
@@ -5320,41 +6389,77 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                             decoration: const BoxDecoration(
                               color: Color(0xFF2E7D32),
                               shape: BoxShape.circle,
-                              ),
-                            child: const Icon(Icons.check, color: Colors.white, size: 16),
+                            ),
+                            child: const Icon(
+                              Icons.check,
+                              color: Colors.white,
+                              size: 16,
+                            ),
                           ),
                           const SizedBox(width: 10),
-                          const Text('TICKET VALIDATED', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF2E7D32), fontSize: 15)),
+                          const Text(
+                            'TICKET VALIDATED',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF2E7D32),
+                              fontSize: 15,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
-                      _buildTicketDetailRow('Passenger', _scannedTicket!['passenger_name']),
-                      _buildTicketDetailRow('Seats', _scannedTicket!['seats'].join(', ')),
-                      _buildTicketDetailRow('Route', '${_scannedTicket!['origin']} ➔ ${_scannedTicket!['destination']}'),
-                      _buildTicketDetailRow('Fare Status', 'PAID (Rs. ${_scannedTicket!['price']})', isPrice: true),
+                      _buildTicketDetailRow(
+                        'Passenger',
+                        _scannedTicket!['passenger_name'],
+                      ),
+                      _buildTicketDetailRow(
+                        'Seats',
+                        _scannedTicket!['seats'].join(', '),
+                      ),
+                      _buildTicketDetailRow(
+                        'Route',
+                        '${_scannedTicket!['origin']} ➔ ${_scannedTicket!['destination']}',
+                      ),
+                      _buildTicketDetailRow(
+                        'Fare Status',
+                        'PAID (Rs. ${_scannedTicket!['price']})',
+                        isPrice: true,
+                      ),
                       _buildPassengerManifestDetails(_scannedTicket!),
                       const SizedBox(height: 16),
                       Builder(
                         builder: (context) {
                           // Check if Check-In is active (within 30 minutes of departure)
-                          final bool allowed = _isCheckInAvailable(_scannedTicket!);
+                          final bool allowed = _isCheckInAvailable(
+                            _scannedTicket!,
+                          );
                           if (!allowed) {
                             return Container(
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: Colors.amber.shade50,
-                                border: Border.all(color: Colors.amber.shade200),
+                                border: Border.all(
+                                  color: Colors.amber.shade200,
+                                ),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.info_outline, color: Color(0xFFB7791F), size: 20),
+                                  const Icon(
+                                    Icons.info_outline,
+                                    color: Color(0xFFB7791F),
+                                    size: 20,
+                                  ),
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Text(
                                       'Check-in is only available starting 30 minutes prior to departure.',
-                                      style: TextStyle(color: Colors.amber.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                        color: Colors.amber.shade900,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -5363,24 +6468,40 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                           }
 
                           return ElevatedButton(
-                            onPressed: _isCheckingIn ? null : () => _completeCheckIn(state),
+                            onPressed: _isCheckingIn
+                                ? null
+                                : () => _completeCheckIn(state),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF2E7D32),
                               foregroundColor: Colors.white,
                               minimumSize: const Size.fromHeight(48),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
-                            child: _isCheckingIn 
-                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : const Text('Complete Check-In', style: TextStyle(fontWeight: FontWeight.bold)),
+                            child: _isCheckingIn
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Complete Check-In',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                           );
-                        }
+                        },
                       ),
                     ],
                   ),
                 );
-              }
-            )
+              },
+            ),
           ] else if (_scanAttempted) ...[
             Container(
               padding: const EdgeInsets.all(18),
@@ -5391,21 +6512,35 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.error_outline_rounded, color: Color(0xFFC62828), size: 24),
+                  Icon(
+                    Icons.error_outline_rounded,
+                    color: Color(0xFFC62828),
+                    size: 24,
+                  ),
                   SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('INVALID TICKET', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFC62828), fontSize: 15)),
+                        Text(
+                          'INVALID TICKET',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFC62828),
+                            fontSize: 15,
+                          ),
+                        ),
                         SizedBox(height: 4),
-                        Text('Scanned QR code is expired, invalid, or unpaid.', style: TextStyle(fontSize: 12, color: Colors.black87)),
+                        Text(
+                          'Scanned QR code is expired, invalid, or unpaid.',
+                          style: TextStyle(fontSize: 12, color: Colors.black87),
+                        ),
                       ],
                     ),
                   ),
                 ],
               ),
-            )
+            ),
           ] else ...[
             Container(
               padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -5420,12 +6555,19 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                   children: [
                     Icon(Icons.qr_code_2, color: Colors.grey, size: 20),
                     SizedBox(width: 8),
-                    Text('Waiting to scan ticket QR code...', style: TextStyle(color: Colors.grey, fontSize: 13, fontStyle: FontStyle.italic)),
+                    Text(
+                      'Waiting to scan ticket QR code...',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   ],
                 ),
               ),
-            )
-          ]
+            ),
+          ],
         ],
       ),
     );
@@ -5448,12 +6590,16 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
             SizedBox(width: 8),
             Text(
               'Passenger Manifest Details',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0A2540), fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0A2540),
+                fontSize: 14,
+              ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        
+
         // Primary passenger details card
         Container(
           padding: const EdgeInsets.all(12),
@@ -5468,38 +6614,56 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF0A2540).withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
                       'Seat ${ticket['seats'].isNotEmpty ? ticket['seats'][0] : "N/A"}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0A2540), fontSize: 11),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0A2540),
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   const Text(
                     'Primary Booker',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.black54,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              _buildTicketDetailRow('Name', primary['name'] ?? ticket['passenger_name']),
+              _buildTicketDetailRow(
+                'Name',
+                primary['name'] ?? ticket['passenger_name'],
+              ),
               _buildTicketDetailRow('Phone', primary['phone'] ?? 'N/A'),
               _buildTicketDetailRow('NIC', primary['nic'] ?? 'N/A'),
               _buildTicketDetailRow('Gender', primary['gender'] ?? 'N/A'),
             ],
           ),
         ),
-        
+
         // Co-passengers / guests list
         if (guests is List && guests.isNotEmpty) ...[
           const SizedBox(height: 12),
           const Text(
             'Co-Passengers',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black54),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Colors.black54,
+            ),
           ),
           const SizedBox(height: 8),
           ...guests.map((g) {
@@ -5519,37 +6683,51 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: const Color(0xFFE65100).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'Seat $seatNum',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE65100), fontSize: 11),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFE65100),
+                            fontSize: 11,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Text(
                         g['name'] ?? 'Passenger $seatNum',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, fontSize: 13),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: gender.toString().toLowerCase() == 'female' 
-                          ? Colors.pink.shade50 
+                      color: gender.toString().toLowerCase() == 'female'
+                          ? Colors.pink.shade50
                           : Colors.blue.shade50,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       gender.toString().toUpperCase(),
                       style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        color: gender.toString().toLowerCase() == 'female' 
-                            ? Colors.pink.shade700 
+                        fontWeight: FontWeight.bold,
+                        color: gender.toString().toLowerCase() == 'female'
+                            ? Colors.pink.shade700
                             : Colors.blue.shade700,
                         fontSize: 10,
                       ),
@@ -5564,7 +6742,11 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
     );
   }
 
-  Widget _buildTicketDetailRow(String label, String value, {bool isPrice = false}) {
+  Widget _buildTicketDetailRow(
+    String label,
+    String value, {
+    bool isPrice = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
@@ -5572,7 +6754,10 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab> with SingleTi
         children: [
           SizedBox(
             width: 100,
-            child: Text(label, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.black54, fontSize: 13),
+            ),
           ),
           Expanded(
             child: Text(
@@ -5614,17 +6799,28 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
             children: [
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Vehicle Name (e.g. Galle Superliner)'),
+                decoration: const InputDecoration(
+                  labelText: 'Vehicle Name (e.g. Galle Superliner)',
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: _regController,
-                decoration: const InputDecoration(labelText: 'Registration Plate (e.g. WP-ND-1234)'),
+                decoration: const InputDecoration(
+                  labelText: 'Registration Plate (e.g. WP-ND-1234)',
+                ),
               ),
               const SizedBox(height: 12),
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Seat Capacity', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+                child: Text(
+                  'Seat Capacity',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black54,
+                  ),
+                ),
               ),
               const SizedBox(height: 6),
               DropdownButtonFormField<int>(
@@ -5632,32 +6828,52 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
                 dropdownColor: const Color(0xFF0F172A),
                 iconEnabledColor: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Select Seat Capacity',
-                  hintStyle: const TextStyle(color: Colors.white60, fontSize: 13),
+                  hintStyle: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 13,
+                  ),
                   filled: true,
                   fillColor: const Color(0xFF0A2540),
-                  prefixIcon: const Icon(Icons.event_seat_rounded, color: Colors.white70, size: 20),
+                  prefixIcon: const Icon(
+                    Icons.event_seat_rounded,
+                    color: Colors.white70,
+                    size: 20,
+                  ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                 ),
                 items: [24, 36, 40, 42, 54].map((c) {
                   return DropdownMenuItem<int>(
                     value: c,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 4.0),
-                      child: Text('$c Seats', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                      child: Text(
+                        '$c Seats',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
                   );
                 }).toList(),
                 onChanged: (val) {
                   if (val != null) setState(() => _capacity = val);
                 },
-              )
+              ),
             ],
           ),
           actions: [
@@ -5667,16 +6883,22 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
             ),
             ElevatedButton(
               onPressed: () {
-                if (_nameController.text.isNotEmpty && _regController.text.isNotEmpty) {
-                  ref.read(appStateProvider)
-                      .registerVehicle(_nameController.text, _regController.text, _capacity);
+                if (_nameController.text.isNotEmpty &&
+                    _regController.text.isNotEmpty) {
+                  ref
+                      .read(appStateProvider)
+                      .registerVehicle(
+                        _nameController.text,
+                        _regController.text,
+                        _capacity,
+                      );
                   _nameController.clear();
                   _regController.clear();
                   Navigator.pop(context);
                 }
               },
               child: const Text('Register'),
-            )
+            ),
           ],
         );
       },
@@ -5686,7 +6908,7 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -5695,13 +6917,19 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('My Fleet', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                'My Fleet',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               ElevatedButton.icon(
                 onPressed: _showAddVehicleDialog,
                 icon: const Icon(Icons.add),
                 label: const Text('Add Bus'),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE65100), foregroundColor: Colors.white),
-              )
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE65100),
+                  foregroundColor: Colors.white,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -5713,19 +6941,30 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
-                    leading: const Icon(Icons.airport_shuttle_rounded, size: 36, color: Color(0xFFE65100)),
+                    leading: const Icon(
+                      Icons.airport_shuttle_rounded,
+                      size: 36,
+                      color: Color(0xFFE65100),
+                    ),
                     title: Text(v['name']),
                     subtitle: Text('${v['reg']} • ${v['total_seats']} Seats'),
                     trailing: Chip(
-                      label: Text(v['is_verified'] ? 'Verified' : 'Pending Approval'),
-                      backgroundColor: v['is_verified'] ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-                      labelStyle: TextStyle(color: v['is_verified'] ? Colors.green : Colors.orange, fontSize: 11),
+                      label: Text(
+                        v['is_verified'] ? 'Verified' : 'Pending Approval',
+                      ),
+                      backgroundColor: v['is_verified']
+                          ? Colors.green.withOpacity(0.1)
+                          : Colors.orange.withOpacity(0.1),
+                      labelStyle: TextStyle(
+                        color: v['is_verified'] ? Colors.green : Colors.orange,
+                        fontSize: 11,
+                      ),
                     ),
                   ),
                 );
               },
             ),
-          )
+          ),
         ],
       ),
     );
@@ -5758,9 +6997,9 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
     setState(() => _isLoadingRoutes = true);
     final state = ref.read(appStateProvider);
     try {
-      final response = await http.get(
-        Uri.parse('${state.apiBaseUrl}/routes'),
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(Uri.parse('${state.apiBaseUrl}/routes'))
+          .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
         if (mounted) {
@@ -5784,12 +7023,16 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
   void _showAddTripDialog() {
     final state = ref.read(appStateProvider);
     if (state.vehicles.isEmpty) {
-      SeatyNotifications.show(context, 'Please register a vehicle first.', isError: true);
+      SeatyNotifications.show(
+        context,
+        'Please register a vehicle first.',
+        isError: true,
+      );
       return;
     }
 
     _selectedVehicleId = state.vehicles[0]['id'];
-    
+
     // Set default price based on selected route if available
     if (_routesList.isNotEmpty && _selectedRouteId == null) {
       _selectedRouteId = _routesList[0]['id'];
@@ -5808,7 +7051,14 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                   children: [
                     const Align(
                       alignment: Alignment.centerLeft,
-                      child: Text('Select Vehicle', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+                      child: Text(
+                        'Select Vehicle',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black54,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
@@ -5816,81 +7066,137 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                       dropdownColor: const Color(0xFF0F172A),
                       iconEnabledColor: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                       decoration: InputDecoration(
                         hintText: 'Select Vehicle',
-                        hintStyle: const TextStyle(color: Colors.white60, fontSize: 13),
+                        hintStyle: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 13,
+                        ),
                         filled: true,
                         fillColor: const Color(0xFF0A2540),
-                        prefixIcon: const Icon(Icons.airport_shuttle_rounded, color: Colors.white70, size: 20),
+                        prefixIcon: const Icon(
+                          Icons.airport_shuttle_rounded,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                       items: state.vehicles.map((v) {
                         return DropdownMenuItem<String>(
                           value: v['id'],
                           child: Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4.0),
-                            child: Text('${v['name']} (${v['reg']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                            child: Text(
+                              '${v['name']} (${v['reg']})',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         );
                       }).toList(),
-                      onChanged: (val) => setDialogState(() => _selectedVehicleId = val),
+                      onChanged: (val) =>
+                          setDialogState(() => _selectedVehicleId = val),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     _isLoadingRoutes
                         ? const Center(child: CircularProgressIndicator())
                         : _routesList.isEmpty
-                            ? const Padding(
-                                padding: EdgeInsets.all(8.0),
-                                child: Text('No pre-defined routes found. Contact administrator.', style: TextStyle(color: Colors.redAccent)),
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text('Select Route Template', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
-                                  const SizedBox(height: 6),
-                                  DropdownButtonFormField<String>(
-                                    value: _selectedRouteId,
-                                    dropdownColor: const Color(0xFF0F172A),
-                                    iconEnabledColor: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                                    decoration: InputDecoration(
-                                      hintText: 'Select Route Template',
-                                      hintStyle: const TextStyle(color: Colors.white60, fontSize: 13),
-                                      filled: true,
-                                      fillColor: const Color(0xFF0A2540),
-                                      prefixIcon: const Icon(Icons.route_rounded, color: Colors.white70, size: 20),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        borderSide: BorderSide.none,
+                        ? const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Text(
+                              'No pre-defined routes found. Contact administrator.',
+                              style: TextStyle(color: Colors.redAccent),
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Select Route Template',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              DropdownButtonFormField<String>(
+                                value: _selectedRouteId,
+                                dropdownColor: const Color(0xFF0F172A),
+                                iconEnabledColor: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Select Route Template',
+                                  hintStyle: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 13,
+                                  ),
+                                  filled: true,
+                                  fillColor: const Color(0xFF0A2540),
+                                  prefixIcon: const Icon(
+                                    Icons.route_rounded,
+                                    color: Colors.white70,
+                                    size: 20,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                items: _routesList.map((r) {
+                                  final stopsCount =
+                                      (r['stops'] as List?)?.length ?? 0;
+                                  final stopsText = stopsCount > 0
+                                      ? ' ($stopsCount stops)'
+                                      : ' (direct)';
+                                  return DropdownMenuItem<String>(
+                                    value: r['id'],
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4.0,
                                       ),
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    ),
-                                    items: _routesList.map((r) {
-                                      final stopsCount = (r['stops'] as List?)?.length ?? 0;
-                                      final stopsText = stopsCount > 0 ? ' ($stopsCount stops)' : ' (direct)';
-                                      return DropdownMenuItem<String>(
-                                        value: r['id'],
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(vertical: 4.0),
                                       child: Text(
                                         '${r['origin']} ➔ ${r['destination']}$stopsText',
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   );
                                 }).toList(),
-                                onChanged: (val) => setDialogState(() => _selectedRouteId = val),
+                                onChanged: (val) => setDialogState(
+                                  () => _selectedRouteId = val,
+                                ),
                               ),
-                                ],
-                              ),
+                            ],
+                          ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _timeController,
@@ -5903,21 +7209,31 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                     TextField(
                       controller: _priceController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Price per Seat (Rs.)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Price per Seat (Rs.)',
+                      ),
                     ),
                   ],
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
                 ElevatedButton(
-                  onPressed: (_selectedRouteId == null || _priceController.text.isEmpty)
+                  onPressed:
+                      (_selectedRouteId == null ||
+                          _priceController.text.isEmpty)
                       ? null
                       : () {
-                          final selectedRoute = _routesList.firstWhere((r) => r['id'] == _selectedRouteId);
-                          
+                          final selectedRoute = _routesList.firstWhere(
+                            (r) => r['id'] == _selectedRouteId,
+                          );
+
                           // Format timing: YYYY-MM-DD HH:MM
-                          final departureDateTime = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')} ${_timeController.text}';
+                          final departureDateTime =
+                              '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')} ${_timeController.text}';
 
                           state.scheduleTrip(
                             _selectedVehicleId!,
@@ -5928,13 +7244,16 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                           );
                           _priceController.clear();
                           Navigator.pop(context);
-                          SeatyNotifications.show(context, 'Trip scheduled successfully!');
+                          SeatyNotifications.show(
+                            context,
+                            'Trip scheduled successfully!',
+                          );
                         },
                   child: const Text('Schedule'),
-                )
+                ),
               ],
             );
-          }
+          },
         );
       },
     );
@@ -5943,7 +7262,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -5952,14 +7271,20 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Scheduled Journeys', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              const Text(
+                'Scheduled Journeys',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
               if (state.role == 'owner')
                 ElevatedButton.icon(
                   onPressed: _showAddTripDialog,
                   icon: const Icon(Icons.add),
                   label: const Text('Schedule'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE65100), foregroundColor: Colors.white),
-                )
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE65100),
+                    foregroundColor: Colors.white,
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -5977,14 +7302,17 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                   return Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     clipBehavior: Clip.antiAlias,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 2,
                     child: InkWell(
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ConductorTripDetailsScreen(trip: trip),
+                            builder: (context) =>
+                                ConductorTripDetailsScreen(trip: trip),
                           ),
                         );
                       },
@@ -5997,13 +7325,35 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
-                                  child: Text('${trip['origin']} \u2192 ${trip['destination']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0A2540))),
+                                  child: Text(
+                                    '${trip['origin']} \u2192 ${trip['destination']}',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0A2540),
+                                    ),
+                                  ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(color: const Color(0xFFE65100).withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-                                  child: Text(trip['departure'] ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFE65100))),
-                                )
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFFE65100,
+                                    ).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    trip['departure'] ?? '',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFE65100),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -6011,20 +7361,47 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(color: const Color(0xFFF4F6F9), borderRadius: BorderRadius.circular(10)),
-                                  child: const Icon(Icons.airport_shuttle_rounded, size: 20, color: Color(0xFF0A2540)),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF4F6F9),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.airport_shuttle_rounded,
+                                    size: 20,
+                                    color: Color(0xFF0A2540),
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text('${trip['bus_name']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                      Text('${trip['reg']} • ${trip['total_seats']} Seats', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                      Text(
+                                        '${trip['bus_name']}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${trip['reg']} • ${trip['total_seats']} Seats',
+                                        style: const TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                Text('Rs. ${trip['price']}', style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFE65100), fontSize: 15)),
+                                Text(
+                                  'Rs. ${trip['price']}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFE65100),
+                                    fontSize: 15,
+                                  ),
+                                ),
                               ],
                             ),
                           ],
@@ -6035,7 +7412,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                 },
               ),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -6057,42 +7434,77 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.only(left: 24.0, right: 24.0, top: 24.0, bottom: 110.0),
+      padding: const EdgeInsets.only(
+        left: 24.0,
+        right: 24.0,
+        top: 24.0,
+        bottom: 110.0,
+      ),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Live GPS Broadcaster', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          const Text('Transmit coordinates to passengers tracking your vehicle.', style: TextStyle(color: Colors.grey, fontSize: 13)),
+          const Text(
+            'Live GPS Broadcaster',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'Transmit coordinates to passengers tracking your vehicle.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+          ),
           const SizedBox(height: 24),
-          const Text('Select active vehicle to stream GPS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+          const Text(
+            'Select active vehicle to stream GPS',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.black54,
+            ),
+          ),
           const SizedBox(height: 6),
           DropdownButtonFormField<String>(
             value: _selectedVehicleId,
             dropdownColor: const Color(0xFF0F172A),
             iconEnabledColor: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
             decoration: InputDecoration(
               hintText: 'Select active vehicle to stream GPS',
               hintStyle: const TextStyle(color: Colors.white60, fontSize: 13),
               filled: true,
               fillColor: const Color(0xFF0A2540),
-              prefixIcon: const Icon(Icons.sensors_rounded, color: Colors.white70, size: 20),
+              prefixIcon: const Icon(
+                Icons.sensors_rounded,
+                color: Colors.white70,
+                size: 20,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
             ),
             items: state.vehicles.map((v) {
               return DropdownMenuItem<String>(
                 value: v['reg'],
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4.0),
-                  child: Text('${v['name']} (${v['reg']})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    '${v['name']} (${v['reg']})',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               );
             }).toList(),
@@ -6101,7 +7513,9 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
           const SizedBox(height: 16),
           SwitchListTile(
             title: const Text('Simulate Route Movement'),
-            subtitle: const Text('Generates coordinates along highways. Disable to use real device GPS.'),
+            subtitle: const Text(
+              'Generates coordinates along highways. Disable to use real device GPS.',
+            ),
             value: _simulateGps,
             onChanged: (val) => setState(() => _simulateGps = val),
             activeColor: const Color(0xFFE65100),
@@ -6112,20 +7526,33 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: const Color(0xFFF4F6F9),
-                border: Border.all(color: state.isStreamingGPS ? const Color(0xFFE65100).withOpacity(0.5) : Colors.black12),
+                border: Border.all(
+                  color: state.isStreamingGPS
+                      ? const Color(0xFFE65100).withOpacity(0.5)
+                      : Colors.black12,
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Column(
                 children: [
                   Icon(
-                    state.isStreamingGPS ? Icons.sensors : Icons.sensors_off_rounded,
+                    state.isStreamingGPS
+                        ? Icons.sensors
+                        : Icons.sensors_off_rounded,
                     size: 64,
-                    color: state.isStreamingGPS ? const Color(0xFFE65100) : Colors.grey,
+                    color: state.isStreamingGPS
+                        ? const Color(0xFFE65100)
+                        : Colors.grey,
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    state.isStreamingGPS ? 'Broadcasting Coordinates...' : 'GPS Stream Idle',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    state.isStreamingGPS
+                        ? 'Broadcasting Coordinates...'
+                        : 'GPS Stream Idle',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
@@ -6135,21 +7562,35 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
                             if (state.isStreamingGPS) {
                               state.stopStreamingGPS();
                             } else {
-                              state.startStreamingGPS(_selectedVehicleId!, _simulateGps);
+                              state.startStreamingGPS(
+                                _selectedVehicleId!,
+                                _simulateGps,
+                              );
                             }
                           },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: state.isStreamingGPS ? Colors.redAccent : const Color(0xFFE65100),
+                      backgroundColor: state.isStreamingGPS
+                          ? Colors.redAccent
+                          : const Color(0xFFE65100),
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    child: Text(state.isStreamingGPS ? 'Stop GPS Broadcast' : 'Start GPS Broadcast'),
+                    child: Text(
+                      state.isStreamingGPS
+                          ? 'Stop GPS Broadcast'
+                          : 'Start GPS Broadcast',
+                    ),
                   ),
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );
@@ -6222,7 +7663,11 @@ class NotificationsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text(
           'Notifications',
-          style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0A2540), letterSpacing: -0.5),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: Color(0xFF0A2540),
+            letterSpacing: -0.5,
+          ),
         ),
         centerTitle: false,
         actions: [
@@ -6232,9 +7677,16 @@ class NotificationsScreen extends ConsumerWidget {
               child: TextButton.icon(
                 onPressed: () {
                   state.markAllNotificationsAsRead();
-                  SeatyNotifications.show(context, 'All notifications marked as read');
+                  SeatyNotifications.show(
+                    context,
+                    'All notifications marked as read',
+                  );
                 },
-                icon: const Icon(Icons.done_all_rounded, size: 18, color: Color(0xFF0A2540)),
+                icon: const Icon(
+                  Icons.done_all_rounded,
+                  size: 18,
+                  color: Color(0xFF0A2540),
+                ),
                 label: const Text(
                   'Mark all read',
                   style: TextStyle(
@@ -6289,7 +7741,10 @@ class NotificationsScreen extends ConsumerWidget {
                 await state.fetchNotifications();
               },
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 itemCount: list.length,
                 itemBuilder: (context, index) {
                   final noti = list[index];
@@ -6297,14 +7752,19 @@ class NotificationsScreen extends ConsumerWidget {
                   final String title = noti['title'] ?? 'Alert';
                   final String message = noti['message'] ?? '';
                   final String type = noti['type'] ?? 'system';
-                  final bool isRead = noti['is_read'] == true || noti['is_read'] == 1;
+                  final bool isRead =
+                      noti['is_read'] == true || noti['is_read'] == 1;
                   final String timeAgo = _formatTimeAgo(noti['created_at']);
 
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: isRead ? Colors.white : const Color(0xFFF1F5F9), // Subtle greyish-blue for unread
+                      color: isRead
+                          ? Colors.white
+                          : const Color(
+                              0xFFF1F5F9,
+                            ), // Subtle greyish-blue for unread
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
@@ -6314,7 +7774,7 @@ class NotificationsScreen extends ConsumerWidget {
                         ),
                       ],
                       border: Border.all(
-                        color: isRead 
+                        color: isRead
                             ? Colors.black.withOpacity(0.05)
                             : const Color(0xFF0A2540).withOpacity(0.1),
                         width: 1,
@@ -6338,7 +7798,9 @@ class NotificationsScreen extends ConsumerWidget {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: _getColorForType(type).withOpacity(0.1),
+                                  color: _getColorForType(
+                                    type,
+                                  ).withOpacity(0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -6353,14 +7815,17 @@ class NotificationsScreen extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Expanded(
                                           child: Text(
                                             title,
                                             style: TextStyle(
                                               fontSize: 15,
-                                              fontWeight: isRead ? FontWeight.bold : FontWeight.w800,
+                                              fontWeight: isRead
+                                                  ? FontWeight.bold
+                                                  : FontWeight.w800,
                                               color: const Color(0xFF0A2540),
                                             ),
                                           ),
@@ -6369,7 +7834,9 @@ class NotificationsScreen extends ConsumerWidget {
                                           timeAgo,
                                           style: TextStyle(
                                             fontSize: 12,
-                                            color: const Color(0xFF0A2540).withOpacity(0.5),
+                                            color: const Color(
+                                              0xFF0A2540,
+                                            ).withOpacity(0.5),
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -6380,13 +7847,17 @@ class NotificationsScreen extends ConsumerWidget {
                                       message,
                                       style: TextStyle(
                                         fontSize: 13.5,
-                                        color: const Color(0xFF0A2540).withOpacity(0.7),
+                                        color: const Color(
+                                          0xFF0A2540,
+                                        ).withOpacity(0.7),
                                         height: 1.4,
                                       ),
                                     ),
                                     if (!isRead)
                                       Padding(
-                                        padding: const EdgeInsets.only(top: 8.0),
+                                        padding: const EdgeInsets.only(
+                                          top: 8.0,
+                                        ),
                                         child: Row(
                                           children: [
                                             Container(
@@ -6421,6 +7892,741 @@ class NotificationsScreen extends ConsumerWidget {
                 },
               ),
             ),
+    );
+  }
+}
+
+// =====================================================================
+// 6. CONDUCTOR MAIN SCREEN & TABS
+// =====================================================================
+class ConductorHomeTab extends ConsumerStatefulWidget {
+  const ConductorHomeTab({super.key});
+
+  @override
+  ConsumerState<ConductorHomeTab> createState() => _ConductorHomeTabState();
+}
+
+class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
+  bool _isOnDuty = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(appStateProvider);
+    final conductorName = state.userName.isNotEmpty
+        ? state.userName
+        : 'Conductor';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. TOP HEADER & ON-DUTY TOGGLE
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withOpacity(0.2),
+                      blurRadius: 16,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: const Color(
+                                0xFFE65100,
+                              ).withOpacity(0.2),
+                              child: const Icon(
+                                Icons.badge_rounded,
+                                color: Color(0xFFE65100),
+                                size: 28,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Hello, $conductorName',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const Text(
+                                  'Route Conductor • Seaty Express',
+                                  style: TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        // Duty Toggle Switch Button
+                        GestureDetector(
+                          onTap: () {
+                            setState(() => _isOnDuty = !_isOnDuty);
+                            SeatyNotifications.show(
+                              context,
+                              _isOnDuty
+                                  ? 'Status set to On Duty'
+                                  : 'Status set to Off Duty',
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _isOnDuty
+                                  ? const Color(0xFF10B981).withOpacity(0.2)
+                                  : Colors.white10,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: _isOnDuty
+                                    ? const Color(0xFF10B981)
+                                    : Colors.white24,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: _isOnDuty
+                                        ? const Color(0xFF10B981)
+                                        : Colors.grey,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _isOnDuty ? 'ON DUTY' : 'OFF DUTY',
+                                  style: TextStyle(
+                                    color: _isOnDuty
+                                        ? const Color(0xFF10B981)
+                                        : Colors.white60,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // 2. ASSIGNED BUS & ACTIVE TRIP CARD
+              const Text(
+                'Assigned Active Trip',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE65100).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'BUS: NC-4821',
+                            style: TextStyle(
+                              color: Color(0xFFE65100),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(
+                                Icons.access_time_rounded,
+                                size: 14,
+                                color: Color(0xFF3B82F6),
+                              ),
+                              SizedBox(width: 4),
+                              Text(
+                                'Departs 03:30 PM Today',
+                                style: TextStyle(
+                                  color: Color(0xFF3B82F6),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.directions_bus_filled_rounded,
+                          color: Color(0xFF0F172A),
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Colombo (Fort) ➔ Kandy (Central)',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              Text(
+                                'Super Luxury AC • 42 Seater',
+                                style: const TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Passenger Boarding Progress Bar
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Passenger Boarding',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          '34 / 42 Seats Boarded (81%)',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: 34 / 42,
+                        minHeight: 10,
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFFE65100),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    const Divider(),
+                    const SizedBox(height: 12),
+
+                    // Quick Trip Action Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              SeatyNotifications.show(
+                                context,
+                                'Opening QR Scanner...',
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.qr_code_scanner_rounded,
+                              size: 20,
+                            ),
+                            label: const Text('Scan QR Code'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F172A),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              SeatyNotifications.show(
+                                context,
+                                'Loading Passenger Manifest...',
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.people_alt_rounded,
+                              size: 20,
+                            ),
+                            label: const Text('Manifest'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF0F172A),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(
+                                color: Color(0xFFCBD5E1),
+                                width: 1.5,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // 3. STATS GRID
+              const Text(
+                'Today\'s Summary',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.confirmation_number_rounded,
+                      iconColor: const Color(0xFF10B981),
+                      title: 'Validated',
+                      value: '34',
+                      subtitle: 'Checked in',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.hourglass_top_rounded,
+                      iconColor: const Color(0xFFF59E0B),
+                      title: 'Pending',
+                      value: '8',
+                      subtitle: 'Not boarded yet',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.payments_rounded,
+                      iconColor: const Color(0xFF3B82F6),
+                      title: 'Cash Collected',
+                      value: 'LKR 14,200',
+                      subtitle: 'Waybill total',
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      icon: Icons.alt_route_rounded,
+                      iconColor: const Color(0xFF8B5CF6),
+                      title: 'Completed Trips',
+                      value: '2 / 3',
+                      subtitle: 'For today',
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+
+              // 4. RECENT BOARDED PASSENGERS LIST
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Recent Boarding Activity',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      SeatyNotifications.show(
+                        context,
+                        'Opening full activity log',
+                      );
+                    },
+                    child: const Text('View All'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  children: [
+                    _buildActivityTile(
+                      seatNo: 'Seat A12',
+                      passengerName: 'Kamal Silva',
+                      timeAgo: '2 mins ago',
+                      isVerified: true,
+                    ),
+                    const Divider(height: 1),
+                    _buildActivityTile(
+                      seatNo: 'Seat B04',
+                      passengerName: 'Nimali Fernando',
+                      timeAgo: '10 mins ago',
+                      isVerified: true,
+                    ),
+                    const Divider(height: 1),
+                    _buildActivityTile(
+                      seatNo: 'Seat C01',
+                      passengerName: 'Suneth Perera',
+                      timeAgo: '15 mins ago',
+                      isVerified: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String value,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: iconColor, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityTile({
+    required String seatNo,
+    required String passengerName,
+    required String timeAgo,
+    required bool isVerified,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          seatNo,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+          ),
+        ),
+      ),
+      title: Text(
+        passengerName,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+          color: Color(0xFF0F172A),
+        ),
+      ),
+      subtitle: Text(
+        timeAgo,
+        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+      ),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF10B981).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.check_circle_rounded,
+              size: 14,
+              color: Color(0xFF10B981),
+            ),
+            SizedBox(width: 4),
+            Text(
+              'Verified',
+              style: TextStyle(
+                color: Color(0xFF10B981),
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ConductorMainScreen extends ConsumerStatefulWidget {
+  const ConductorMainScreen({super.key});
+
+  @override
+  ConsumerState<ConductorMainScreen> createState() =>
+      _ConductorMainScreenState();
+}
+
+class _ConductorMainScreenState extends ConsumerState<ConductorMainScreen> {
+  int _currentIndex = 0;
+
+  final List<Widget> _tabs = [const ConductorHomeTab()];
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(appStateProvider);
+
+    return Scaffold(
+      extendBody: true,
+      appBar: AppBar(
+        title: Text(
+          'Conductor Hub • ${state.userName}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.logout_rounded,
+              color: Color(0xFFEF4444),
+              size: 24,
+            ),
+            onPressed: () {
+              ref.read(appStateProvider).logout();
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      body: _tabs[_currentIndex],
+      bottomNavigationBar: Container(
+        margin: const EdgeInsets.only(left: 32, right: 32, bottom: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        height: 64,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(
+    int index,
+    IconData outlineIcon,
+    IconData solidIcon,
+    String label,
+  ) {
+    final isSelected = _currentIndex == index;
+    final activeColor = Colors.white;
+    final activeBgColor = const Color(0xFFE65100);
+    final inactiveColor = Colors.white.withOpacity(0.5);
+
+    return GestureDetector(
+      onTap: () => setState(() => _currentIndex = index),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutQuint,
+        padding: EdgeInsets.symmetric(
+          horizontal: isSelected ? 16 : 12,
+          vertical: 12,
+        ),
+        decoration: BoxDecoration(
+          color: isSelected ? activeBgColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutQuint,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSelected ? solidIcon : outlineIcon,
+                color: isSelected ? activeColor : inactiveColor,
+                size: 24,
+              ),
+              if (isSelected) ...[
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
