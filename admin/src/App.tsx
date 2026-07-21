@@ -19,10 +19,39 @@ import { Loader2 } from 'lucide-react';
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="flex flex-col items-center space-y-4">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600 dark:text-indigo-400" />
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Loading details...</p>
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'var(--bg-secondary)',
+      fontFamily: 'var(--font-family)',
+    }}>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '16px',
+        padding: '24px 36px',
+        background: 'var(--bg-card)',
+        borderRadius: '16px',
+        boxShadow: 'var(--shadow-card)',
+        border: '1px solid var(--border-color)',
+      }}>
+        <Loader2 
+          className="animate-spin" 
+          size={36} 
+          style={{ color: 'var(--color-primary)' }} 
+        />
+        <p style={{
+          fontSize: '14.5px',
+          fontWeight: 600,
+          color: 'var(--text-main)',
+          margin: 0,
+        }}>
+          Loading details...
+        </p>
       </div>
     </div>
   );

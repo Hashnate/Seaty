@@ -618,7 +618,7 @@ export default function MyFleetPage() {
                 {/* Bus Body Simulator */}
                 <div style={{ flex: 1, overflowY: 'auto', maxHeight: '420px', padding: '20px 40px', background: 'rgba(10, 37, 64, 0.02)', borderRadius: '12px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   {/* Bus Front Cap (Steering wheel and Driver section) */}
-                  <div style={{ width: '100%', maxWidth: '320px', height: '50px', background: '#ffffff', border: '2px solid var(--border-color)', borderBottom: 'none', borderRadius: '40px 40px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 28px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+                  <div style={{ width: '100%', maxWidth: '320px', height: '50px', background: '#ffffff', border: '2px solid var(--border-color)', borderBottom: 'none', borderRadius: '40px 40px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 28px', color: 'var(--text-muted)', marginBottom: '8px', flexShrink: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600 }}>
                       <span style={{ width: '8px', height: '8px', background: 'var(--color-success)', borderRadius: '50%' }}></span> Front / Driver
                     </div>
@@ -643,7 +643,8 @@ export default function MyFleetPage() {
                           background: '#ffffff',
                           border: '2px solid var(--border-color)',
                           borderRadius: '0 0 20px 20px',
-                          minHeight: '280px'
+                          minHeight: '280px',
+                          flexShrink: 0
                         }}
                       >
                         {Array.from({ length: rows }).map((_, rIdx) => {

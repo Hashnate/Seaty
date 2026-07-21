@@ -1,4 +1,4 @@
-const API_BASE = 'https://api.seaty.hashnate.com/api/v1';
+const API_BASE = '/api/v1';
 
 interface RequestOptions {
   method?: string;
