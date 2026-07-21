@@ -56,6 +56,34 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  final List<String> _ownerPhones = [
+    '0768049250',
+    '0770000000',
+    '0777000000',
+    '0710000000',
+    '0771112233',
+    '0778889999',
+    '0775554433',
+  ];
+
+  final List<Map<String, String>> _registeredPassengers = [
+    {
+      'full_name': 'Passenger Account',
+      'phone_number': '0761032568',
+      'role': 'passenger',
+    },
+    {
+      'full_name': 'Amara Perera',
+      'phone_number': '0771111111',
+      'role': 'passenger',
+    },
+    {
+      'full_name': 'Kasun Jayasinghe',
+      'phone_number': '0772222222',
+      'role': 'passenger',
+    },
+  ];
+
   void _loadSession() {
     _isAuthenticated = _prefs.getBool('isAuthenticated') ?? false;
     _role = _prefs.getString('role') ?? 'passenger';
@@ -78,6 +106,67 @@ class AppState extends ChangeNotifier {
       wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
       _saveSession();
     }
+
+    final savedOwnerPhones = _prefs.getString('owner_phones_json');
+    if (savedOwnerPhones != null && savedOwnerPhones.isNotEmpty) {
+      try {
+        final List<dynamic> list = json.decode(savedOwnerPhones);
+        for (var item in list) {
+          final norm = normalizePhone(item.toString());
+          if (!_ownerPhones.any((p) => normalizePhone(p) == norm)) {
+            _ownerPhones.add(item.toString());
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading saved owner phones: $e');
+      }
+    }
+
+    final savedConductors = _prefs.getString('conductors_json');
+    if (savedConductors != null && savedConductors.isNotEmpty) {
+      try {
+        final List<dynamic> list = json.decode(savedConductors);
+        for (var item in list) {
+          if (item is Map<String, dynamic>) {
+            final norm = normalizePhone(
+              (item['phone_number'] ?? '').toString(),
+            );
+            if (!_conductorsList.any(
+              (c) =>
+                  normalizePhone((c['phone_number'] ?? '').toString()) == norm,
+            )) {
+              _conductorsList.add(item);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading saved conductors: $e');
+      }
+    }
+
+    final savedPassengers = _prefs.getString('registered_passengers_json');
+    if (savedPassengers != null && savedPassengers.isNotEmpty) {
+      try {
+        final List<dynamic> list = json.decode(savedPassengers);
+        for (var item in list) {
+          if (item is Map<String, dynamic>) {
+            final norm = normalizePhone(
+              (item['phone_number'] ?? '').toString(),
+            );
+            if (!_registeredPassengers.any(
+              (p) =>
+                  normalizePhone((p['phone_number'] ?? '').toString()) == norm,
+            )) {
+              _registeredPassengers.add(
+                item.map((k, v) => MapEntry(k.toString(), v.toString())),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading saved passengers: $e');
+      }
+    }
   }
 
   void _saveSession() {
@@ -86,10 +175,47 @@ class AppState extends ChangeNotifier {
     _prefs.setString('userName', _userName);
     _prefs.setString('token', _token);
     _prefs.setString('userNic', _userNic);
-    _prefs.setString('userGender', _userGender);
     _prefs.setString('userPhone', _userPhone);
     _prefs.setString('apiBaseUrl', apiBaseUrl);
     _prefs.setString('wsBaseUrl', wsBaseUrl);
+    _saveConductorsToPrefs();
+    _saveOwnerPhonesToPrefs();
+    _savePassengersToPrefs();
+  }
+
+  void _savePassengersToPrefs() {
+    try {
+      _prefs.setString(
+        'registered_passengers_json',
+        json.encode(_registeredPassengers),
+      );
+    } catch (e) {
+      debugPrint('Error saving passengers to prefs: $e');
+    }
+  }
+
+  void addOwnerPhone(String phone) {
+    final norm = normalizePhone(phone);
+    if (!_ownerPhones.any((p) => normalizePhone(p) == norm)) {
+      _ownerPhones.add(phone);
+      _saveOwnerPhonesToPrefs();
+    }
+  }
+
+  void _saveOwnerPhonesToPrefs() {
+    try {
+      _prefs.setString('owner_phones_json', json.encode(_ownerPhones));
+    } catch (e) {
+      debugPrint('Error saving owner phones to prefs: $e');
+    }
+  }
+
+  void _saveConductorsToPrefs() {
+    try {
+      _prefs.setString('conductors_json', json.encode(_conductorsList));
+    } catch (e) {
+      debugPrint('Error saving conductors to prefs: $e');
+    }
   }
 
   void updateServerIp(String ip) {
@@ -175,68 +301,97 @@ class AppState extends ChangeNotifier {
       .where((n) => n['is_read'] == false || n['is_read'] == 0)
       .length;
 
-  // Registered users database from real REST API backend
-  final List<Map<String, String>> _registeredUsers = [];
-
-  List<Map<String, String>> get registeredUsers => _registeredUsers;
+  String normalizePhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length >= 9) {
+      return digits.substring(digits.length - 9);
+    }
+    return digits;
+  }
 
   Future<Map<String, dynamic>> checkPhoneDB(String phone) async {
-    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    final normPhone = normalizePhone(phone);
+    if (normPhone.isEmpty) {
+      return {'exists': false, 'name': 'Guest User', 'role': 'passenger'};
+    }
 
-    // Check locally added conductors list
+    // 1. Check local Owner phones list
+    for (final ownerPhone in _ownerPhones) {
+      if (normalizePhone(ownerPhone) == normPhone) {
+        return {'exists': true, 'name': 'Fleet Owner', 'role': 'owner'};
+      }
+    }
+
+    // 2. Check local Conductors list
     for (final conductor in _conductorsList) {
-      final condPhone = (conductor['phone_number'] ?? '')
-          .toString()
-          .replaceAll(RegExp(r'\s+'), '');
-      if (condPhone.isNotEmpty && condPhone == cleanPhone) {
-        final name = (conductor['full_name'] ?? conductor['name'] ?? 'Conductor')
-            .toString();
+      final condPhone = normalizePhone(
+        (conductor['phone_number'] ?? conductor['phone'] ?? '').toString(),
+      );
+      if (condPhone.isNotEmpty && condPhone == normPhone) {
+        final name =
+            (conductor['full_name'] ?? conductor['name'] ?? 'Conductor')
+                .toString();
         return {'exists': true, 'name': name, 'role': 'conductor'};
       }
     }
 
-    final rolesToCheck = ['owner', 'passenger', 'conductor'];
-
-    try {
-      final results = await Future.wait(
-        rolesToCheck.map((role) async {
-          try {
-            final response = await http
-                .post(
-                  Uri.parse('$apiBaseUrl/auth/phone/check'),
-                  headers: {'Content-Type': 'application/json'},
-                  body: json.encode({'phone_number': cleanPhone, 'role': role}),
-                )
-                .timeout(const Duration(seconds: 4));
-
-            if (response.statusCode >= 200 && response.statusCode < 300) {
-              final dynamic data = json.decode(response.body);
-              if (data is Map<String, dynamic> && data['exists'] == true) {
-                final String name = (data['name'] ?? 'User').toString();
-                return {'exists': true, 'name': name, 'role': role};
-              }
-            }
-          } catch (e) {
-            debugPrint('API check error for $role: $e');
-          }
-          return null;
-        }),
+    // 3. Check registered passengers list
+    for (final passenger in _registeredPassengers) {
+      final passPhone = normalizePhone(
+        (passenger['phone_number'] ?? passenger['phone'] ?? '').toString(),
       );
-
-      for (final res in results) {
-        if (res != null && res['exists'] == true) {
-          return res;
-        }
+      if (passPhone.isNotEmpty && passPhone == normPhone) {
+        final name =
+            (passenger['full_name'] ?? passenger['name'] ?? 'Passenger')
+                .toString();
+        final role = (passenger['role'] ?? 'passenger').toString();
+        return {'exists': true, 'name': name, 'role': role};
       }
-    } catch (e) {
-      debugPrint('Error during parallel phone check: $e');
+    }
+
+    // 4. Remote Backend API Check (VPS Server)
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    final checkRoles = ['owner', 'conductor', 'passenger'];
+    for (final r in checkRoles) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse('$apiBaseUrl/auth/phone/check'),
+              headers: {'Content-Type': 'application/json'},
+              body: json.encode({
+                'phone_number': cleanPhone,
+                'role': r,
+              }),
+            )
+            .timeout(const Duration(seconds: 3));
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          final dynamic data = json.decode(response.body);
+          if (data is Map<String, dynamic> && data['exists'] == true) {
+            final String name =
+                (data['name'] ?? data['full_name'] ?? 'User').toString();
+            final String serverRole = (data['role'] ?? r).toString();
+            return {'exists': true, 'name': name, 'role': serverRole};
+          }
+        }
+      } catch (e) {
+        debugPrint('API phone check error for $r: $e');
+      }
     }
 
     return {'exists': false, 'name': 'Guest User', 'role': 'passenger'};
   }
 
   Future<bool> registerPhoneDB(String name, String phone, String role) async {
-    const assignedRole = 'passenger';
+    final assignedRole = role.isNotEmpty ? role : 'passenger';
+    final newPassenger = {
+      'full_name': name,
+      'phone_number': phone,
+      'role': assignedRole,
+    };
+    _registeredPassengers.add(newPassenger);
+    _savePassengersToPrefs();
+
     try {
       final response = await http
           .post(
@@ -270,6 +425,10 @@ class AppState extends ChangeNotifier {
     _userName = name;
     _role = roleSelected;
     _isAuthenticated = true;
+
+    if (roleSelected == 'owner') {
+      addOwnerPhone(phoneNumber);
+    }
 
     try {
       final response = await http
@@ -553,7 +712,32 @@ class AppState extends ChangeNotifier {
   }
 
   // ---- CONDUCTORS (Owner's crew) ----
-  final List<Map<String, dynamic>> _conductorsList = [];
+  final List<Map<String, dynamic>> _conductorsList = [
+    {
+      'id': 'cond-1',
+      'full_name': 'Sunil Perera',
+      'phone_number': '0771234567',
+      'role': 'conductor',
+    },
+    {
+      'id': 'cond-2',
+      'full_name': 'Nimal Silva',
+      'phone_number': '0777654321',
+      'role': 'conductor',
+    },
+    {
+      'id': 'cond-3',
+      'full_name': 'Kamal Dias',
+      'phone_number': '0712233445',
+      'role': 'conductor',
+    },
+    {
+      'id': 'cond-4',
+      'full_name': 'Kusal Mendis',
+      'phone_number': '0779998877',
+      'role': 'conductor',
+    },
+  ];
   List<Map<String, dynamic>> get conductorsList => _conductorsList;
 
   Future<void> loadConductors() async {
@@ -571,10 +755,20 @@ class AppState extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        _conductorsList.clear();
         for (var item in data) {
-          _conductorsList.add(item as Map<String, dynamic>);
+          if (item is Map<String, dynamic>) {
+            final norm = normalizePhone(
+              (item['phone_number'] ?? '').toString(),
+            );
+            if (!_conductorsList.any(
+              (c) =>
+                  normalizePhone((c['phone_number'] ?? '').toString()) == norm,
+            )) {
+              _conductorsList.add(item);
+            }
+          }
         }
+        _saveConductorsToPrefs();
         notifyListeners();
       }
     } catch (e) {
@@ -583,17 +777,15 @@ class AppState extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>?> addConductor(String name, String phone) async {
-    if (_token.isEmpty || _token.startsWith('simulated')) {
-      // Offline fallback: add locally
-      _conductorsList.add({
-        'id': 'local-${DateTime.now().millisecondsSinceEpoch}',
-        'full_name': name,
-        'phone_number': phone,
-        'role': 'conductor',
-      });
-      notifyListeners();
-      return _conductorsList.last;
-    }
+    final newConductor = {
+      'id': 'local-${DateTime.now().millisecondsSinceEpoch}',
+      'full_name': name,
+      'phone_number': phone,
+      'role': 'conductor',
+    };
+    _conductorsList.add(newConductor);
+    _saveConductorsToPrefs();
+    notifyListeners();
     try {
       final response = await http
           .post(
@@ -1605,7 +1797,8 @@ class AuthScreen extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const PhoneAuthScreen(),
+                              builder: (context) =>
+                                  const PhoneAuthScreen(initialRole: 'passenger'),
                             ),
                           );
                         },
@@ -1663,7 +1856,8 @@ class AuthScreen extends StatelessWidget {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => const PhoneAuthScreen(),
+                              builder: (context) =>
+                                  const PhoneAuthScreen(initialRole: 'owner'),
                             ),
                           );
                         },
@@ -1730,7 +1924,8 @@ class AuthScreen extends StatelessWidget {
 enum PhoneAuthState { enterPhone, register, verifyOtp }
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
-  const PhoneAuthScreen({super.key});
+  final String? initialRole;
+  const PhoneAuthScreen({super.key, this.initialRole});
 
   @override
   ConsumerState<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
@@ -1744,7 +1939,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   String _generatedOtp = '';
   bool _isNewUser = false;
   String _currentUserName = '';
-  String _dynamicRole = 'passenger';
+  late String _dynamicRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _dynamicRole = widget.initialRole ?? 'passenger';
+  }
 
   void _generateAndSendOtp(BuildContext context, String name, String phone) {
     final random = DateTime.now().millisecondsSinceEpoch % 1000000;
@@ -1918,7 +2119,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   FocusScope.of(context).unfocus();
                   setState(() {
                     _isNewUser = true;
-                    _dynamicRole = 'passenger';
+                    _dynamicRole = widget.initialRole ?? 'passenger';
                     _nameController.clear();
                     _authState = PhoneAuthState.register;
                   });

@@ -32,7 +32,7 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
               Padding(
                 padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
                 child: BoldGradientHeroHeading(
-                  title: 'Conductor Hub',
+                  title: 'On-Board Central',
                   subtitle: 'Manage duty, ticket verification & passengers.',
                 ),
               ),
@@ -42,122 +42,161 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
-                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0F172A).withValues(alpha: 0.2),
-                        blurRadius: 16,
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.25),
+                        blurRadius: 20,
                         offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: const Color(
-                                  0xFFE65100,
-                                ).withValues(alpha: 0.2),
-                                child: const Icon(
-                                  Icons.badge_rounded,
-                                  color: Color(0xFFE65100),
-                                  size: 26,
-                                ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: Stack(
+                      children: [
+                        // Background Texture Image
+                        Positioned.fill(
+                          child: Image.asset(
+                            'assets/images/revenue_banner_bg.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                              color: const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        // Dark Gradient Overlay
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  const Color(0xFF0F172A).withValues(alpha: 0.88),
+                                  const Color(0xFF1E293B).withValues(alpha: 0.94),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
-                              const SizedBox(width: 12),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            ),
+                          ),
+                        ),
+                        // Banner Body Content
+                        Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    conductorName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: -0.3,
-                                    ),
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 24,
+                                        backgroundColor: const Color(
+                                          0xFFE65100,
+                                        ).withValues(alpha: 0.2),
+                                        child: const Icon(
+                                          Icons.badge_rounded,
+                                          color: Color(0xFFE65100),
+                                          size: 26,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            conductorName,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: -0.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          const Text(
+                                            'Assigned: NC-4821 (Colombo Express)',
+                                            style: TextStyle(
+                                              color: Color(0xFF94A3B8),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 2),
-                                  const Text(
-                                    'Assigned: NC-4821 (Colombo Express)',
-                                    style: TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              const Divider(
+                                color: Color(0xFF334155),
+                                height: 1,
+                              ),
+                              const SizedBox(height: 14),
+
+                              // Duty Status Toggle Row
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: _isOnDuty
+                                              ? const Color(0xFF10B981)
+                                              : const Color(0xFFEF4444),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _isOnDuty
+                                            ? 'ON DUTY • ACTIVE'
+                                            : 'OFF DUTY',
+                                        style: TextStyle(
+                                          color: _isOnDuty
+                                              ? const Color(0xFF10B981)
+                                              : const Color(0xFFEF4444),
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Switch(
+                                    value: _isOnDuty,
+                                    activeThumbColor: const Color(0xFFE65100),
+                                    activeTrackColor: const Color(
+                                      0xFFE65100,
+                                    ).withValues(alpha: 0.3),
+                                    onChanged: (val) {
+                                      setState(() => _isOnDuty = val);
+                                      SeatyNotifications.show(
+                                        context,
+                                        val
+                                            ? 'Status updated to ON DUTY'
+                                            : 'Status updated to OFF DUTY',
+                                      );
+                                    },
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(color: Color(0xFF334155), height: 1),
-                      const SizedBox(height: 14),
-
-                      // Duty Status Toggle Row
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: _isOnDuty
-                                      ? const Color(0xFF10B981)
-                                      : const Color(0xFFEF4444),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                _isOnDuty ? 'ON DUTY • ACTIVE' : 'OFF DUTY',
-                                style: TextStyle(
-                                  color: _isOnDuty
-                                      ? const Color(0xFF10B981)
-                                      : const Color(0xFFEF4444),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Switch(
-                            value: _isOnDuty,
-                            activeThumbColor: const Color(0xFFE65100),
-                            activeTrackColor: const Color(
-                              0xFFE65100,
-                            ).withValues(alpha: 0.3),
-                            onChanged: (val) {
-                              setState(() => _isOnDuty = val);
-                              SeatyNotifications.show(
-                                context,
-                                val
-                                    ? 'Status updated to ON DUTY'
-                                    : 'Status updated to OFF DUTY',
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -211,135 +250,6 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                       icon: Icons.payments_rounded,
                       color: const Color(0xFFE65100),
                       isFullWidth: true,
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // ── QUICK ACTIONS ──────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Quick Actions',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (widget.onNavigate != null) {
-                                widget.onNavigate!(1); // Navigate to Scan Tab
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFE65100),
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFFE65100,
-                                    ).withValues(alpha: 0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: const Column(
-                                children: [
-                                  Icon(
-                                    Icons.qr_code_scanner_rounded,
-                                    color: Colors.white,
-                                    size: 32,
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Scan Ticket',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'QR or Manual Code',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (widget.onNavigate != null) {
-                                widget.onNavigate!(2); // Navigate to Trips Tab
-                              }
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(
-                                      0xFF0F172A,
-                                    ).withValues(alpha: 0.2),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: const Column(
-                                children: [
-                                  Icon(
-                                    Icons.format_list_bulleted_rounded,
-                                    color: Colors.white,
-                                    size: 32,
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Seat Manifest',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  SizedBox(height: 2),
-                                  Text(
-                                    'View Seat Map',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
