@@ -99,13 +99,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
 
               // ── REVENUE CARD ───────────────────────────
               Container(
-                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
@@ -115,99 +109,134 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                     ),
                   ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Monthly Revenue',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFF94A3B8),
-                          ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Image.asset(
+                          'assets/images/revenue_banner_bg.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(color: const Color(0xFF0F172A)),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
+                      ),
+                      Positioned.fill(
+                        child: Container(
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF10B981,
-                            ).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.trending_up_rounded,
-                                color: Color(0xFF10B981),
-                                size: 14,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                '+18.4%',
-                                style: TextStyle(
-                                  color: Color(0xFF10B981),
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF0F172A).withValues(alpha: 0.88),
+                                const Color(0xFF1E293B).withValues(alpha: 0.72),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'LKR 485,200',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        letterSpacing: -1,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'From online bookings this month',
-                      style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                    ),
-                    const SizedBox(height: 16),
-                    // Mini progress bar
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 65,
-                            child: Container(
-                              height: 4,
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Color(0xFFE65100),
-                                    Color(0xFFFF8A65),
-                                  ],
+                      Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Monthly Revenue',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF94A3B8),
+                                  ),
                                 ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.trending_up_rounded,
+                                        color: Color(0xFF10B981),
+                                        size: 14,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '+18.4%',
+                                        style: TextStyle(
+                                          color: Color(0xFF10B981),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'LKR 485,200',
+                              style: TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: -1,
                               ),
                             ),
-                          ),
-                          Expanded(
-                            flex: 35,
-                            child: Container(
-                              height: 4,
-                              color: const Color(0xFF334155),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'From online bookings this month',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF94A3B8),
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 16),
+                            // Mini progress bar
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    flex: 65,
+                                    child: Container(
+                                      height: 4,
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Color(0xFFE65100),
+                                            Color(0xFFFF8A65),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 35,
+                                    child: Container(
+                                      height: 4,
+                                      color: const Color(0xFF334155),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
@@ -229,7 +258,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                 children: [
                   Expanded(
                     child: _buildStatCard(
-                      icon: Icons.directions_bus_filled_rounded,
+                      imageAsset: 'assets/images/stat_bus.png',
                       iconBg: const Color(0xFF0F172A),
                       value: '$vehicleCount',
                       label: 'Buses',
@@ -238,7 +267,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildStatCard(
-                      icon: Icons.badge_rounded,
+                      imageAsset: 'assets/images/stat_conductor.png',
                       iconBg: const Color(0xFFE65100),
                       value: '$conductorCount',
                       label: 'Conductors',
@@ -247,7 +276,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _buildStatCard(
-                      icon: Icons.route_rounded,
+                      imageAsset: 'assets/images/stat_trips.png',
                       iconBg: const Color(0xFF3B82F6),
                       value: '4',
                       label: 'Live Trips',
@@ -328,7 +357,8 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
 
   // ── STAT CARD WIDGET ─────────────────────────
   Widget _buildStatCard({
-    required IconData icon,
+    IconData? icon,
+    String? imageAsset,
     required Color iconBg,
     required String value,
     required String label,
@@ -350,12 +380,28 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
       child: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(12),
+              color: iconBg.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: Colors.white, size: 20),
+            child: imageAsset != null
+                ? Image.asset(
+                    imageAsset,
+                    width: 38,
+                    height: 38,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) => Icon(
+                      icon ?? Icons.analytics_rounded,
+                      color: iconBg,
+                      size: 28,
+                    ),
+                  )
+                : Icon(
+                    icon ?? Icons.analytics_rounded,
+                    color: iconBg,
+                    size: 28,
+                  ),
           ),
           const SizedBox(height: 10),
           Text(
