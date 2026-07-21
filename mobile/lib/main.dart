@@ -55,35 +55,6 @@ class AppState extends ChangeNotifier {
       startNotificationsListener();
     }
   }
-
-  final List<String> _ownerPhones = [
-    '0768049250',
-    '0770000000',
-    '0777000000',
-    '0710000000',
-    '0771112233',
-    '0778889999',
-    '0775554433',
-  ];
-
-  final List<Map<String, String>> _registeredPassengers = [
-    {
-      'full_name': 'Passenger Account',
-      'phone_number': '0761032568',
-      'role': 'passenger',
-    },
-    {
-      'full_name': 'Amara Perera',
-      'phone_number': '0771111111',
-      'role': 'passenger',
-    },
-    {
-      'full_name': 'Kasun Jayasinghe',
-      'phone_number': '0772222222',
-      'role': 'passenger',
-    },
-  ];
-
   void _loadSession() {
     _isAuthenticated = _prefs.getBool('isAuthenticated') ?? false;
     _role = _prefs.getString('role') ?? 'passenger';
@@ -107,21 +78,6 @@ class AppState extends ChangeNotifier {
       _saveSession();
     }
 
-    final savedOwnerPhones = _prefs.getString('owner_phones_json');
-    if (savedOwnerPhones != null && savedOwnerPhones.isNotEmpty) {
-      try {
-        final List<dynamic> list = json.decode(savedOwnerPhones);
-        for (var item in list) {
-          final norm = normalizePhone(item.toString());
-          if (!_ownerPhones.any((p) => normalizePhone(p) == norm)) {
-            _ownerPhones.add(item.toString());
-          }
-        }
-      } catch (e) {
-        debugPrint('Error loading saved owner phones: $e');
-      }
-    }
-
     final savedConductors = _prefs.getString('conductors_json');
     if (savedConductors != null && savedConductors.isNotEmpty) {
       try {
@@ -143,30 +99,6 @@ class AppState extends ChangeNotifier {
         debugPrint('Error loading saved conductors: $e');
       }
     }
-
-    final savedPassengers = _prefs.getString('registered_passengers_json');
-    if (savedPassengers != null && savedPassengers.isNotEmpty) {
-      try {
-        final List<dynamic> list = json.decode(savedPassengers);
-        for (var item in list) {
-          if (item is Map<String, dynamic>) {
-            final norm = normalizePhone(
-              (item['phone_number'] ?? '').toString(),
-            );
-            if (!_registeredPassengers.any(
-              (p) =>
-                  normalizePhone((p['phone_number'] ?? '').toString()) == norm,
-            )) {
-              _registeredPassengers.add(
-                item.map((k, v) => MapEntry(k.toString(), v.toString())),
-              );
-            }
-          }
-        }
-      } catch (e) {
-        debugPrint('Error loading saved passengers: $e');
-      }
-    }
   }
 
   void _saveSession() {
@@ -179,35 +111,6 @@ class AppState extends ChangeNotifier {
     _prefs.setString('apiBaseUrl', apiBaseUrl);
     _prefs.setString('wsBaseUrl', wsBaseUrl);
     _saveConductorsToPrefs();
-    _saveOwnerPhonesToPrefs();
-    _savePassengersToPrefs();
-  }
-
-  void _savePassengersToPrefs() {
-    try {
-      _prefs.setString(
-        'registered_passengers_json',
-        json.encode(_registeredPassengers),
-      );
-    } catch (e) {
-      debugPrint('Error saving passengers to prefs: $e');
-    }
-  }
-
-  void addOwnerPhone(String phone) {
-    final norm = normalizePhone(phone);
-    if (!_ownerPhones.any((p) => normalizePhone(p) == norm)) {
-      _ownerPhones.add(phone);
-      _saveOwnerPhonesToPrefs();
-    }
-  }
-
-  void _saveOwnerPhonesToPrefs() {
-    try {
-      _prefs.setString('owner_phones_json', json.encode(_ownerPhones));
-    } catch (e) {
-      debugPrint('Error saving owner phones to prefs: $e');
-    }
   }
 
   void _saveConductorsToPrefs() {
@@ -309,89 +212,65 @@ class AppState extends ChangeNotifier {
     return digits;
   }
 
-  Future<Map<String, dynamic>> checkPhoneDB(String phone) async {
+  Future<Map<String, dynamic>> checkPhoneDB(
+    String phone, {
+    String? preferredRole,
+  }) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
     final normPhone = normalizePhone(phone);
     if (normPhone.isEmpty) {
       return {'exists': false, 'name': 'Guest User', 'role': 'passenger'};
     }
 
-    // 1. Check local Owner phones list
-    for (final ownerPhone in _ownerPhones) {
-      if (normalizePhone(ownerPhone) == normPhone) {
-        return {'exists': true, 'name': 'Fleet Owner', 'role': 'owner'};
-      }
-    }
+    // The VPS API requires a "role" field in the request body.
+    // We send the portal selection as the role hint.
+    // The server now returns the user's ACTUAL role from the database,
+    // so we always trust the server-returned role over anything else.
+    final String roleHint = preferredRole ?? 'passenger';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/auth/phone/check'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': cleanPhone,
+              'role': roleHint,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
 
-    // 2. Check local Conductors list
-    for (final conductor in _conductorsList) {
-      final condPhone = normalizePhone(
-        (conductor['phone_number'] ?? conductor['phone'] ?? '').toString(),
-      );
-      if (condPhone.isNotEmpty && condPhone == normPhone) {
-        final name =
-            (conductor['full_name'] ?? conductor['name'] ?? 'Conductor')
-                .toString();
-        return {'exists': true, 'name': name, 'role': 'conductor'};
-      }
-    }
+      debugPrint('VPS check response [${response.statusCode}]: ${response.body}');
 
-    // 3. Check registered passengers list
-    for (final passenger in _registeredPassengers) {
-      final passPhone = normalizePhone(
-        (passenger['phone_number'] ?? passenger['phone'] ?? '').toString(),
-      );
-      if (passPhone.isNotEmpty && passPhone == normPhone) {
-        final name =
-            (passenger['full_name'] ?? passenger['name'] ?? 'Passenger')
-                .toString();
-        final role = (passenger['role'] ?? 'passenger').toString();
-        return {'exists': true, 'name': name, 'role': role};
-      }
-    }
-
-    // 4. Remote Backend API Check (VPS Server)
-    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
-    final checkRoles = ['owner', 'conductor', 'passenger'];
-    for (final r in checkRoles) {
-      try {
-        final response = await http
-            .post(
-              Uri.parse('$apiBaseUrl/auth/phone/check'),
-              headers: {'Content-Type': 'application/json'},
-              body: json.encode({
-                'phone_number': cleanPhone,
-                'role': r,
-              }),
-            )
-            .timeout(const Duration(seconds: 3));
-
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          final dynamic data = json.decode(response.body);
-          if (data is Map<String, dynamic> && data['exists'] == true) {
-            final String name =
-                (data['name'] ?? data['full_name'] ?? 'User').toString();
-            final String serverRole = (data['role'] ?? r).toString();
-            return {'exists': true, 'name': name, 'role': serverRole};
-          }
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final dynamic data = json.decode(response.body);
+        if (data is Map<String, dynamic> && data['exists'] == true) {
+          final String name =
+              (data['name'] ?? data['full_name'] ?? 'User').toString();
+          // Server role is the absolute authority (now returned by the API)
+          final String? serverRole = data['role']?.toString();
+          final String finalRole = (serverRole != null && serverRole.isNotEmpty)
+              ? serverRole
+              : roleHint;
+          debugPrint(
+            'VPS DB Found: $cleanPhone -> $name | serverRole=$serverRole | preferredRole=$preferredRole | finalRole=$finalRole',
+          );
+          return {'exists': true, 'name': name, 'role': finalRole};
         }
-      } catch (e) {
-        debugPrint('API phone check error for $r: $e');
       }
+    } catch (e) {
+      debugPrint('VPS API check error: $e');
     }
 
-    return {'exists': false, 'name': 'Guest User', 'role': 'passenger'};
+    // Phone not found in DB — new user, use the portal they selected
+    return {
+      'exists': false,
+      'name': 'Guest User',
+      'role': preferredRole ?? 'passenger',
+    };
   }
 
   Future<bool> registerPhoneDB(String name, String phone, String role) async {
     final assignedRole = role.isNotEmpty ? role : 'passenger';
-    final newPassenger = {
-      'full_name': name,
-      'phone_number': phone,
-      'role': assignedRole,
-    };
-    _registeredPassengers.add(newPassenger);
-    _savePassengersToPrefs();
-
     try {
       final response = await http
           .post(
@@ -407,9 +286,7 @@ class AppState extends ChangeNotifier {
 
       return response.statusCode == 201;
     } catch (e) {
-      debugPrint(
-        'API Registration Error: $e. Local registration fallback used.',
-      );
+      debugPrint('API Registration Error: $e');
       return true;
     }
   }
@@ -420,15 +297,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Real or Simulated Login
+  // Real Login
   void login(String name, String roleSelected, String phoneNumber) async {
     _userName = name;
     _role = roleSelected;
     _isAuthenticated = true;
-
-    if (roleSelected == 'owner') {
-      addOwnerPhone(phoneNumber);
-    }
 
     try {
       final response = await http
@@ -2105,7 +1978,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   duration: const Duration(milliseconds: 600),
                 );
 
-                final checkResult = await state.checkPhoneDB(phone);
+                final checkResult = await state.checkPhoneDB(
+                  phone,
+                  preferredRole: widget.initialRole,
+                );
                 final bool exists = checkResult['exists'] ?? false;
                 final String name = checkResult['name'] ?? 'Guest User';
                 _dynamicRole = checkResult['role'] ?? 'passenger';

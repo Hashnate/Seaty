@@ -406,6 +406,7 @@ class PhoneCheckRequest(BaseModel):
 class PhoneCheckResponse(BaseModel):
     exists: bool
     name: Optional[str] = None
+    role: Optional[str] = None
 
 class PhoneRegisterRequest(BaseModel):
     phone_number: str

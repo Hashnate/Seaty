@@ -62,7 +62,7 @@ def check_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db
         models.User.role.in_(roles)
     ).first()
     if user:
-        return {"exists": True, "name": user.full_name}
+        return {"exists": True, "name": user.full_name, "role": user.role}
     return {"exists": False}
 
 @router.post("/phone/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
