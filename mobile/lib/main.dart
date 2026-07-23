@@ -585,32 +585,7 @@ class AppState extends ChangeNotifier {
   }
 
   // ---- CONDUCTORS (Owner's crew) ----
-  final List<Map<String, dynamic>> _conductorsList = [
-    {
-      'id': 'cond-1',
-      'full_name': 'Sunil Perera',
-      'phone_number': '0771234567',
-      'role': 'conductor',
-    },
-    {
-      'id': 'cond-2',
-      'full_name': 'Nimal Silva',
-      'phone_number': '0777654321',
-      'role': 'conductor',
-    },
-    {
-      'id': 'cond-3',
-      'full_name': 'Kamal Dias',
-      'phone_number': '0712233445',
-      'role': 'conductor',
-    },
-    {
-      'id': 'cond-4',
-      'full_name': 'Kusal Mendis',
-      'phone_number': '0779998877',
-      'role': 'conductor',
-    },
-  ];
+  final List<Map<String, dynamic>> _conductorsList = [];
   List<Map<String, dynamic>> get conductorsList => _conductorsList;
 
   Future<void> loadConductors() async {
@@ -628,17 +603,10 @@ class AppState extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
+        _conductorsList.clear();
         for (var item in data) {
           if (item is Map<String, dynamic>) {
-            final norm = normalizePhone(
-              (item['phone_number'] ?? '').toString(),
-            );
-            if (!_conductorsList.any(
-              (c) =>
-                  normalizePhone((c['phone_number'] ?? '').toString()) == norm,
-            )) {
-              _conductorsList.add(item);
-            }
+            _conductorsList.add(item);
           }
         }
         _saveConductorsToPrefs();
@@ -673,7 +641,9 @@ class AppState extends ChangeNotifier {
 
       if (response.statusCode == 201) {
         final data = json.decode(response.body) as Map<String, dynamic>;
+        _conductorsList.remove(newConductor);
         _conductorsList.add(data);
+        _saveConductorsToPrefs();
         notifyListeners();
         return data;
       } else {
@@ -681,6 +651,9 @@ class AppState extends ChangeNotifier {
         throw Exception(errorBody['detail'] ?? 'Failed to add conductor');
       }
     } catch (e) {
+      _conductorsList.remove(newConductor);
+      _saveConductorsToPrefs();
+      notifyListeners();
       debugPrint('Error adding conductor: $e');
       rethrow;
     }

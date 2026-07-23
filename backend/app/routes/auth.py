@@ -56,11 +56,19 @@ def get_current_user_profile(current_user: models.User = Depends(auth.get_curren
 
 @router.post("/phone/check", response_model=schemas.PhoneCheckResponse)
 def check_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
+    # Try to find matching role/role group first
     roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
     user = db.query(models.User).filter(
         models.User.phone_number == payload.phone_number,
         models.User.role.in_(roles)
     ).first()
+    
+    # Fallback to any user matching the phone number (auto-detect role)
+    if not user:
+        user = db.query(models.User).filter(
+            models.User.phone_number == payload.phone_number
+        ).first()
+
     if user:
         return {"exists": True, "name": user.full_name, "role": user.role}
     return {"exists": False}
@@ -101,11 +109,19 @@ def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(
 
 @router.post("/phone/login", response_model=schemas.Token)
 def login_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
+    # Try to find matching role/role group first
     roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
     user = db.query(models.User).filter(
         models.User.phone_number == payload.phone_number,
         models.User.role.in_(roles)
     ).first()
+    
+    # Fallback to any user matching the phone number (auto-detect role)
+    if not user:
+        user = db.query(models.User).filter(
+            models.User.phone_number == payload.phone_number
+        ).first()
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
