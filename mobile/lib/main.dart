@@ -686,16 +686,16 @@ class AppState extends ChangeNotifier {
   }
 
   // Load trips from backend
-  Future<void> loadTrips() async {
+  Future<void> loadTrips({String? date}) async {
     try {
       final Map<String, String> headers = {};
       if (_token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $_token';
       }
-      final today =
+      final queryDate = date ??
           '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
       final response = await http
-          .get(Uri.parse('$apiBaseUrl/trips?date=$today'), headers: headers)
+          .get(Uri.parse('$apiBaseUrl/trips?date=$queryDate'), headers: headers)
           .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
@@ -2915,11 +2915,12 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                           },
                                         );
                                         if (picked != null) {
+                                          final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
                                           setState(() {
                                             _selectedDate = picked;
-                                            _dateController.text =
-                                                "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                            _dateController.text = dateStr;
                                           });
+                                          ref.read(appStateProvider).loadTrips(date: dateStr);
                                         }
                                       },
                                       onClear: () {
@@ -2927,6 +2928,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                           _selectedDate = null;
                                           _dateController.text = 'All Dates';
                                         });
+                                        ref.read(appStateProvider).loadTrips();
                                       },
                                     ),
                                   ],
