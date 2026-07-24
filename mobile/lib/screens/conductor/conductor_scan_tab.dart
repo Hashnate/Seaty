@@ -23,97 +23,166 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
     super.dispose();
   }
 
-  void _verifyTicketCode(String code) {
+  Future<void> _verifyTicketCode(String code) async {
     if (_isProcessing || code.trim().isEmpty) return;
     setState(() => _isProcessing = true);
 
-    final cleanCode = code.trim().toUpperCase();
-
-    // Verification logic
+    // Show loading indicator dialog
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF10B981),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'TICKET VERIFIED',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF10B981),
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Code: #$cleanCode',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF64748B),
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 16),
-              const _VerifyRow(label: 'Passenger:', value: 'Mohamed Muzakkir'),
-              const SizedBox(height: 6),
-              const _VerifyRow(label: 'Seat Number:', value: '14A (Window)'),
-              const SizedBox(height: 6),
-              const _VerifyRow(label: 'Route:', value: 'Colombo → Kandy'),
-              const SizedBox(height: 6),
-              const _VerifyRow(label: 'Boarding Status:', value: 'APPROVED'),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    setState(() => _isProcessing = false);
-                    _manualCodeCtrl.clear();
-                    SeatyNotifications.show(
-                      this.context,
-                      'Passenger boarded successfully!',
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text(
-                    'Confirm Boarding',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFFE65100),
+        ),
+      ),
     );
+
+    final cleanCode = code.trim();
+    final state = ref.read(appStateProvider);
+    final booking = await state.fetchBookingDetails(cleanCode);
+
+    // Dismiss the loading indicator
+    if (mounted) {
+      Navigator.pop(context);
+    }
+
+    if (booking == null) {
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        SeatyNotifications.show(
+          context,
+          'Invalid or expired ticket code.',
+          isError: true,
+        );
+      }
+      return;
+    }
+
+    final passengerName = booking['passenger_name'] ?? 'Passenger';
+    final seats = (booking['seats'] as List).join(', ');
+    final routeStr = '${booking['origin']} → ${booking['destination']}';
+    final status = booking['status']?.toString().toUpperCase() ?? 'PENDING';
+    final tripId = booking['trip_id']?.toString() ?? '';
+
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF10B981),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'TICKET VERIFIED',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Color(0xFF10B981),
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Code: #${cleanCode.length > 8 ? cleanCode.substring(0, 8).toUpperCase() : cleanCode.toUpperCase()}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF64748B),
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                _VerifyRow(label: 'Passenger:', value: passengerName),
+                const SizedBox(height: 6),
+                _VerifyRow(label: 'Seat Number:', value: seats),
+                const SizedBox(height: 6),
+                _VerifyRow(label: 'Route:', value: routeStr),
+                const SizedBox(height: 6),
+                _VerifyRow(label: 'Payment Status:', value: status),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      setState(() => _isProcessing = true);
+                      
+                      // Toggle boarding for all seats in this booking
+                      final List<String> bookingSeats = List<String>.from(booking['seats'] ?? []);
+                      for (final seat in bookingSeats) {
+                        await state.toggleBoarding(tripId, seat);
+                      }
+                      
+                      if (mounted) {
+                        setState(() => _isProcessing = false);
+                        _manualCodeCtrl.clear();
+                        SeatyNotifications.show(
+                          context,
+                          'Passenger boarded successfully!',
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(
+                      'Confirm Boarding',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      setState(() => _isProcessing = false);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF64748B),
+                      side: const BorderSide(color: Color(0xFFE2E8F0)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
   }
 
   @override

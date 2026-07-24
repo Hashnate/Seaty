@@ -824,6 +824,57 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  // Fetch details of a specific booking by ID
+  Future<Map<String, dynamic>?> fetchBookingDetails(String bookingId) async {
+    if (_token.isEmpty || _token.startsWith('simulated')) {
+      try {
+        final b = _bookings.firstWhere(
+          (item) => item['id'].toString().toLowerCase() == bookingId.toLowerCase(),
+        );
+        return b;
+      } catch (e) {
+        return null;
+      }
+    }
+    try {
+      final response = await http
+          .get(
+            Uri.parse('$apiBaseUrl/bookings/$bookingId'),
+            headers: {'Authorization': 'Bearer $_token'},
+          )
+          .timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final b = json.decode(response.body) as Map<String, dynamic>;
+        final trip = b['trip'] ?? {};
+        final vehicle = trip['vehicle'] ?? {};
+        return {
+          'id': b['id'],
+          'trip_id': b['trip_id'],
+          'origin': trip['route']?['origin'] ?? 'Colombo Fort',
+          'destination': trip['route']?['destination'] ?? 'Galle',
+          'departure':
+              trip['departure_time']
+                  ?.toString()
+                  .replaceAll('T', ' ')
+                  .substring(0, 16) ??
+              '2026-07-13 14:00',
+          'bus_name': vehicle['name'] ?? 'Luxury Express',
+          'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
+          'seats': List<String>.from(b['selected_seats'] ?? []),
+          'price': double.tryParse(b['total_price'].toString()) ?? 0.0,
+          'status': b['booking_status'] ?? 'pending',
+          'passenger_name': b['passenger']?['full_name'] ?? 'Passenger',
+          'boarded_seats': List<String>.from(trip['boarded_seats'] ?? []),
+          'passenger_details': b['passenger_details'] ?? {},
+        };
+      }
+    } catch (e) {
+      debugPrint('Error fetching booking details: $e');
+    }
+    return null;
+  }
+
   // Toggle boarding status of a seat
   Future<List<String>?> toggleBoarding(String tripId, String seat) async {
     try {
