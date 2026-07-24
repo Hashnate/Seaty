@@ -320,8 +320,9 @@ class AppState extends ChangeNotifier {
         _token = data['access_token'];
       }
     } catch (e) {
-      debugPrint('API Login error: $e. Using simulated token.');
-      _token = 'simulated_jwt_token_for_${name.replaceAll(' ', '_')}';
+      debugPrint('API Login error: $e.');
+      _token = '';
+      rethrow;
     }
 
     _saveSession();
@@ -1148,46 +1149,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Live Tracking listener (WS Client with Simulation Fallback)
+  // Live Tracking listener (WS Client)
   void startTracking(String vehicleId) {
     stopTracking();
     _isTracking = true;
-
-    // Find matching trip for route coordinates fallback
-    final trip = _trips.firstWhere(
-      (t) => t['reg'] == vehicleId,
-      orElse: () => <String, dynamic>{},
-    );
-
-    double startLat = 6.9271;
-    double startLon = 79.8612;
-    double destLat = 6.0535;
-    double destLon = 80.2210;
-
-    if (trip.isNotEmpty) {
-      final dest = trip['destination']?.toString().toLowerCase() ?? '';
-      if (dest.contains('kandy')) {
-        destLat = 7.2906;
-        destLon = 80.6337;
-      } else if (dest.contains('ella')) {
-        destLat = 6.8667;
-        destLon = 81.0466;
-      } else if (dest.contains('trinco') || dest.contains('trincomalee')) {
-        destLat = 8.5873;
-        destLon = 81.2152;
-      }
-    }
-
-    _trackedBusLocation = {
-      'vehicle_id': vehicleId,
-      'latitude': startLat,
-      'longitude': startLon,
-      'speed': 0.0,
-      'heading': 0.0,
-    };
+    _trackedBusLocation = null;
     notifyListeners();
 
-    bool connected = false;
     try {
       final wsUrl =
           '$wsBaseUrl/tracking/$vehicleId?role=passenger&token=$_token';
@@ -1195,50 +1163,23 @@ class AppState extends ChangeNotifier {
 
       _trackingChannel!.stream.listen(
         (message) {
-          connected = true;
           final data = json.decode(message);
           _trackedBusLocation = data;
           notifyListeners();
         },
         onError: (err) {
           debugPrint('Tracking socket error: $err');
-          if (!connected) {
-            _startLocalTrackingSimulation(
-              vehicleId,
-              startLat,
-              startLon,
-              destLat,
-              destLon,
-            );
-          }
+          stopTracking();
         },
         onDone: () {
-          if (!connected) {
-            _startLocalTrackingSimulation(
-              vehicleId,
-              startLat,
-              startLon,
-              destLat,
-              destLon,
-            );
-          } else {
-            _isTracking = false;
-            _trackedBusLocation = null;
-            notifyListeners();
-          }
+          stopTracking();
         },
       );
     } catch (e) {
       debugPrint(
-        'WebSocket connection failed: $e. Starting simulation fallback.',
+        'WebSocket connection failed: $e.',
       );
-      _startLocalTrackingSimulation(
-        vehicleId,
-        startLat,
-        startLon,
-        destLat,
-        destLon,
-      );
+      stopTracking();
     }
   }
 
@@ -1308,69 +1249,41 @@ class AppState extends ChangeNotifier {
       print('Streaming socket connection failed: $e');
     }
 
-    if (simulate) {
-      // Loop coordinates representing Colombo -> Galle highway
-      double startLat = 6.9271;
-      double startLon = 79.8612;
-      Timer.periodic(const Duration(seconds: 2), (timer) {
-        if (!_isStreamingGPS) {
-          timer.cancel();
-          return;
-        }
-        startLat += 0.003;
-        startLon += 0.002;
+    // Active GPS streaming
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _isStreamingGPS = false;
+      notifyListeners();
+      return;
+    }
 
-        final payload = {
-          'latitude': startLat,
-          'longitude': startLon,
-          'speed': 65.5,
-          'heading': 145.0,
-        };
-
-        // Send to WebSocket
-        _streamingChannel?.sink.add(json.encode(payload));
-
-        // Also update local tracking state in case passenger is on the same device
-        _trackedBusLocation = {'vehicle_id': vehicleId, ...payload};
-        notifyListeners();
-      });
-    } else {
-      // Active GPS streaming
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
         _isStreamingGPS = false;
         notifyListeners();
         return;
       }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          _isStreamingGPS = false;
-          notifyListeners();
-          return;
-        }
-      }
-
-      _positionStreamSubscription =
-          Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: 10,
-            ),
-          ).listen((Position position) {
-            final payload = {
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'speed': position.speed * 3.6, // m/s to km/h
-              'heading': position.heading,
-            };
-
-            _streamingChannel?.sink.add(json.encode(payload));
-            notifyListeners();
-          });
     }
+
+    _positionStreamSubscription =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        ).listen((Position position) {
+          final payload = {
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'speed': position.speed * 3.6, // m/s to km/h
+            'heading': position.heading,
+          };
+
+          _streamingChannel?.sink.add(json.encode(payload));
+          notifyListeners();
+        });
   }
 
   void stopStreamingGPS() {
@@ -7544,7 +7457,7 @@ class OwnerStreamingTab extends ConsumerStatefulWidget {
 
 class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
   String? _selectedVehicleId;
-  bool _simulateGps = true;
+  final bool _simulateGps = false;
 
   @override
   Widget build(BuildContext context) {
@@ -7624,16 +7537,6 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
               );
             }).toList(),
             onChanged: (val) => setState(() => _selectedVehicleId = val),
-          ),
-          const SizedBox(height: 16),
-          SwitchListTile(
-            title: const Text('Simulate Route Movement'),
-            subtitle: const Text(
-              'Generates coordinates along highways. Disable to use real device GPS.',
-            ),
-            value: _simulateGps,
-            onChanged: (val) => setState(() => _simulateGps = val),
-            activeColor: const Color(0xFFE65100),
           ),
           const SizedBox(height: 32),
           Center(
