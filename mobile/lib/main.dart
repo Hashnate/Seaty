@@ -4627,24 +4627,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: List.generate(gridColumns, (cIndex) {
-              if (aisleAfter > 0 && cIndex == aisleAfter) {
-                return SizedBox(
-                  width: 20,
-                  child: Center(
-                    child: Icon(
-                      Icons.arrow_upward_rounded,
-                      color: const Color(0xFF0A2540).withValues(alpha: 0.15),
-                      size: 14,
-                    ),
-                  ),
-                );
-              }
-
-              int seatColIndex = cIndex;
-              if (aisleAfter > 0 && cIndex > aisleAfter) {
-                seatColIndex = cIndex - 1;
-              }
-
               Map<String, dynamic>? customSeat;
               if (customSeatsList != null) {
                 for (var s in customSeatsList) {
@@ -4653,7 +4635,29 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                     break;
                   }
                 }
-                if (customSeat == null) return SizedBox(width: seatWidth);
+              }
+
+              if (customSeat == null) {
+                if (aisleAfter > 0 && cIndex == aisleAfter) {
+                  return SizedBox(
+                    width: 20,
+                    child: Center(
+                      child: Icon(
+                        Icons.arrow_upward_rounded,
+                        color: const Color(0xFF0A2540).withValues(alpha: 0.15),
+                        size: 14,
+                      ),
+                    ),
+                  );
+                }
+                if (customSeatsList != null) {
+                  return SizedBox(width: seatWidth);
+                }
+              }
+
+              int seatColIndex = cIndex;
+              if (customSeat == null && aisleAfter > 0 && cIndex > aisleAfter) {
+                seatColIndex = cIndex - 1;
               }
 
               String seatLabel = customSeat != null
