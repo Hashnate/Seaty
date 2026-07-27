@@ -40,8 +40,8 @@ class AppState extends ChangeNotifier {
   String get userPhone => _userPhone;
 
   // API URL Config
-  String apiBaseUrl = 'http://127.0.0.1:8000/api/v1';
-  String wsBaseUrl = 'ws://127.0.0.1:8000/api/v1/ws';
+  String apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
+  String wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
 
   AppState(this._prefs) {
     _loadSession();
@@ -64,19 +64,9 @@ class AppState extends ChangeNotifier {
     _userNic = _prefs.getString('userNic') ?? '';
     _userGender = _prefs.getString('userGender') ?? '';
     _userPhone = _prefs.getString('userPhone') ?? '';
-    apiBaseUrl =
-        _prefs.getString('apiBaseUrl') ??
-        'http://127.0.0.1:8000/api/v1';
-    wsBaseUrl =
-        _prefs.getString('wsBaseUrl') ??
-        'ws://127.0.0.1:8000/api/v1/ws';
-
-    // Ensure stale prefs pointing to outdated IPs reset to local backend
-    if (apiBaseUrl.contains('192.168.1.195') || apiBaseUrl.contains('api.seaty.hashnate.com')) {
-      apiBaseUrl = 'http://127.0.0.1:8000/api/v1';
-      wsBaseUrl = 'ws://127.0.0.1:8000/api/v1/ws';
-      _saveSession();
-    }
+    apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
+    wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
+    _saveSession();
 
     final savedConductors = _prefs.getString('conductors_json');
     if (savedConductors != null && savedConductors.isNotEmpty) {
@@ -790,6 +780,7 @@ class AppState extends ChangeNotifier {
             'total_seats': vehicle['total_seats'] ?? 40,
             'seat_layout': vehicle['seat_layout'],
             'amenities': List<String>.from(vehicle['amenities'] ?? []),
+            'booked_seats': List<String>.from(tripMap['booked_seats'] ?? []),
             'boarded_seats': List<String>.from(tripMap['boarded_seats'] ?? []),
           });
         }
@@ -2421,7 +2412,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
     final isSelected = _currentIndex == index;
     final activeColor = Colors.white;
     final activeBgColor = const Color(0xFF2563EB); // Matte Orange
-    final inactiveColor = Colors.white.withOpacity(0.5);
+    final inactiveColor = Colors.white.withOpacity(0.75);
 
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
@@ -3096,7 +3087,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                       '${filteredTrips.length} Rides Found',
                       style: const TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                         color: Color(0xFF0F172A),
                         letterSpacing: -0.5,
                       ),
@@ -3307,6 +3298,10 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
               TextField(
                 controller: controller,
                 focusNode: focusNode,
+                onTap: () {
+                  controller.clear();
+                  onChanged('');
+                },
                 onChanged: onChanged,
                 style: const TextStyle(
                   color: Colors.white,
@@ -3627,8 +3622,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
         double.tryParse(trip['price'].toString())?.toStringAsFixed(0) ??
         trip['price'].toString();
     final int totalSeats = trip['total_seats'] as int? ?? 40;
-    final int bookedCount = (trip['boarded_seats'] as List?)?.length ?? 0;
-    final int seatsLeft = totalSeats - bookedCount;
+    final int bookedCount = (trip['booked_seats'] as List?)?.length ?? 0;
+    final int seatsLeft = (totalSeats - bookedCount).clamp(0, totalSeats);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -3679,7 +3674,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                               trip['bus_name'],
                               style: const TextStyle(
                                 fontSize: 14,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: Color(0xFF0A2540),
                                 letterSpacing: -0.3,
                               ),
@@ -3712,7 +3707,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                         'Rs. $priceStr',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           fontSize: 13,
                         ),
                       ),
@@ -3728,7 +3723,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                       trip['origin'],
                       style: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: Color(0xFF0A2540),
                         letterSpacing: -0.5,
                       ),
@@ -3745,7 +3740,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                         trip['destination'],
                         style: const TextStyle(
                           fontSize: 16,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           color: Color(0xFF0A2540),
                           letterSpacing: -0.5,
                         ),
@@ -4846,7 +4841,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                 seatColIndex = cIndex - 1;
               }
 
-              String seatLabel = '${(rIndex * 4) + seatColIndex + 1}';
+              String seatLabel = (customSeat != null && customSeat['label'] != null)
+                  ? customSeat['label'].toString()
+                  : '${(rIndex * 4) + seatColIndex + 1}';
 
               bool isSelected = state.selectedSeats.contains(seatLabel);
               bool isBooked = state.bookedSeats.contains(seatLabel);

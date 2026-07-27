@@ -172,6 +172,8 @@ class TripResponse(BaseModel):
     arrival_time: datetime.datetime
     price_per_seat: float
     status: str
+    boarded_seats: List[str] = []
+    booked_seats: List[str] = []
     created_at: datetime.datetime
     updated_at: datetime.datetime
     # Nested components can be requested via specific endpoints or query params

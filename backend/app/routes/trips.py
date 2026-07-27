@@ -220,6 +220,23 @@ def list_trips(
         trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
         trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
         
+        # Compute confirmed booked seats
+        confirmed_b = db.query(models.Booking).filter(
+            models.Booking.trip_id == trip.id,
+            models.Booking.booking_status == "confirmed"
+        ).all()
+        b_seats = set()
+        for cb in confirmed_b:
+            if cb.selected_seats:
+                b_seats.update(cb.selected_seats)
+        
+        # Filter against vehicle valid seat layout if present
+        if trip.vehicle and trip.vehicle.seat_layout and "seats" in trip.vehicle.seat_layout:
+            valid_labels = set(str(s["label"]) for s in trip.vehicle.seat_layout["seats"] if isinstance(s, dict) and "label" in s)
+            b_seats = b_seats.intersection(valid_labels)
+            
+        trip.booked_seats = list(b_seats)
+        
         # Verify route match with intermediate stops
         if trip.route:
             match = True
@@ -275,6 +292,16 @@ def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
     trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
     trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
     trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
+    
+    confirmed_b = db.query(models.Booking).filter(
+        models.Booking.trip_id == trip.id,
+        models.Booking.booking_status == "confirmed"
+    ).all()
+    b_seats = set()
+    for cb in confirmed_b:
+        if cb.selected_seats:
+            b_seats.update(cb.selected_seats)
+    trip.booked_seats = list(b_seats)
     return trip
 
 @router.patch("/{trip_id}/status", response_model=schemas.TripResponse)

@@ -21,6 +21,12 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
   void initState() {
     super.initState();
     _loadRealtimeReviews();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final tripId = widget.trip['id']?.toString() ?? '';
+      if (tripId.isNotEmpty) {
+        ref.read(appStateProvider).loadSeatAvailability(tripId);
+      }
+    });
   }
 
   Future<void> _loadRealtimeReviews() async {
@@ -239,12 +245,16 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final state = ref.watch(appStateProvider);
     final String priceStr =
         double.tryParse(widget.trip['price'].toString())?.toStringAsFixed(2) ??
         widget.trip['price'].toString();
     final int totalSeats = widget.trip['total_seats'] as int? ?? 40;
-    final int bookedCount = (widget.trip['boarded_seats'] as List?)?.length ?? 0;
-    final int seatsLeft = totalSeats - bookedCount;
+    final List<dynamic> tripBookedSeats = (widget.trip['booked_seats'] as List?) ?? [];
+    final int bookedCount = state.bookedSeats.isNotEmpty 
+        ? state.bookedSeats.length 
+        : tripBookedSeats.length;
+    final int seatsLeft = (totalSeats - bookedCount).clamp(0, totalSeats);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),

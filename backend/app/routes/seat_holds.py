@@ -136,14 +136,10 @@ def get_trip_seat_availability(
     if "seats" in layout and isinstance(layout["seats"], list):
         for s in layout["seats"]:
             if isinstance(s, dict) and "label" in s:
-                all_seats.append(s["label"])
+                all_seats.append(str(s["label"]))
     else:
-        rows = layout.get("rows", 10)
-        columns = layout.get("columns", 4)
-        for r in range(1, rows + 1):
-            for c in range(columns):
-                col_letter = chr(65 + c)
-                all_seats.append(f"{col_letter}{r}")
+        total = vehicle.total_seats or 40
+        all_seats = [str(i) for i in range(1, total + 1)]
 
     # Find genders for the booked seats
     confirmed_bookings = db.query(models.Booking).filter(
@@ -172,12 +168,14 @@ def get_trip_seat_availability(
 
     all_unavailable = set(unavailable["booked"]) | set(unavailable["held"])
     available = [s for s in all_seats if s not in all_unavailable]
+    valid_booked = [s for s in unavailable["booked"] if s in all_seats]
+    valid_held = [s for s in unavailable["held"] if s in all_seats]
 
     return schemas.TripSeatsResponse(
         trip_id=trip_id,
         total_seats=vehicle.total_seats,
-        booked_seats=unavailable["booked"],
-        held_seats=unavailable["held"],
+        booked_seats=valid_booked,
+        held_seats=valid_held,
         available_seats=available,
         seat_genders=seat_genders
     )
