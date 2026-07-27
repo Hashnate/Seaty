@@ -434,3 +434,30 @@ class NotificationBroadcast(BaseModel):
     title: str
     message: str
     target_role: str = Field(default="passenger", description="passenger, owner, conductor, admin, or all")
+
+
+# ==========================================
+# Review Schemas
+# ==========================================
+class ReviewCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = None
+    passenger_name: Optional[str] = "Anonymous Passenger"
+
+class ReviewResponse(BaseModel):
+    id: UUID
+    vehicle_id: UUID
+    user_id: UUID
+    passenger_name: str
+    rating: int
+    comment: Optional[str] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class ReviewSummaryResponse(BaseModel):
+    average_rating: float
+    total_reviews: int
+    reviews: List[ReviewResponse]
+

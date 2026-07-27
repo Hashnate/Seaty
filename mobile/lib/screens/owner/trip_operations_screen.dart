@@ -55,9 +55,9 @@ class _TripOperationsScreenState extends ConsumerState<TripOperationsScreen>
             // TAB BAR SWITCHER
             TabBar(
               controller: _tabController,
-              labelColor: const Color(0xFFE65100),
+              labelColor: const Color(0xFF2563EB),
               unselectedLabelColor: const Color(0xFF64748B),
-              indicatorColor: const Color(0xFFE65100),
+              indicatorColor: const Color(0xFF2563EB),
               indicatorWeight: 3,
               dividerHeight: 0,
               labelStyle: const TextStyle(
@@ -183,7 +183,7 @@ class _TripOperationsScreenState extends ConsumerState<TripOperationsScreen>
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
                             _buildLegendTile(Colors.green, 'Available'),
-                            _buildLegendTile(const Color(0xFFE65100), 'Booked'),
+                            _buildLegendTile(const Color(0xFF2563EB), 'Booked'),
                             _buildLegendTile(
                               const Color(0xFF3B82F6),
                               'VIP Reserve',
@@ -268,9 +268,9 @@ class _TripOperationsScreenState extends ConsumerState<TripOperationsScreen>
                                         textClr = const Color(0xFF3B82F6);
                                       } else if (isBooked) {
                                         seatBg = const Color(
-                                          0xFFE65100,
+                                          0xFF2563EB,
                                         ).withOpacity(0.2);
-                                        textClr = const Color(0xFFE65100);
+                                        textClr = const Color(0xFF2563EB);
                                       }
 
                                       return GestureDetector(

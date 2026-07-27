@@ -13,12 +13,65 @@ class ConductorHomeTab extends ConsumerStatefulWidget {
 
 class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
   bool _isOnDuty = true;
+  Map<String, dynamic>? _manifestData;
+  bool _isLoadingManifest = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadActiveManifest();
+    });
+  }
+
+  Future<void> _loadActiveManifest() async {
+    final state = ref.read(appStateProvider);
+    if (state.trips.isEmpty) {
+      await state.loadTrips();
+    }
+    final trips = ref.read(appStateProvider).trips;
+    if (trips.isNotEmpty) {
+      final activeTrip = trips.first;
+      final tripId = activeTrip['id'].toString();
+      setState(() => _isLoadingManifest = true);
+      final manifest = await state.fetchTripManifest(tripId);
+      if (mounted) {
+        setState(() {
+          _manifestData = manifest;
+          _isLoadingManifest = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
     final conductorName =
         state.userName.isNotEmpty ? state.userName : 'Conductor';
+
+    // Pick active assigned trip for conductor if available
+    final activeTrip = state.trips.isNotEmpty ? state.trips.first : null;
+
+    final String assignedBusText = activeTrip != null
+        ? 'Assigned: ${activeTrip['reg'] ?? 'N/A'} (${activeTrip['bus_name'] ?? 'Bus'})'
+        : 'Assigned: No Active Bus';
+
+    final int totalSeats = activeTrip?['total_seats'] ?? 40;
+    final List<dynamic> manifestList = _manifestData?['manifest'] ?? [];
+    final List<dynamic> boardedList = _manifestData?['boarded_seats'] ?? (activeTrip?['boarded_seats'] ?? []);
+
+    final int validatedCount = manifestList
+        .where((m) => boardedList.contains(m['seat']))
+        .length;
+    final int bookedCount = manifestList.length;
+    final int availableSeats = (totalSeats - bookedCount) > 0 ? (totalSeats - bookedCount) : 0;
+    final double pricePerSeat = activeTrip?['price'] ?? 0.0;
+    final double totalCash = bookedCount * pricePerSeat;
+
+    final String origin = activeTrip?['origin'] ?? 'No Scheduled Origin';
+    final String destination = activeTrip?['destination'] ?? 'No Scheduled Destination';
+    final String departure = activeTrip?['departure'] ?? 'N/A';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -97,11 +150,11 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                       CircleAvatar(
                                         radius: 24,
                                         backgroundColor: const Color(
-                                          0xFFE65100,
+                                          0xFF2563EB,
                                         ).withValues(alpha: 0.2),
                                         child: const Icon(
                                           Icons.badge_rounded,
-                                          color: Color(0xFFE65100),
+                                          color: Color(0xFF2563EB),
                                           size: 26,
                                         ),
                                       ),
@@ -120,9 +173,9 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                             ),
                                           ),
                                           const SizedBox(height: 2),
-                                          const Text(
-                                            'Assigned: NC-4821 (Colombo Express)',
-                                            style: TextStyle(
+                                          Text(
+                                            assignedBusText,
+                                            style: const TextStyle(
                                               color: Color(0xFF94A3B8),
                                               fontSize: 12,
                                               fontWeight: FontWeight.w500,
@@ -176,9 +229,9 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                   ),
                                   Switch(
                                     value: _isOnDuty,
-                                    activeThumbColor: const Color(0xFFE65100),
+                                    activeThumbColor: const Color(0xFF2563EB),
                                     activeTrackColor: const Color(
-                                      0xFFE65100,
+                                      0xFF2563EB,
                                     ).withValues(alpha: 0.3),
                                     onChanged: (val) {
                                       setState(() => _isOnDuty = val);
@@ -209,14 +262,28 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Today\'s Boarding Overview',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.3,
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Today\'s Boarding Overview',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        if (_isLoadingManifest)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFF2563EB),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -224,7 +291,7 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                         Expanded(
                           child: _buildStatTile(
                             title: 'Validated',
-                            value: '34 / 42',
+                            value: '$validatedCount / $bookedCount',
                             subtitle: 'Passengers',
                             icon: Icons.check_circle_rounded,
                             color: const Color(0xFF10B981),
@@ -234,7 +301,7 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                         Expanded(
                           child: _buildStatTile(
                             title: 'Available',
-                            value: '8 Seats',
+                            value: '$availableSeats Seats',
                             subtitle: 'Remaining',
                             icon: Icons.event_seat_rounded,
                             color: const Color(0xFF3B82F6),
@@ -245,10 +312,10 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                     const SizedBox(height: 12),
                     _buildStatTile(
                       title: 'Cash Collected',
-                      value: 'LKR 48,500',
-                      subtitle: 'From 34 verified tickets today',
+                      value: 'LKR ${totalCash.toStringAsFixed(0)}',
+                      subtitle: 'From $bookedCount verified tickets today',
                       icon: Icons.payments_rounded,
-                      color: const Color(0xFFE65100),
+                      color: const Color(0xFF2563EB),
                       isFullWidth: true,
                     ),
                   ],
@@ -299,10 +366,12 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                               ).withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: const Text(
-                              'EN ROUTE',
+                            child: Text(
+                              activeTrip != null ? 'EN ROUTE' : 'NO TRIP',
                               style: TextStyle(
-                                color: Color(0xFF10B981),
+                                color: activeTrip != null
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFF64748B),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 11,
                               ),
@@ -311,18 +380,18 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      const Text(
-                        'Colombo Fort → Kandy Goods Shed',
-                        style: TextStyle(
+                      Text(
+                        '$origin → $destination',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF0F172A),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Departure: Today 02:30 PM • Platform 04',
-                        style: TextStyle(
+                      Text(
+                        'Departure: $departure',
+                        style: const TextStyle(
                           fontSize: 12,
                           color: Color(0xFF64748B),
                           fontWeight: FontWeight.w500,

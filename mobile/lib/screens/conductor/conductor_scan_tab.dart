@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -16,9 +17,16 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
   final TextEditingController _manualCodeCtrl = TextEditingController();
   bool _isProcessing = false;
 
+  bool get _isDesktop =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
   @override
   void dispose() {
-    _scannerController.dispose();
+    if (!_isDesktop) {
+      _scannerController.dispose();
+    }
     _manualCodeCtrl.dispose();
     super.dispose();
   }
@@ -33,7 +41,7 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
       barrierDismissible: false,
       builder: (context) => const Center(
         child: CircularProgressIndicator(
-          color: Color(0xFFE65100),
+          color: Color(0xFF2563EB),
         ),
       ),
     );
@@ -223,55 +231,85 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
-                    child: Stack(
-                      children: [
-                        MobileScanner(
-                          controller: _scannerController,
-                          onDetect: (capture) {
-                            final List<Barcode> barcodes = capture.barcodes;
-                            for (final barcode in barcodes) {
-                              if (barcode.rawValue != null) {
-                                _verifyTicketCode(barcode.rawValue!);
-                                break;
-                              }
-                            }
-                          },
-                        ),
-
-                        // Overlay Finder Frame
-                        Center(
-                          child: Container(
-                            width: 180,
-                            height: 180,
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: const Color(0xFFE65100),
-                                width: 3,
-                              ),
-                              borderRadius: BorderRadius.circular(20),
+                    child: _isDesktop
+                        ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.camera_alt_outlined,
+                                  size: 44,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                                SizedBox(height: 12),
+                                Text(
+                                  'Camera Scanner active on Mobile Devices',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Use manual 6-digit code verification below.',
+                                  style: TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                        ),
-
-                        // Flash & Camera controls
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: CircleAvatar(
-                            backgroundColor: Colors.black45,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.flash_on_rounded,
-                                color: Colors.white,
-                                size: 20,
+                          )
+                        : Stack(
+                            children: [
+                              MobileScanner(
+                                controller: _scannerController,
+                                onDetect: (capture) {
+                                  final List<Barcode> barcodes = capture.barcodes;
+                                  for (final barcode in barcodes) {
+                                    if (barcode.rawValue != null) {
+                                      _verifyTicketCode(barcode.rawValue!);
+                                      break;
+                                    }
+                                  }
+                                },
                               ),
-                              onPressed: () =>
-                                  _scannerController.toggleTorch(),
-                            ),
+
+                              // Overlay Finder Frame
+                              Center(
+                                child: Container(
+                                  width: 180,
+                                  height: 180,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: const Color(0xFF2563EB),
+                                      width: 3,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+
+                              // Flash & Camera controls
+                              Positioned(
+                                top: 12,
+                                right: 12,
+                                child: CircleAvatar(
+                                  backgroundColor: Colors.black45,
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.flash_on_rounded,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    onPressed: () =>
+                                        _scannerController.toggleTorch(),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -356,7 +394,7 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                               onPressed: () =>
                                   _verifyTicketCode(_manualCodeCtrl.text),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE65100),
+                                backgroundColor: const Color(0xFF2563EB),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),

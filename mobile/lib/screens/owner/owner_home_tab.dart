@@ -63,7 +63,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(2),
                             gradient: const LinearGradient(
-                              colors: [Color(0xFFE65100), Color(0xFFFF8A65)],
+                              colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
                             ),
                           ),
                         ),
@@ -215,8 +215,8 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                                       decoration: const BoxDecoration(
                                         gradient: LinearGradient(
                                           colors: [
-                                            Color(0xFFE65100),
-                                            Color(0xFFFF8A65),
+                                            Color(0xFF2563EB),
+                                            Color(0xFF60A5FA),
                                           ],
                                         ),
                                       ),
@@ -268,7 +268,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                   Expanded(
                     child: _buildStatCard(
                       imageAsset: 'assets/images/stat_conductor.png',
-                      iconBg: const Color(0xFFE65100),
+                      iconBg: const Color(0xFF2563EB),
                       value: '$conductorCount',
                       label: 'Conductors',
                     ),
@@ -309,7 +309,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                     child: const Text(
                       'View All',
                       style: TextStyle(
-                        color: Color(0xFFE65100),
+                        color: Color(0xFF2563EB),
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                       ),
@@ -346,7 +346,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                 progress: 0.45,
                 passengers: '18/40',
                 status: 'BOARDING',
-                statusColor: const Color(0xFFE65100),
+                statusColor: const Color(0xFF2563EB),
               ),
             ],
           ),

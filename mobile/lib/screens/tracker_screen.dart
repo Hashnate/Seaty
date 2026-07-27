@@ -60,12 +60,12 @@ class BoldGradientHeroHeading extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE65100).withValues(alpha: 0.08),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
                     trailingIcon,
-                    color: const Color(0xFFE65100),
+                    color: const Color(0xFF2563EB),
                     size: 20,
                   ),
                 ),
@@ -79,7 +79,7 @@ class BoldGradientHeroHeading extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
             gradient: const LinearGradient(
-              colors: [Color(0xFFE65100), Color(0xFFFF8A65)],
+              colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
             ),
           ),
         ),
@@ -216,7 +216,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                       height: 40,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFFE65100), Color(0xFFFF8A65)],
+                          colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -250,7 +250,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: const BorderSide(
-                              color: Color(0xFFE65100),
+                              color: Color(0xFF2563EB),
                               width: 1.5,
                             ),
                           ),
@@ -344,7 +344,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                               polylines: <Polyline<Object>>[
                                 Polyline(
                                   points: routePoints,
-                                  color: const Color(0xFFE65100),
+                                  color: const Color(0xFF2563EB),
                                   strokeWidth: 4.0,
                                 ),
                               ],
@@ -430,11 +430,11 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
                                       color: const Color(
-                                        0xFFE65100,
+                                        0xFF2563EB,
                                       ).withValues(alpha: 0.12),
                                       border: Border.all(
                                         color: const Color(
-                                          0xFFE65100,
+                                          0xFF2563EB,
                                         ).withValues(alpha: 0.25),
                                         width: 1.5,
                                       ),
@@ -450,7 +450,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                     decoration: BoxDecoration(
                                       gradient: const LinearGradient(
                                         colors: [
-                                          Color(0xFFE65100),
+                                          Color(0xFF2563EB),
                                           Color(0xFFFF6D00),
                                         ],
                                         begin: Alignment.topLeft,
@@ -464,7 +464,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       boxShadow: [
                                         BoxShadow(
                                           color: const Color(
-                                            0xFFE65100,
+                                            0xFF2563EB,
                                           ).withValues(alpha: 0.5),
                                           blurRadius: 12,
                                           spreadRadius: 2,
@@ -560,7 +560,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                               child: const Icon(
                                 Icons.my_location_rounded,
                                 size: 18,
-                                color: Color(0xFFE65100),
+                                color: Color(0xFF2563EB),
                               ),
                             ),
                           ),
@@ -595,13 +595,13 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       height: 36,
                                       decoration: BoxDecoration(
                                         color: const Color(
-                                          0xFFE65100,
+                                          0xFF2563EB,
                                         ).withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: const Icon(
                                         Icons.directions_bus_filled_rounded,
-                                        color: Color(0xFFE65100),
+                                        color: Color(0xFF2563EB),
                                         size: 18,
                                       ),
                                     ),
@@ -640,7 +640,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       Icons.speed_rounded,
                                       '${state.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? '0'}',
                                       'km/h',
-                                      const Color(0xFFE65100),
+                                      const Color(0xFF2563EB),
                                     ),
                                     const SizedBox(width: 8),
                                     _buildStatChip(

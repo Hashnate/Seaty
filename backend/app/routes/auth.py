@@ -54,38 +54,50 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def get_current_user_profile(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
+def normalize_phone_digits(raw: str) -> str:
+    if not raw:
+        return ""
+    digits = "".join(c for c in raw if c.isdigit())
+    return digits[-9:] if len(digits) >= 9 else digits
+
 @router.post("/phone/check", response_model=schemas.PhoneCheckResponse)
 def check_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
-    # Try to find matching role/role group first
-    roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
-    user = db.query(models.User).filter(
-        models.User.phone_number == payload.phone_number,
-        models.User.role.in_(roles)
-    ).first()
+    target_norm = normalize_phone_digits(payload.phone_number)
+    users = db.query(models.User).all()
     
-    # Fallback to any user matching the phone number (auto-detect role)
-    if not user:
-        user = db.query(models.User).filter(
-            models.User.phone_number == payload.phone_number
-        ).first()
+    matching_user = None
+    roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
+    
+    # 1. Try matching target phone + role group first
+    for u in users:
+        if u.phone_number and normalize_phone_digits(u.phone_number) == target_norm:
+            if u.role in roles:
+                matching_user = u
+                break
+                
+    # 2. Fallback to any user matching target phone (auto-detect role)
+    if not matching_user:
+        for u in users:
+            if u.phone_number and normalize_phone_digits(u.phone_number) == target_norm:
+                matching_user = u
+                break
 
-    if user:
-        return {"exists": True, "name": user.full_name, "role": user.role}
+    if matching_user:
+        return {"exists": True, "name": matching_user.full_name, "role": matching_user.role}
     return {"exists": False}
 
 @router.post("/phone/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(get_db)):
     email = f"{payload.phone_number}@seaty.lk"
+    target_norm = normalize_phone_digits(payload.phone_number)
     
-    existing_user = db.query(models.User).filter(
-        models.User.phone_number == payload.phone_number,
-        models.User.role == payload.role
-    ).first()
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A user with this mobile number is already registered under this role."
-        )
+    users = db.query(models.User).all()
+    for u in users:
+        if u.phone_number and normalize_phone_digits(u.phone_number) == target_norm and u.role == payload.role:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A user with this mobile number is already registered under this role."
+            )
 
     existing_email = db.query(models.User).filter(models.User.email == email).first()
     if existing_email:
@@ -109,29 +121,34 @@ def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(
 
 @router.post("/phone/login", response_model=schemas.Token)
 def login_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
-    # Try to find matching role/role group first
-    roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
-    user = db.query(models.User).filter(
-        models.User.phone_number == payload.phone_number,
-        models.User.role.in_(roles)
-    ).first()
+    target_norm = normalize_phone_digits(payload.phone_number)
+    users = db.query(models.User).all()
     
-    # Fallback to any user matching the phone number (auto-detect role)
-    if not user:
-        user = db.query(models.User).filter(
-            models.User.phone_number == payload.phone_number
-        ).first()
+    matching_user = None
+    roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
+    
+    for u in users:
+        if u.phone_number and normalize_phone_digits(u.phone_number) == target_norm:
+            if u.role in roles:
+                matching_user = u
+                break
+                
+    if not matching_user:
+        for u in users:
+            if u.phone_number and normalize_phone_digits(u.phone_number) == target_norm:
+                matching_user = u
+                break
 
-    if not user:
+    if not matching_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found."
         )
 
     access_token = auth.create_access_token(
-        data={"sub": user.email, "role": user.role}
+        data={"sub": matching_user.email, "role": matching_user.role}
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "role": matching_user.role}
 
 @router.put("/profile", response_model=schemas.UserResponse)
 def update_profile(

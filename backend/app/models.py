@@ -250,3 +250,20 @@ class VehicleLocation(Base):
 
     # Relationships
     vehicle = relationship("Vehicle", back_populates="location")
+
+
+class Review(Base):
+    __tablename__ = "reviews"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    passenger_name = Column(String, nullable=False)
+    rating = Column(Integer, nullable=False)
+    comment = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    vehicle = relationship("Vehicle", backref="reviews")
+    user = relationship("User", backref="reviews")
+

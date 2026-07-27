@@ -90,7 +90,7 @@ class _ConductorMainScreenState extends ConsumerState<ConductorMainScreen> {
   ) {
     final isSelected = _currentIndex == index;
     final activeColor = Colors.white;
-    final activeBgColor = const Color(0xFFE65100);
+    final activeBgColor = const Color(0xFF2563EB);
     final inactiveColor = Colors.white.withValues(alpha: 0.5);
 
     return GestureDetector(

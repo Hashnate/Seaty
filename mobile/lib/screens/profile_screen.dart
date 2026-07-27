@@ -125,7 +125,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                         height: 56,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFFE65100), Color(0xFFFF8A65)],
+                            colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
@@ -164,7 +164,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: const Color(
-                                  0xFFE65100,
+                                  0xFF2563EB,
                                 ).withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -173,7 +173,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFFE65100),
+                                  color: Color(0xFF2563EB),
                                   letterSpacing: 0.8,
                                 ),
                               ),
@@ -204,7 +204,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(2),
                               gradient: const LinearGradient(
-                                colors: [Color(0xFFE65100), Color(0xFFFF8A65)],
+                                colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
                                 begin: Alignment.topCenter,
                                 end: Alignment.bottomCenter,
                               ),
@@ -257,7 +257,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                                   Icon(
                                     Icons.lock_outline_rounded,
                                     size: 13,
-                                    color: Color(0xFFE65100),
+                                    color: Color(0xFF2563EB),
                                   ),
                                   SizedBox(width: 3),
                                   Text(
@@ -265,7 +265,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
-                                      color: Color(0xFFE65100),
+                                      color: Color(0xFF2563EB),
                                     ),
                                   ),
                                 ],
@@ -377,10 +377,10 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                         child: ElevatedButton(
                           onPressed: _isSaving ? null : _saveProfile,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE65100),
+                            backgroundColor: const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
                             disabledBackgroundColor: const Color(
-                              0xFFE65100,
+                              0xFF2563EB,
                             ).withValues(alpha: 0.5),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -503,7 +503,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(
-          color: readOnly ? const Color(0xFFE2E8F0) : const Color(0xFFE65100),
+          color: readOnly ? const Color(0xFFE2E8F0) : const Color(0xFF2563EB),
           width: readOnly ? 1.0 : 1.5,
         ),
       ),

@@ -97,7 +97,7 @@ class _OwnerMainScreenState extends ConsumerState<OwnerMainScreen> {
   ) {
     final isSelected = _currentIndex == index;
     final activeColor = Colors.white;
-    final activeBgColor = const Color(0xFFE65100); // Matte Orange
+    final activeBgColor = const Color(0xFF2563EB); // Matte Orange
     final inactiveColor = Colors.white.withOpacity(0.5);
 
     return GestureDetector(

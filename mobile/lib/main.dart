@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -39,8 +40,8 @@ class AppState extends ChangeNotifier {
   String get userPhone => _userPhone;
 
   // API URL Config
-  String apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
-  String wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
+  String apiBaseUrl = 'http://127.0.0.1:8000/api/v1';
+  String wsBaseUrl = 'ws://127.0.0.1:8000/api/v1/ws';
 
   AppState(this._prefs) {
     _loadSession();
@@ -65,16 +66,15 @@ class AppState extends ChangeNotifier {
     _userPhone = _prefs.getString('userPhone') ?? '';
     apiBaseUrl =
         _prefs.getString('apiBaseUrl') ??
-        'https://api.seaty.hashnate.com/api/v1';
+        'http://127.0.0.1:8000/api/v1';
     wsBaseUrl =
         _prefs.getString('wsBaseUrl') ??
-        'wss://api.seaty.hashnate.com/api/v1/ws';
+        'ws://127.0.0.1:8000/api/v1/ws';
 
-    // Auto-override outdated placeholder IP to avoid socket timeouts
-    if (apiBaseUrl.contains('192.168.1.195') ||
-        apiBaseUrl.contains('localhost')) {
-      apiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
-      wsBaseUrl = 'wss://api.seaty.hashnate.com/api/v1/ws';
+    // Ensure stale prefs pointing to outdated IPs reset to local backend
+    if (apiBaseUrl.contains('192.168.1.195') || apiBaseUrl.contains('api.seaty.hashnate.com')) {
+      apiBaseUrl = 'http://127.0.0.1:8000/api/v1';
+      wsBaseUrl = 'ws://127.0.0.1:8000/api/v1/ws';
       _saveSession();
     }
 
@@ -318,6 +318,9 @@ class AppState extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         _token = data['access_token'];
+        if (data['role'] != null && data['role'].toString().isNotEmpty) {
+          _role = data['role'].toString();
+        }
       }
     } catch (e) {
       debugPrint('API Login error: $e.');
@@ -427,9 +430,21 @@ class AppState extends ChangeNotifier {
 
     _isNotiListenerConnected = true;
     try {
-      final cleanWsBase = wsBaseUrl.endsWith('/ws')
-          ? wsBaseUrl.substring(0, wsBaseUrl.length - 3)
-          : wsBaseUrl;
+      String currentWsBase = wsBaseUrl;
+      if (apiBaseUrl.contains('localhost') ||
+          apiBaseUrl.contains('127.0.0.1') ||
+          apiBaseUrl.contains('10.0.2.2') ||
+          apiBaseUrl.contains('192.168.')) {
+        try {
+          final uri = Uri.parse(apiBaseUrl);
+          final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
+          currentWsBase = '$scheme://${uri.host}:${uri.port}/api/v1/ws';
+        } catch (_) {}
+      }
+
+      final cleanWsBase = currentWsBase.endsWith('/ws')
+          ? currentWsBase.substring(0, currentWsBase.length - 3)
+          : currentWsBase;
       final wsUrl = '$cleanWsBase/notifications/ws?token=$_token';
       _notificationsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
@@ -455,10 +470,12 @@ class AppState extends ChangeNotifier {
         },
         onError: (err) {
           debugPrint('Notification WS error: $err');
+          _isNotiListenerConnected = false;
         },
         onDone: () {
           _isNotiListenerConnected = false;
         },
+        cancelOnError: true,
       );
     } catch (e) {
       debugPrint('Notification WS connection failed: $e');
@@ -488,11 +505,61 @@ class AppState extends ChangeNotifier {
         _userPhone = data['phone_number'] ?? _userPhone;
         _userNic = data['nic_number'] ?? '';
         _userGender = data['gender'] ?? '';
+        if (data['role'] != null && data['role'].toString().isNotEmpty) {
+          _role = data['role'].toString();
+        }
         _saveSession();
         notifyListeners();
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchVehicleReviews(String vehicleId) async {
+    if (vehicleId.isEmpty) {
+      return {'average_rating': 0.0, 'total_reviews': 0, 'reviews': []};
+    }
+    try {
+      final response = await http
+          .get(Uri.parse('$apiBaseUrl/vehicles/$vehicleId/reviews'))
+          .timeout(const Duration(seconds: 3));
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+    } catch (e) {
+      debugPrint('Error fetching reviews: $e');
+    }
+    return {'average_rating': 0.0, 'total_reviews': 0, 'reviews': []};
+  }
+
+  Future<bool> submitVehicleReview(
+    String vehicleId,
+    int rating,
+    String comment,
+  ) async {
+    if (vehicleId.isEmpty) return false;
+    try {
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (_token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $_token';
+      }
+      final response = await http
+          .post(
+            Uri.parse('$apiBaseUrl/vehicles/$vehicleId/reviews'),
+            headers: headers,
+            body: json.encode({
+              'rating': rating,
+              'comment': comment,
+              'passenger_name': _userName.isNotEmpty ? _userName : 'Passenger',
+            }),
+          )
+          .timeout(const Duration(seconds: 3));
+
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      debugPrint('Error submitting review: $e');
+      return false;
     }
   }
 
@@ -696,7 +763,7 @@ class AppState extends ChangeNotifier {
           '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}';
       final response = await http
           .get(Uri.parse('$apiBaseUrl/trips?date=$queryDate'), headers: headers)
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -706,6 +773,7 @@ class AppState extends ChangeNotifier {
           final vehicle = tripMap['vehicle'] ?? {};
           _trips.add({
             'id': tripMap['id'],
+            'vehicle_id': vehicle['id'] ?? tripMap['vehicle_id'],
             'origin': tripMap['route']?['origin'] ?? 'Colombo Fort',
             'destination': tripMap['route']?['destination'] ?? 'Galle',
             'route': tripMap['route'],
@@ -1435,12 +1503,12 @@ class SeatyApp extends StatelessWidget {
         brightness: Brightness.light,
         scaffoldBackgroundColor: Colors.white,
         primaryColor: const Color(0xFF0A2540), // Navy Blue
-        hintColor: const Color(0xFFE65100), // Matte Orange
-        cardColor: const Color(0xFFF4F6F9), // Light card background
+        hintColor: const Color(0xFF2563EB), // Blue (matches admin dashboard)
+        cardColor: const Color(0xFFF8FAFC), // Slate off-white (matches admin)
         fontFamily: 'Inter',
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF0A2540),
-          secondary: Color(0xFFE65100),
+          secondary: Color(0xFF2563EB),
           surface: Colors.white,
         ),
         appBarTheme: const AppBarTheme(
@@ -1456,8 +1524,8 @@ class SeatyApp extends StatelessWidget {
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
-          selectedItemColor: Color(0xFF0A2540),
-          unselectedItemColor: Colors.black38,
+          selectedItemColor: Color(0xFF2563EB),
+          unselectedItemColor: Color(0xFF64748B),
           elevation: 8,
         ),
         useMaterial3: true,
@@ -2352,7 +2420,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
   ) {
     final isSelected = _currentIndex == index;
     final activeColor = Colors.white;
-    final activeBgColor = const Color(0xFFE65100); // Matte Orange
+    final activeBgColor = const Color(0xFF2563EB); // Matte Orange
     final inactiveColor = Colors.white.withOpacity(0.5);
 
     return GestureDetector(
@@ -2498,7 +2566,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   // Palette pool for dynamic destination cards
   static const List<List<int>> _colorPalette = [
     [0xFF0A2540, 0xFF0E3A5E],
-    [0xFFE65100, 0xFFFF8A50],
+    [0xFF2563EB, 0xFFFF8A50],
     [0xFF1E293B, 0xFF475569],
     [0xFF7C3AED, 0xFF9F6FFF],
     [0xFF0F766E, 0xFF14B8A6],
@@ -2815,12 +2883,12 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                                     horizontal: 12,
                                                   ),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFFE65100),
+                                                color: const Color(0xFF2563EB),
                                                 shape: BoxShape.circle,
                                                 boxShadow: [
                                                   BoxShadow(
                                                     color: const Color(
-                                                      0xFFE65100,
+                                                      0xFF2563EB,
                                                     ).withOpacity(0.4),
                                                     blurRadius: 8,
                                                     offset: const Offset(0, 4),
@@ -2899,7 +2967,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                                 colorScheme:
                                                     const ColorScheme.dark(
                                                       primary: Color(
-                                                        0xFFE65100,
+                                                        0xFF2563EB,
                                                       ),
                                                       onPrimary: Colors.white,
                                                       surface: Color(
@@ -3128,7 +3196,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                               Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFE65100),
+                                  color: const Color(0xFF2563EB),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
@@ -3451,7 +3519,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: isSelected && isLight
-                ? const Color(0xFFE65100)
+                ? const Color(0xFF2563EB)
                 : Colors.transparent,
             width: 2,
           ),
@@ -3637,7 +3705,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFE65100),
+                        color: const Color(0xFF2563EB),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -3668,7 +3736,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     const SizedBox(width: 8),
                     const Icon(
                       Icons.east_rounded,
-                      color: Color(0xFFE65100),
+                      color: Color(0xFF2563EB),
                       size: 16,
                     ),
                     const SizedBox(width: 8),
@@ -3879,6 +3947,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
   late Animation<double> _scaleAnimation;
   late Animation<double> _slideAnimation;
 
+  dynamic _wsChannel;
+  Timer? _pollingTimer;
+
   @override
   void initState() {
     super.initState();
@@ -3907,11 +3978,69 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshSeats();
+      _initRealtimeWebSocket();
+      _startSyncTimer();
+    });
+  }
+
+  Future<void> _initRealtimeWebSocket() async {
+    try {
+      final tripId = widget.trip['id'].toString();
+      final state = ref.read(appStateProvider);
+      final wsUri = 'ws://127.0.0.1:8000/api/v1/trips/ws/$tripId';
+
+      _wsChannel = await WebSocket.connect(wsUri);
+      _wsChannel?.listen(
+        (message) {
+          try {
+            final data = json.decode(message.toString());
+            final event = data['event'];
+            final List seats = data['seats'] ?? [];
+
+            if (event == 'SEAT_HELD') {
+              for (var s in seats) {
+                state.heldSeats.add(s.toString());
+              }
+              state.notifyListeners();
+            } else if (event == 'SEAT_BOOKED') {
+              for (var s in seats) {
+                state.bookedSeats.add(s.toString());
+              }
+              state.notifyListeners();
+            } else if (event == 'SEAT_RELEASED') {
+              for (var s in seats) {
+                state.heldSeats.remove(s.toString());
+                state.bookedSeats.remove(s.toString());
+              }
+              state.notifyListeners();
+            }
+          } catch (e) {
+            debugPrint('Error parsing WS message: $e');
+          }
+        },
+        onError: (err) => debugPrint('WebSocket error: $err'),
+        onDone: () => debugPrint('WebSocket connection closed.'),
+      );
+    } catch (e) {
+      debugPrint('Real-time WebSocket connection failed: $e');
+    }
+  }
+
+  void _startSyncTimer() {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (mounted && !_isBookingInProgress) {
+        final state = ref.read(appStateProvider);
+        await state.loadSeatAvailability(widget.trip['id'].toString());
+      }
     });
   }
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
+    try {
+      _wsChannel?.close();
+    } catch (_) {}
     _introController.dispose();
     super.dispose();
   }
@@ -4088,7 +4217,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                                   ),
                                   decoration: BoxDecoration(
                                     color: isSelf
-                                        ? const Color(0xFFE65100)
+                                        ? const Color(0xFF2563EB)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -4120,7 +4249,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                                   ),
                                   decoration: BoxDecoration(
                                     color: !isSelf
-                                        ? const Color(0xFFE65100)
+                                        ? const Color(0xFF2563EB)
                                         : Colors.transparent,
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -4255,7 +4384,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                             _handleConfirmAndBook(state, fullDetails);
                           },
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE65100),
+                            backgroundColor: const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -4313,7 +4442,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFE65100), width: 1.5),
+        borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -4327,66 +4456,60 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
     final state = ref.watch(appStateProvider);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A)),
           onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.trip['bus_name'] ?? 'Select Seats',
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            Text(
+              widget.trip['reg'] ?? '',
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 11,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
         ),
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFE65100)),
+              child: CircularProgressIndicator(color: Color(0xFF2563EB)),
             )
           : Column(
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12.0,
-                    horizontal: 16.0,
-                  ),
+                // Realistic Legend Bar
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10.0, horizontal: 16.0),
+                  color: Colors.white,
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      Text(
-                        widget.trip['bus_name'],
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        widget.trip['reg'],
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
+                      _buildLegendItem(const Color(0xFFFFFFFF), 'Available', border: const Color(0xFFCBD5E1)),
+                      _buildLegendItem(const Color(0xFF2563EB), 'Selected'),
+                      _buildLegendItem(const Color(0xFF1E3A8A), 'Male'),
+                      _buildLegendItem(const Color(0xFFE11D48), 'Female'),
+                      _buildLegendItem(const Color(0xFFD97706), 'Held'),
                     ],
                   ),
                 ),
                 const Divider(height: 1),
 
-                // Legend Bar
-                Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildLegendItem(
-                        const Color(0xFFF4F6F9),
-                        'Available',
-                        border: Colors.black12,
-                      ),
-                      _buildLegendItem(const Color(0xFFE65100), 'Selected'),
-                      _buildLegendItem(const Color(0xFF0F2C59), 'Male'),
-                      _buildLegendItem(const Color(0xFFF472B6), 'Female'),
-                      _buildLegendItem(Colors.amber.shade200, 'Held'),
-                    ],
-                  ),
-                ),
-
-                // Seat Grid with Cinematic 3D Fly-In Intro Animation (No scrolling, auto-fits one view)
+                // Seat Grid inside Realistic Bus Chassis Canvas
                 Builder(
                   builder: (context) {
                     final layout =
@@ -4399,15 +4522,13 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                     return Expanded(
                       child: Container(
                         width: double.infinity,
-                        color: const Color(
-                          0xFFF1F5F9,
-                        ), // Light bus cabin floor color
+                        color: const Color(0xFFE2E8F0),
                         child: AnimatedBuilder(
                           animation: _introController,
                           builder: (context, child) {
                             return Transform(
                               transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.001) // perspective depth
+                                ..setEntry(3, 2, 0.001)
                                 ..rotateX(_perspectiveAnimation.value)
                                 ..scale(_scaleAnimation.value),
                               alignment: Alignment.center,
@@ -4418,44 +4539,59 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                             );
                           },
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 12,
-                            ),
-                            child: LayoutBuilder(
-                              builder: (context, constraints) {
-                                final double gridHeight = constraints.maxHeight;
-                                // We subtract cockpit height (approx 44px) + vertical margins/spacing (approx 16px)
-                                final double availableGridHeight =
-                                    gridHeight - 60.0;
-                                final double rowHeight =
-                                    (availableGridHeight / rows).clamp(
-                                      32.0,
-                                      56.0,
-                                    );
-                                final double seatHeight = (rowHeight - 6.0)
-                                    .clamp(26.0, 48.0);
-                                final double seatWidth = (seatHeight * 1.35)
-                                    .clamp(42.0, 58.0);
-
-                                return Column(
-                                  children: [
-                                    _buildCabinFront(),
-                                    const SizedBox(height: 8),
-                                    Expanded(
-                                      child: _buildFlatGrid(
-                                        state,
-                                        layout,
-                                        rows,
-                                        columns,
-                                        aisleAfter,
-                                        seatWidth,
-                                        seatHeight,
-                                      ),
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Center(
+                              child: Container(
+                                constraints: const BoxConstraints(maxWidth: 480),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    topRight: Radius.circular(16),
+                                    bottomLeft: Radius.circular(10),
+                                    bottomRight: Radius.circular(10),
+                                  ),
+                                  border: Border.all(
+                                    color: const Color(0xFF334155),
+                                    width: 3.0,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 8),
                                     ),
                                   ],
-                                );
-                              },
+                                ),
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final double gridHeight = constraints.maxHeight;
+                                    final double availableGridHeight = gridHeight - 70.0;
+                                    final double rowHeight =
+                                        (availableGridHeight / rows).clamp(34.0, 58.0);
+                                    final double seatHeight = (rowHeight - 6.0).clamp(28.0, 48.0);
+                                    final double seatWidth = (seatHeight * 1.35).clamp(42.0, 58.0);
+
+                                    return Column(
+                                      children: [
+                                        _buildCabinFront(),
+                                        const SizedBox(height: 6),
+                                        Expanded(
+                                          child: _buildFlatGrid(
+                                            state,
+                                            layout,
+                                            rows,
+                                            columns,
+                                            aisleAfter,
+                                            seatWidth,
+                                            seatHeight,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -4464,14 +4600,21 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                   },
                 ),
 
-                // Checkout Info Bar
+                // Bottom Checkout Bar
                 Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0A2540),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A2540),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 16,
+                        offset: const Offset(0, -6),
+                      ),
+                    ],
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
                     ),
                   ),
                   child: Column(
@@ -4480,60 +4623,79 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Text(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
                                 state.selectedSeats.isEmpty
                                     ? 'No seats selected'
-                                    : 'Seats: ${state.selectedSeats.join(', ')}',
+                                    : '${state.selectedSeats.length} Seat${state.selectedSeats.length > 1 ? 's' : ''} Selected',
                                 style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
                                 ),
                               ),
-                            ),
+                              if (state.selectedSeats.isNotEmpty)
+                                Text(
+                                  state.selectedSeats.join(', '),
+                                  style: const TextStyle(
+                                    color: Color(0xFFFF8A50),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                            ],
                           ),
-                          const SizedBox(width: 16),
                           Text(
                             'Rs. ${(widget.trip['price'] * state.selectedSeats.length).toStringAsFixed(0)}',
                             style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFE65100),
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFFFF8A50),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       ElevatedButton(
                         onPressed:
-                            (state.selectedSeats.isEmpty ||
-                                _isBookingInProgress)
-                            ? null
-                            : () => _showPassengerDetailsSheet(context, state),
+                            (state.selectedSeats.isEmpty || _isBookingInProgress)
+                                ? null
+                                : () => _showPassengerDetailsSheet(context, state),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE65100),
+                          backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey.shade800,
+                          disabledBackgroundColor: const Color(0xFF334155),
                           disabledForegroundColor: Colors.white30,
-                          minimumSize: const Size.fromHeight(50),
+                          minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
+                          elevation: 0,
                         ),
                         child: _isBookingInProgress
                             ? const SizedBox(
-                                height: 20,
-                                width: 20,
+                                height: 22,
+                                width: 22,
                                 child: CircularProgressIndicator(
                                   color: Colors.white,
-                                  strokeWidth: 2,
+                                  strokeWidth: 2.5,
                                 ),
                               )
-                            : const Text(
-                                'Confirm & Book Seats',
-                                style: TextStyle(fontWeight: FontWeight.bold),
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    'Confirm & Book Seats',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Icon(Icons.arrow_forward_rounded, size: 18),
+                                ],
                               ),
                       ),
                     ],
@@ -4547,63 +4709,84 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
   Widget _buildCabinFront() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A2540),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8),
-        ],
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0F172A),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(14),
+          topRight: Radius.circular(14),
+          bottomLeft: Radius.circular(6),
+          bottomRight: Radius.circular(6),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
+          // LEFT SIDE: PASSENGER ENTRY DOOR (Sri Lanka RHD Bus Standard)
+          const Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.circle_outlined,
-                  color: Colors.white,
-                  size: 20,
-                ),
+              Icon(
+                Icons.sensor_door_rounded,
+                color: Color(0xFF10B981),
+                size: 16,
               ),
-              const SizedBox(width: 8),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Cockpit Area',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'Driver Seat',
-                    style: TextStyle(color: Colors.white54, fontSize: 9),
-                  ),
-                ],
+              SizedBox(width: 4),
+              Text(
+                'ENTRY DOOR',
+                style: TextStyle(
+                  color: Color(0xFF10B981),
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
+
+          // CENTER: WINDSHIELD LINE INDICATOR
           Container(
-            width: 80,
-            height: 4,
+            width: 40,
+            height: 3,
             decoration: BoxDecoration(
-              color: Colors.white30,
+              color: Colors.white24,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Icon(
-            Icons.sensor_door_rounded,
-            color: Colors.white54,
-            size: 18,
+
+          // RIGHT SIDE: DRIVER CABIN (Sri Lanka Right-Hand Drive)
+          Row(
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'DRIVER CABIN',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  Text(
+                    'Steering (RHD)',
+                    style: TextStyle(color: Color(0xFFFF8A50), fontSize: 9),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.airline_seat_recline_extra_rounded,
+                  color: Color(0xFFFF8A50),
+                  size: 18,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -4642,11 +4825,11 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
               if (customSeat == null) {
                 if (aisleAfter > 0 && cIndex == aisleAfter) {
                   return SizedBox(
-                    width: 20,
+                    width: seatWidth,
                     child: Center(
                       child: Icon(
                         Icons.arrow_upward_rounded,
-                        color: const Color(0xFF0A2540).withValues(alpha: 0.15),
+                        color: const Color(0xFF94A3B8).withValues(alpha: 0.3),
                         size: 14,
                       ),
                     ),
@@ -4658,13 +4841,12 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
               }
 
               int seatColIndex = cIndex;
-              if (customSeat == null && aisleAfter > 0 && cIndex > aisleAfter) {
+              bool hasAisleInThisRow = aisleAfter > 0 && rIndex < (rows - 1);
+              if (hasAisleInThisRow && cIndex > aisleAfter) {
                 seatColIndex = cIndex - 1;
               }
 
-              String seatLabel = customSeat != null
-                  ? customSeat['label']
-                  : '${String.fromCharCode(65 + seatColIndex)}$row';
+              String seatLabel = '${(rIndex * 4) + seatColIndex + 1}';
 
               bool isSelected = state.selectedSeats.contains(seatLabel);
               bool isBooked = state.bookedSeats.contains(seatLabel);
@@ -4732,7 +4914,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                 const SizedBox(height: 20),
                 Row(
                   children: [
-                    // Boy selection option
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
@@ -4743,10 +4924,10 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
                             color: const Color(
-                              0xFF3B82F6,
-                            ).withValues(alpha: 0.1),
+                              0xFF1E3A8A,
+                            ).withValues(alpha: 0.2),
                             border: Border.all(
-                              color: const Color(0xFF3B82F6),
+                              color: const Color(0xFF1E3A8A),
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(16),
@@ -4755,12 +4936,12 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                             children: [
                               Icon(
                                 Icons.face_rounded,
-                                color: Color(0xFF3B82F6),
+                                color: Color(0xFF60A5FA),
                                 size: 36,
                               ),
                               SizedBox(height: 8),
                               Text(
-                                'Boy',
+                                'Male',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -4773,7 +4954,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                       ),
                     ),
                     const SizedBox(width: 16),
-                    // Girl selection option
                     Expanded(
                       child: GestureDetector(
                         onTap: () {
@@ -4784,10 +4964,10 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
                             color: const Color(
-                              0xFFF472B6,
-                            ).withValues(alpha: 0.1),
+                              0xFFE11D48,
+                            ).withValues(alpha: 0.2),
                             border: Border.all(
-                              color: const Color(0xFFF472B6),
+                              color: const Color(0xFFE11D48),
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(16),
@@ -4801,7 +4981,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                               ),
                               SizedBox(height: 8),
                               Text(
-                                'Girl',
+                                'Female',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
@@ -4831,17 +5011,20 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
           height: 14,
           decoration: BoxDecoration(
             color: color,
-            border: Border.all(color: border ?? Colors.transparent),
-            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: border ?? Colors.transparent,
+              width: 1.2,
+            ),
+            borderRadius: BorderRadius.circular(4),
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 5),
         Text(
           label,
           style: const TextStyle(
             fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: Colors.black87,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF0F172A),
           ),
         ),
       ],
@@ -4878,7 +5061,6 @@ class Animated3DSeat extends StatefulWidget {
 class _Animated3DSeatState extends State<Animated3DSeat>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _elevation;
   late Animation<double> _scale;
 
   @override
@@ -4886,19 +5068,15 @@ class _Animated3DSeatState extends State<Animated3DSeat>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 250),
+      duration: const Duration(milliseconds: 200),
     );
-    _elevation = Tween<double>(
-      begin: 0.0,
-      end: 6.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _scale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 1.15),
+        tween: Tween<double>(begin: 1.0, end: 1.12),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.15, end: 1.0),
+        tween: Tween<double>(begin: 1.12, end: 1.0),
         weight: 50,
       ),
     ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
@@ -4928,174 +5106,121 @@ class _Animated3DSeatState extends State<Animated3DSeat>
 
   @override
   Widget build(BuildContext context) {
-    Color mainColor = const Color(0xFFF1F5F9);
-    Color depthColor = const Color(0xFFCBD5E1);
+    Color fillColor = Colors.white;
+    Color borderColor = const Color(0xFFCBD5E1);
     Color textColor = const Color(0xFF0F172A);
-    Color glowColor = Colors.transparent;
+    IconData? genderIcon;
 
     if (widget.isSelected) {
       if (widget.gender.toLowerCase() == 'male') {
-        mainColor = const Color(0xFF3B82F6);
-        depthColor = const Color(0xFF1D4ED8);
+        fillColor = const Color(0xFF1E3A8A);
+        borderColor = const Color(0xFF3B82F6);
         textColor = Colors.white;
-        glowColor = const Color(0xFF3B82F6).withValues(alpha: 0.3);
+        genderIcon = Icons.man_rounded;
       } else if (widget.gender.toLowerCase() == 'female') {
-        mainColor = const Color(0xFFF472B6);
-        depthColor = const Color(0xFFBE185D);
+        fillColor = const Color(0xFFE11D48);
+        borderColor = const Color(0xFFF472B6);
         textColor = Colors.white;
-        glowColor = const Color(0xFFF472B6).withValues(alpha: 0.3);
+        genderIcon = Icons.woman_rounded;
       } else {
-        mainColor = const Color(0xFFFF8A50);
-        depthColor = const Color(0xFFE65100);
+        fillColor = const Color(0xFF2563EB);
+        borderColor = const Color(0xFFFF8A50);
         textColor = Colors.white;
-        glowColor = const Color(0xFFFF8A50).withValues(alpha: 0.3);
       }
     } else if (widget.isBooked) {
       if (widget.gender.toLowerCase() == 'male') {
-        mainColor = const Color(0xFF3B82F6);
-        depthColor = const Color(0xFF1D4ED8);
+        fillColor = const Color(0xFF1E3A8A);
+        borderColor = const Color(0xFF1E3A8A);
         textColor = Colors.white;
+        genderIcon = Icons.man_rounded;
       } else if (widget.gender.toLowerCase() == 'female') {
-        mainColor = const Color(0xFFF472B6);
-        depthColor = const Color(0xFFBE185D);
+        fillColor = const Color(0xFFE11D48);
+        borderColor = const Color(0xFFE11D48);
         textColor = Colors.white;
+        genderIcon = Icons.woman_rounded;
       } else {
-        mainColor = const Color(0xFF94A3B8);
-        depthColor = const Color(0xFF64748B);
+        fillColor = const Color(0xFF64748B);
+        borderColor = const Color(0xFF475569);
         textColor = Colors.white;
       }
     } else if (widget.isHeld) {
-      mainColor = const Color(0xFFFCD34D);
-      depthColor = const Color(0xFFD97706);
-      textColor = const Color(0xFF78350F);
+      fillColor = const Color(0xFFD97706);
+      borderColor = const Color(0xFFB45309);
+      textColor = Colors.white;
     }
-
-    final double w = widget.width;
-    final double hCushion = widget.height * 0.6;
-    final double hBackrest = widget.height * 0.3;
-    final double depth = widget.height * 0.1;
 
     return GestureDetector(
       onTap: (widget.isBooked || widget.isHeld) ? null : widget.onTap,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          final double elevVal = _elevation.value;
-          final double scaleVal = _scale.value;
-
           return Transform.scale(
-            scale: scaleVal,
-            child: SizedBox(
-              height: widget.height,
+            scale: _scale.value,
+            child: Container(
               width: widget.width,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // 1. Drop Shadow under the seat (increases with elevation)
-                  Positioned(
-                    bottom: -2 - elevVal,
-                    left: 2,
-                    right: 2,
-                    child: Container(
-                      height: 8,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        boxShadow: [
+              height: widget.height,
+              decoration: BoxDecoration(
+                color: fillColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: borderColor,
+                  width: widget.isSelected ? 2.0 : 1.2,
+                ),
+                boxShadow:
+                    widget.isSelected
+                        ? [
                           BoxShadow(
-                            color: widget.isSelected
-                                ? glowColor
-                                : Colors.black.withValues(
-                                    alpha: 0.12 + (elevVal * 0.015),
-                                  ),
-                            blurRadius: 4 + elevVal,
-                            offset: Offset(0, 2 + (elevVal * 0.5)),
+                            color: borderColor.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                        : [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 3,
+                            offset: const Offset(0, 2),
                           ),
                         ],
+              ),
+              child: Stack(
+                children: [
+                  // Top Headrest Cushion Curve
+                  Positioned(
+                    top: 2,
+                    left: 6,
+                    right: 6,
+                    child: Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: textColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  // 2. Volumetric Cushions and Backrest (elevates upward along Y axis)
-                  Positioned(
-                    top: -elevVal,
-                    left: 0,
-                    right: 0,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Backrest
-                        Container(
-                          width: w * 0.85,
-                          height: hBackrest,
-                          decoration: BoxDecoration(
-                            color: mainColor,
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(6),
-                              topRight: Radius.circular(6),
-                            ),
-                          ),
-                          alignment: Alignment.bottomCenter,
-                          child: Container(
-                            height: 1.0,
-                            color: depthColor.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        // Cushion Stack
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            // 3D Cushion Depth
-                            Container(
-                              width: w,
-                              height: hCushion + depth,
-                              decoration: BoxDecoration(
-                                color: depthColor,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            // Cushion Top Face
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                width: w,
-                                height: hCushion,
-                                decoration: BoxDecoration(
-                                  color: mainColor,
-                                  borderRadius: BorderRadius.circular(6),
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      mainColor,
-                                      Color.lerp(
-                                            mainColor,
-                                            Colors.white,
-                                            0.15,
-                                          ) ??
-                                          mainColor,
-                                    ],
-                                    begin: Alignment.bottomCenter,
-                                    end: Alignment.topCenter,
-                                  ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  widget.label,
-                                  style: TextStyle(
-                                    fontSize: (widget.height * 0.24).clamp(
-                                      8.0,
-                                      12.0,
-                                    ),
-                                    fontWeight: FontWeight.w900,
-                                    color: textColor,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                  // Seat Label
+                  Center(
+                    child: Text(
+                      widget.label,
+                      style: TextStyle(
+                        fontSize: (widget.height * 0.28).clamp(9.0, 13.0),
+                        fontWeight: FontWeight.w900,
+                        color: textColor,
+                        letterSpacing: -0.2,
+                      ),
                     ),
                   ),
+                  // Gender Icon Badge
+                  if (genderIcon != null)
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Icon(
+                        genderIcon,
+                        size: 11,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -5301,7 +5426,7 @@ class _ConductorTripDetailsScreenState
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFFE65100)),
+              child: CircularProgressIndicator(color: Color(0xFF2563EB)),
             )
           : Column(
               children: [
@@ -5730,7 +5855,7 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
-                                color: Color(0xFFE65100),
+                                color: Color(0xFF2563EB),
                               ),
                             ),
                           ],
@@ -5773,7 +5898,7 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                       const SizedBox(height: 24),
                       if (_isProcessing)
                         const CircularProgressIndicator(
-                          color: Color(0xFFE65100),
+                          color: Color(0xFF2563EB),
                         )
                       else ...[
                         ElevatedButton(
@@ -6012,7 +6137,7 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
                       height: 200,
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: const Color(0xFFE65100),
+                          color: const Color(0xFF2563EB),
                           width: 3,
                         ),
                         borderRadius: BorderRadius.circular(24),
@@ -6122,7 +6247,7 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
                       const Text(
                         'SIMULATOR QR CODE INPUT',
                         style: TextStyle(
-                          color: Color(0xFFE65100),
+                          color: Color(0xFF2563EB),
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.5,
@@ -6207,7 +6332,7 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
                           style: TextStyle(fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFE65100),
+                          backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
@@ -6271,14 +6396,14 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
                     width: 90,
                     height: 90,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE65100).withOpacity(0.1),
+                      color: const Color(0xFF2563EB).withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
                       iconSize: 42,
                       icon: const Icon(
                         Icons.qr_code_scanner_rounded,
-                        color: Color(0xFFE65100),
+                        color: Color(0xFF2563EB),
                       ),
                       onPressed: () => _openCameraScanOverlay(state),
                     ),
@@ -6722,14 +6847,14 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE65100).withOpacity(0.1),
+                          color: const Color(0xFF2563EB).withOpacity(0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'Seat $seatNum',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFFE65100),
+                            color: Color(0xFF2563EB),
                             fontSize: 11,
                           ),
                         ),
@@ -6798,7 +6923,7 @@ class _OwnerScannerTabState extends ConsumerState<OwnerScannerTab>
               value,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isPrice ? const Color(0xFFE65100) : Colors.black87,
+                color: isPrice ? const Color(0xFF2563EB) : Colors.black87,
                 fontSize: 13,
               ),
             ),
@@ -6960,7 +7085,7 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
                 icon: const Icon(Icons.add),
                 label: const Text('Add Bus'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE65100),
+                  backgroundColor: const Color(0xFF2563EB),
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -6978,7 +7103,7 @@ class _OwnerVehiclesTabState extends ConsumerState<OwnerVehiclesTab> {
                     leading: const Icon(
                       Icons.airport_shuttle_rounded,
                       size: 36,
-                      color: Color(0xFFE65100),
+                      color: Color(0xFF2563EB),
                     ),
                     title: Text(v['name']),
                     subtitle: Text('${v['reg']} • ${v['total_seats']} Seats'),
@@ -7315,7 +7440,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                   icon: const Icon(Icons.add),
                   label: const Text('Schedule'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE65100),
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
                   ),
                 ),
@@ -7375,7 +7500,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: const Color(
-                                      0xFFE65100,
+                                      0xFF2563EB,
                                     ).withOpacity(0.12),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -7384,7 +7509,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFFE65100),
+                                      color: Color(0xFF2563EB),
                                     ),
                                   ),
                                 ),
@@ -7432,7 +7557,7 @@ class _OwnerTripsTabState extends ConsumerState<OwnerTripsTab> {
                                   'Rs. ${trip['price']}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: Color(0xFFE65100),
+                                    color: Color(0xFF2563EB),
                                     fontSize: 15,
                                   ),
                                 ),
@@ -7552,7 +7677,7 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
                 color: const Color(0xFFF4F6F9),
                 border: Border.all(
                   color: state.isStreamingGPS
-                      ? const Color(0xFFE65100).withOpacity(0.5)
+                      ? const Color(0xFF2563EB).withOpacity(0.5)
                       : Colors.black12,
                 ),
                 borderRadius: BorderRadius.circular(20),
@@ -7565,7 +7690,7 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
                         : Icons.sensors_off_rounded,
                     size: 64,
                     color: state.isStreamingGPS
-                        ? const Color(0xFFE65100)
+                        ? const Color(0xFF2563EB)
                         : Colors.grey,
                   ),
                   const SizedBox(height: 12),
@@ -7595,7 +7720,7 @@ class _OwnerStreamingTabState extends ConsumerState<OwnerStreamingTab> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: state.isStreamingGPS
                           ? Colors.redAccent
-                          : const Color(0xFFE65100),
+                          : const Color(0xFF2563EB),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 32,
@@ -7666,7 +7791,7 @@ class NotificationsScreen extends ConsumerWidget {
   Color _getColorForType(String type) {
     switch (type) {
       case 'booking':
-        return const Color(0xFFE65100); // Matte Orange
+        return const Color(0xFF2563EB); // Matte Orange
       case 'trip_update':
         return const Color(0xFF0A2540); // Navy Blue
       case 'verification':
@@ -7674,6 +7799,198 @@ class NotificationsScreen extends ConsumerWidget {
       default:
         return const Color(0xFF64748B); // Slate Grey
     }
+  }
+
+  void _handleNotificationTap(
+      BuildContext context, AppState state, Map<String, dynamic> noti) {
+    if (noti['type'] == 'booking' ||
+        (noti['title'] ?? '').toLowerCase().contains('booking')) {
+      Map<String, dynamic>? targetBooking;
+      if (state.bookings.isNotEmpty) {
+        final msg = (noti['message'] ?? '').toString();
+        for (var b in state.bookings) {
+          final reg = b['reg']?.toString() ?? '';
+          final idStr = b['id']?.toString() ?? '';
+          if ((reg.isNotEmpty && msg.contains(reg)) ||
+              (idStr.isNotEmpty && msg.contains(idStr.substring(0, 8)))) {
+            targetBooking = b;
+            break;
+          }
+        }
+        targetBooking ??= state.bookings.first;
+      }
+
+      if (targetBooking != null) {
+        _showTicketDialog(context, targetBooking);
+      } else {
+        SeatyNotifications.show(
+          context,
+          'Opening your tickets...',
+        );
+      }
+    }
+  }
+
+  void _showTicketDialog(BuildContext context, Map<String, dynamic> b) {
+    final ticketCode =
+        'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+    final seats = (b['seats'] as List?)?.join(', ') ?? '';
+    final formattedPrice =
+        double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
+        b['price'].toString();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.confirmation_number_rounded, color: Color(0xFF2563EB), size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Digital Boarding Pass',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0A2540),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            ticketCode,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0A2540),
+                              fontSize: 12,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'CONFIRMED',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Text(
+                        '${b['origin']} ➔ ${b['destination']}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF0A2540),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Departure: ${b['departure']}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Bus: ${b['bus_name']} (${b['reg']})',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Seat(s): $seats',
+                            style: const TextStyle(
+                              color: Color(0xFF2563EB),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            'Rs. $formattedPrice',
+                            style: const TextStyle(
+                              color: Color(0xFF0A2540),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
+                  child: SizedBox(
+                    width: 150,
+                    height: 150,
+                    child: QrImageView(
+                      data: b['id'].toString(),
+                      version: QrVersions.auto,
+                      size: 150.0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Center(
+                  child: Text(
+                    'Show this QR ticket to the conductor when boarding.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -7813,6 +8130,7 @@ class NotificationsScreen extends ConsumerWidget {
                           if (!isRead && notiId.isNotEmpty) {
                             state.markNotificationAsRead(notiId);
                           }
+                          _handleNotificationTap(context, state, noti);
                         },
                         child: Padding(
                           padding: const EdgeInsets.all(16.0),
@@ -7888,7 +8206,7 @@ class NotificationsScreen extends ConsumerWidget {
                                               width: 8,
                                               height: 8,
                                               decoration: const BoxDecoration(
-                                                color: Color(0xFFE65100),
+                                                color: Color(0xFF2563EB),
                                                 shape: BoxShape.circle,
                                               ),
                                             ),
@@ -7897,7 +8215,7 @@ class NotificationsScreen extends ConsumerWidget {
                                               'Tap to mark as read',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                color: Color(0xFFE65100),
+                                                color: Color(0xFF2563EB),
                                                 fontWeight: FontWeight.bold,
                                               ),
                                             ),

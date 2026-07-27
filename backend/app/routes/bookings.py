@@ -8,6 +8,7 @@ import datetime
 from app.database import get_db
 from app import models, schemas, auth
 from app.routes.seat_holds import get_unavailable_seats
+from app.routes.trips import notify_seat_change
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -90,6 +91,8 @@ def create_booking(
     db.add(db_booking)
     db.commit()
     db.refresh(db_booking)
+
+    notify_seat_change(str(booking_in.trip_id), "SEAT_HELD", booking_in.selected_seats)
 
     # Preload details for response
     db_booking.trip = trip
@@ -191,6 +194,8 @@ def cancel_booking(
 
     db.commit()
     db.refresh(booking)
+
+    notify_seat_change(str(booking.trip_id), "SEAT_RELEASED", booking.selected_seats)
 
     booking.trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
     booking.passenger = current_user

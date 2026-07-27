@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
@@ -23,12 +24,6 @@ class PassengerBookingsTab extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.qr_code_2_rounded,
-                size: 84,
-                color: Color(0xFFE65100),
-              ),
-              const SizedBox(height: 16),
               const Text(
                 'Ready to Board',
                 style: TextStyle(
@@ -70,47 +65,80 @@ class PassengerBookingsTab extends ConsumerWidget {
             right: 16,
           ),
           actions: [
-            Row(
+            Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      _generateAndSavePDF(context, b);
-                    },
-                    icon: const Icon(
-                      Icons.download_rounded,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      'Save PDF',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFE65100),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _generateAndSavePDF(context, b, share: false);
+                        },
+                        icon: const Icon(
+                          Icons.download_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        label: const Text(
+                          'Save PDF',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _generateAndSavePDF(context, b, share: true);
+                        },
+                        icon: const Icon(
+                          Icons.share_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                        label: const Text(
+                          'Share Ticket',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0A2540),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Expanded(
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF0A2540),
+                      foregroundColor: const Color(0xFF64748B),
                       side: const BorderSide(color: Color(0xFFE2E8F0)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
-                    child: const Text('Close', style: TextStyle(fontSize: 12)),
+                    child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -123,250 +151,442 @@ class PassengerBookingsTab extends ConsumerWidget {
 
   Future<void> _generateAndSavePDF(
     BuildContext context,
-    Map<String, dynamic> b,
-  ) async {
+    Map<String, dynamic> b, {
+    bool share = false,
+  }) async {
     try {
-      final pdf = pw.Document();
-      final ticketCode =
-          'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
-      final seats = (b['seats'] as List).join(', ');
+      final pdf = pw.Document(
+        theme: pw.ThemeData.withFont(
+          base: pw.Font.helvetica(),
+          bold: pw.Font.helveticaBold(),
+        ),
+      );
+
+      final rawTicketId = b['id'].toString().replaceAll('-', '').toUpperCase();
+      final ticketCode = 'TQ${rawTicketId.substring(0, 10)}';
+      final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
+      final seatsList = (b['seats'] as List?)?.join(', ') ?? 'A1';
+      final numPassengers = (b['seats'] as List?)?.length ?? 1;
       final formattedPrice =
-          double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
+          double.tryParse(b['price'].toString())?.toStringAsFixed(1) ??
           b['price'].toString();
+      final origin = (b['origin'] ?? 'Colombo Fort').toString();
+      final destination = (b['destination'] ?? 'Galle').toString();
+      final busName = (b['bus_name'] ?? 'Luxury Express').toString();
+      final regNumber = (b['reg'] ?? 'WP-ND-8942').toString();
+      final depTimeStr = (b['departure'] ?? '2026-07-27 23:00').toString();
 
       pdf.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat.a5,
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
           build: (pw.Context context) {
-            return pw.Container(
-              padding: const pw.EdgeInsets.all(20),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: PdfColors.grey300, width: 1),
-                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(12)),
-              ),
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Text(
-                        'SEATY TRAVELS',
-                        style: pw.TextStyle(
-                          fontSize: 18,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.blue900,
-                        ),
-                      ),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: const pw.BoxDecoration(
-                          color: PdfColors.orange800,
-                          borderRadius: pw.BorderRadius.all(
-                            pw.Radius.circular(4),
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // 1. Top Header Row (Logo + eTICKET + Customer Care)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Row(
+                      children: [
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: const pw.BoxDecoration(
+                            color: PdfColors.red700,
+                            borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
+                          ),
+                          child: pw.Text(
+                            'seaty',
+                            style: pw.TextStyle(
+                              color: PdfColors.white,
+                              fontSize: 18,
+                              fontWeight: pw.FontWeight.bold,
+                            ),
                           ),
                         ),
-                        child: pw.Text(
-                          'BOARDING PASS',
+                        pw.SizedBox(width: 14),
+                        pw.Text(
+                          'eTICKET',
                           style: pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 10,
+                            fontSize: 22,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.grey800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Text(
+                          'Need help with your trip?',
+                          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+                        ),
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'Boarding Point Ph. No: 0775555555 | Seaty Care: 0112345678',
+                          style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                pw.SizedBox(height: 16),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.SizedBox(height: 16),
+
+                // 2. Main Trip Summary & QR Code Section
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          '$origin -> $destination',
+                          style: pw.TextStyle(
+                            fontSize: 18,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.grey900,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          depTimeStr,
+                          style: pw.TextStyle(
+                            fontSize: 12,
+                            color: PdfColors.grey800,
                             fontWeight: pw.FontWeight.bold,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  pw.SizedBox(height: 10),
-                  pw.Divider(thickness: 1, color: PdfColors.grey300),
-                  pw.SizedBox(height: 10),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'FROM',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
+                        pw.SizedBox(height: 12),
+                        pw.Text(
+                          'Ticket no: $ticketCode',
+                          style: pw.TextStyle(
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.black,
                           ),
-                          pw.Text(
-                            '${b['origin']}',
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.end,
-                        children: [
-                          pw.Text(
-                            'TO',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
-                          ),
-                          pw.Text(
-                            '${b['destination']}',
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  pw.SizedBox(height: 15),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'DEPARTURE',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
-                          ),
-                          pw.Text(
-                            '${b['departure']}',
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.end,
-                        children: [
-                          pw.Text(
-                            'BUS REG',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
-                          ),
-                          pw.Text(
-                            '${b['reg'] ?? 'WP-ND-8942'}',
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  pw.SizedBox(height: 15),
-                  pw.Divider(
-                    thickness: 1,
-                    color: PdfColors.grey300,
-                    borderStyle: pw.BorderStyle.dashed,
-                  ),
-                  pw.SizedBox(height: 15),
-                  pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      pw.Column(
-                        crossAxisAlignment: pw.CrossAxisAlignment.start,
-                        children: [
-                          pw.Text(
-                            'TICKET CODE',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
-                          ),
-                          pw.Text(
-                            ticketCode,
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.blueGrey800,
-                            ),
-                          ),
-                          pw.SizedBox(height: 10),
-                          pw.Text(
-                            'SEATS',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
-                          ),
-                          pw.Text(
-                            seats,
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              color: PdfColors.orange900,
-                            ),
-                          ),
-                          pw.SizedBox(height: 10),
-                          pw.Text(
-                            'TOTAL PRICE',
-                            style: pw.TextStyle(
-                              color: PdfColors.grey600,
-                              fontSize: 10,
-                            ),
-                          ),
-                          pw.Text(
-                            'Rs. $formattedPrice',
-                            style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                      pw.Container(
-                        alignment: pw.Alignment.center,
-                        child: pw.BarcodeWidget(
-                          barcode: pw.Barcode.qrCode(),
-                          data: b['id'].toString(),
-                          width: 90,
-                          height: 90,
                         ),
-                      ),
-                    ],
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          'PNR no: $pnrCode / $origin TO $destination',
+                          style: pw.TextStyle(
+                            fontSize: 9,
+                            color: PdfColors.grey700,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // QR Code Container
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.center,
+                      children: [
+                        pw.Container(
+                          padding: const pw.EdgeInsets.all(6),
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border.all(color: PdfColors.grey400, width: 1),
+                            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                          ),
+                          child: pw.BarcodeWidget(
+                            barcode: pw.Barcode.qrCode(),
+                            data: b['id'].toString(),
+                            width: 110,
+                            height: 110,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Container(
+                          width: 140,
+                          child: pw.Text(
+                            'Please show the QR code at the time of boarding for contactless check-in',
+                            textAlign: pw.TextAlign.center,
+                            style: pw.TextStyle(
+                              fontSize: 7.5,
+                              color: PdfColors.grey700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                pw.SizedBox(height: 16),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.SizedBox(height: 12),
+
+                // Guidelines Banner
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.yellow100,
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
                   ),
-                  pw.SizedBox(height: 20),
-                  pw.Center(
-                    child: pw.Text(
-                      'Please show this ticket PDF at the boarding point.',
-                      style: pw.TextStyle(
-                        fontSize: 9,
-                        color: PdfColors.grey500,
-                        fontStyle: pw.FontStyle.italic,
-                      ),
+                  child: pw.Text(
+                    'Please Note: It is mandatory to follow the travel guidelines of your source and destination state of travel. View Guidelines: https://seaty.lk/travel-guidelines',
+                    style: pw.TextStyle(
+                      fontSize: 8,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.amber900,
                     ),
                   ),
-                ],
-              ),
+                ),
+                pw.SizedBox(height: 16),
+
+                // 3. 4-Column Details Table
+                pw.Table(
+                  border: pw.TableBorder(
+                    horizontalInside: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                  ),
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(2.5),
+                    1: const pw.FlexColumnWidth(2.0),
+                    2: const pw.FlexColumnWidth(2.0),
+                    3: const pw.FlexColumnWidth(2.5),
+                  },
+                  children: [
+                    // Row 1: Bus Info, Times & Passenger Count
+                    pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(busName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                              pw.Text('Luxury Superline ($regNumber)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('22:45', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                              pw.Text('Reporting time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('23:00', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                              pw.Text('Departure time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('$numPassengers', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                              pw.Text('Number of Passengers', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Row 2: Boarding Point Details
+                    pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Text('Boarding point details', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text(origin, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                              pw.Text('Location', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('Near Clock Tower', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                              pw.Text('Landmark', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('$origin Bus Terminal Stand #4', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                              pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Row 3: Dropping Point Details
+                    pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Text('Dropping point details', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('05:15', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                              pw.Text('Dropping point time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('Next Day', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                              pw.Text('Dropping point Date', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                          child: pw.Column(
+                            crossAxisAlignment: pw.CrossAxisAlignment.start,
+                            children: [
+                              pw.Text('$destination Main Central Terminal', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                              pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                pw.SizedBox(height: 16),
+
+                // Passenger & Seat Breakdown Table
+                pw.Table(
+                  columnWidths: {
+                    0: const pw.FlexColumnWidth(3),
+                    1: const pw.FlexColumnWidth(2),
+                  },
+                  children: [
+                    pw.TableRow(
+                      children: [
+                        pw.Text('Passenger Details (Name, Gender)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Seat Number', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                      ],
+                    ),
+                    pw.TableRow(
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 4),
+                          child: pw.Text('Primary Passenger (Adult)', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold)),
+                        ),
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.only(top: 4),
+                          child: pw.Text(seatsList, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.red900)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                pw.SizedBox(height: 20),
+                pw.Divider(thickness: 1, color: PdfColors.grey300),
+                pw.SizedBox(height: 12),
+
+                // Total Fare Box
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      'NOTE : This operator accepts mTicket, you need not carry a print out',
+                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                    ),
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.end,
+                      children: [
+                        pw.Row(
+                          children: [
+                            pw.Text('Total Fare : ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                            pw.Text('Rs. $formattedPrice', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                          ],
+                        ),
+                        pw.Text('(Rs. 0 inclusive of GST and service charge, if any)', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+                      ],
+                    ),
+                  ],
+                ),
+
+                pw.SizedBox(height: 24),
+                pw.Divider(thickness: 1, color: PdfColors.grey400),
+                pw.SizedBox(height: 10),
+
+                // Footer Guarantee
+                pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      'Note: Your booking is covered under Seaty FlexiTicket. You can change your travel date for free up to 8 hours before departure.',
+                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                    ),
+                  ],
+                ),
+              ],
             );
           },
         ),
       );
 
+      final pdfBytes = await pdf.save();
+
+      // 1. Always save directly to user's Documents directory using standard dart:io
       final directory = await getApplicationDocumentsDirectory();
-      final file = File('${directory.path}/$ticketCode.pdf');
-      await file.writeAsBytes(await pdf.save());
+      final filePath = '${directory.path}/$ticketCode.pdf';
+      final file = File(filePath);
+      await file.writeAsBytes(pdfBytes);
+
+      // 2. Safely trigger native share / layout preview if plugin bindings are loaded
+      if (share) {
+        try {
+          await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
+        } catch (shareErr) {
+          debugPrint('Native share warning: $shareErr');
+        }
+      } else {
+        try {
+          await Printing.layoutPdf(
+            onLayout: (PdfPageFormat format) async => pdfBytes,
+            name: ticketCode,
+          );
+        } catch (layoutErr) {
+          debugPrint('Native layout warning: $layoutErr');
+        }
+      }
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Ticket PDF saved to Documents successfully!'),
-            backgroundColor: const Color(0xFF00C853),
+            content: Text('Ticket PDF saved to Documents! ($ticketCode.pdf)'),
+            backgroundColor: const Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
@@ -378,7 +598,7 @@ class PassengerBookingsTab extends ConsumerWidget {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to generate PDF: $e'),
+            content: Text('Failed to process PDF: $e'),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
@@ -420,13 +640,13 @@ class PassengerBookingsTab extends ConsumerWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE65100).withValues(alpha: 0.08),
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '${state.bookings.length} active ticket${state.bookings.length == 1 ? '' : 's'}',
                     style: const TextStyle(
-                      color: Color(0xFFE65100),
+                      color: Color(0xFF2563EB),
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
@@ -511,14 +731,14 @@ class PassengerBookingsTab extends ConsumerWidget {
                             clipBehavior: Clip.antiAlias,
                             child: Row(
                               children: [
-                                // ── Left Block (Orange, Color(0xFFE65100)) ──
+                                // ── Left Block (Orange, Color(0xFF2563EB)) ──
                                 Expanded(
                                   flex: 4,
                                   child: Container(
                                     decoration: const BoxDecoration(
                                       gradient: LinearGradient(
                                         colors: [
-                                          Color(0xFFE65100), // Dark Orange
+                                          Color(0xFF2563EB), // Dark Orange
                                           Color(
                                             0xFF802200,
                                           ), // Deep Burnt Rust Orange

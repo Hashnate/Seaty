@@ -118,7 +118,7 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                           }
                         },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE65100),
+                    backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
                   ),
                   child: const Text('Add Conductor'),
@@ -154,9 +154,9 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
             // TAB BAR SWITCHER
             TabBar(
               controller: _tabController,
-              labelColor: const Color(0xFFE65100),
+              labelColor: const Color(0xFF2563EB),
               unselectedLabelColor: const Color(0xFF64748B),
-              indicatorColor: const Color(0xFFE65100),
+              indicatorColor: const Color(0xFF2563EB),
               indicatorWeight: 3,
               dividerHeight: 0,
               labelStyle: const TextStyle(
@@ -244,7 +244,7 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                                   'Assigned Route: $routeName',
                                   style: const TextStyle(
                                     fontSize: 11,
-                                    color: Color(0xFFE65100),
+                                    color: Color(0xFF2563EB),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -304,7 +304,7 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                               ),
                               label: const Text('Add Staff'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFE65100),
+                                backgroundColor: const Color(0xFF2563EB),
                                 foregroundColor: Colors.white,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),

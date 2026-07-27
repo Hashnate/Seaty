@@ -1,14 +1,58 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
 import uuid
 import datetime
+import asyncio
 
 from app.database import get_db
 from app import models, schemas, auth
 
 router = APIRouter(prefix="/trips", tags=["Trips"])
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, List[WebSocket]] = {}
+
+    async def connect(self, trip_id: str, websocket: WebSocket):
+        await websocket.accept()
+        if trip_id not in self.active_connections:
+            self.active_connections[trip_id] = []
+        self.active_connections[trip_id].append(websocket)
+
+    def disconnect(self, trip_id: str, websocket: WebSocket):
+        if trip_id in self.active_connections:
+            if websocket in self.active_connections[trip_id]:
+                self.active_connections[trip_id].remove(websocket)
+            if not self.active_connections[trip_id]:
+                del self.active_connections[trip_id]
+
+    async def broadcast(self, trip_id: str, message: dict):
+        if trip_id in self.active_connections:
+            disconnected = []
+            for connection in self.active_connections[trip_id]:
+                try:
+                    await connection.send_json(message)
+                except Exception:
+                    disconnected.append(connection)
+            for conn in disconnected:
+                self.disconnect(trip_id, conn)
+
+manager = ConnectionManager()
+
+def notify_seat_change(trip_id: str, event_type: str, seats: list, genders: dict = None):
+    """Broadcast real-time seat holds, releases, or bookings to active WebSocket viewers."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(manager.broadcast(str(trip_id), {
+                "event": event_type,
+                "seats": seats,
+                "genders": genders or {}
+            }))
+    except Exception as e:
+        print(f"Error broadcasting WS seat update: {e}")
 
 @router.post("", response_model=schemas.TripResponse, status_code=status.HTTP_201_CREATED)
 def create_trip(
@@ -479,3 +523,16 @@ def toggle_seat_board_status(
     db.commit()
     
     return {"message": f"Seat {seat} marked as {action}", "boarded_seats": boarded}
+
+@router.websocket("/ws/{trip_id}")
+async def websocket_trip_seats(websocket: WebSocket, trip_id: str):
+    """Real-time WebSocket endpoint broadcasting seat holds, releases, and bookings to all active viewers."""
+    await manager.connect(str(trip_id), websocket)
+    try:
+        while True:
+            # Maintain active connection and listen for ping/heartbeats
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(str(trip_id), websocket)
+    except Exception:
+        manager.disconnect(str(trip_id), websocket)

@@ -46,6 +46,7 @@ dependencies:
   qr_flutter: ^4.1.0
   video_player: ^2.11.1
   pdf: ^3.12.0
+  printing: ^5.13.0
   path_provider: ^2.1.6
 
 dev_dependencies:
