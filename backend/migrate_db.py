@@ -41,8 +41,41 @@ try:
     except Exception as e:
         print(f"trip_schedules column might already exist: {e}")
         
+    # 4. Convert all vehicle seat_layouts to purely numeric seat labels (1, 2, 3... N)
+    print("Migrating vehicle seat layouts to purely numeric labels...")
+    cur.execute("SELECT id, name, registration_number, total_seats, seat_layout FROM vehicles")
+    rows = cur.fetchall()
+    import json
+    for row in rows:
+        v_id, name, reg, total, layout = row
+        if not layout:
+            layout = {}
+        seats = layout.get('seats', [])
+        new_seats = []
+        if seats:
+            for i, s in enumerate(seats, start=1):
+                new_seats.append({
+                    'col': s.get('col', 0),
+                    'row': s.get('row', 1),
+                    'label': str(i)
+                })
+        else:
+            tot = total or 40
+            r_count = (tot + 3) // 4
+            s_num = 1
+            for r in range(1, r_count + 1):
+                for c in range(5):
+                    if c == 2 and r < r_count:
+                        continue
+                    if s_num <= tot:
+                        new_seats.append({'col': c, 'row': r, 'label': str(s_num)})
+                        s_num += 1
+        layout['seats'] = new_seats
+        cur.execute("UPDATE vehicles SET seat_layout = %s WHERE id = %s", (json.dumps(layout), v_id))
+    print("Vehicle seat layout migration to numeric labels completed!")
+
     cur.close()
     conn.close()
-    print("Database migration for conductor role constraint completed successfully!")
+    print("Database migration completed successfully!")
 except Exception as e:
     print(f"Migration error: {e}")
