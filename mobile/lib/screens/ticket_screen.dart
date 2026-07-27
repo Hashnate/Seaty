@@ -711,10 +711,9 @@ class PassengerBookingsTab extends ConsumerWidget {
                           onTap: () => _showDownloadTicketDialog(context, b),
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 16),
-                            height: 165,
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
+                              borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: const Color(0xFFE2E8F0),
                               ),
@@ -722,247 +721,182 @@ class PassengerBookingsTab extends ConsumerWidget {
                                 BoxShadow(
                                   color: const Color(
                                     0xFF0A2540,
-                                  ).withValues(alpha: 0.05),
-                                  blurRadius: 10,
+                                  ).withValues(alpha: 0.04),
+                                  blurRadius: 12,
                                   offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Row(
+                            child: Column(
                               children: [
-                                // ── Left Block (Orange, Color(0xFF2563EB)) ──
-                                Expanded(
-                                  flex: 4,
-                                  child: Container(
-                                    decoration: const BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Color(0xFF2563EB), // Dark Orange
-                                          Color(
-                                            0xFF802200,
-                                          ), // Deep Burnt Rust Orange
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                    ),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 16,
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
+                                // ── Top Section: Route + QR ──
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Route & Trip Info
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
-                                            const Icon(
-                                              Icons.directions_bus_rounded,
-                                              color: Colors.white70,
-                                              size: 24,
-                                            ),
-                                            const SizedBox(height: 14),
                                             Text(
-                                              '${b['origin']}',
+                                              '${b['origin']}  ->  ${b['destination']}',
                                               style: const TextStyle(
-                                                color: Colors.white,
                                                 fontWeight: FontWeight.w900,
-                                                fontSize: 16,
+                                                fontSize: 15,
+                                                color: Color(0xFF0A2540),
                                                 letterSpacing: -0.3,
                                               ),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             ),
-                                            const Icon(
-                                              Icons.arrow_downward_rounded,
-                                              color: Colors.white54,
-                                              size: 14,
-                                            ),
+                                            const SizedBox(height: 6),
                                             Text(
-                                              '${b['destination']}',
+                                              '${b['departure']}',
                                               style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 16,
-                                                letterSpacing: -0.3,
+                                                color: Color(0xFF64748B),
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 12,
                                               ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Row(
+                                              children: [
+                                                const Icon(
+                                                  Icons.event_seat_rounded,
+                                                  size: 13,
+                                                  color: Color(0xFF2563EB),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Seats: $seats',
+                                                    style: const TextStyle(
+                                                      color: Color(0xFF334155),
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Fare: Rs. $formattedPrice',
+                                              style: const TextStyle(
+                                                color: Color(0xFF0A2540),
+                                                fontWeight: FontWeight.w900,
+                                                fontSize: 14,
+                                              ),
                                             ),
                                           ],
                                         ),
-                                        Text(
-                                          '${b['bus_name']}',
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w700,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      // QR Code
+                                      Column(
+                                        children: [
+                                          Container(
+                                            width: 80,
+                                            height: 80,
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: const Color(0xFFE2E8F0),
+                                              ),
+                                            ),
+                                            child: QrImageView(
+                                              data: b['id'].toString(),
+                                              version: QrVersions.auto,
+                                              size: 72.0,
+                                            ),
                                           ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                          const SizedBox(height: 4),
+                                          const Text(
+                                            'Scan to verify',
+                                            style: TextStyle(
+                                              fontSize: 8,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // ── Dashed Divider ──
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: Row(
+                                    children: List.generate(
+                                      40,
+                                      (i) => Expanded(
+                                        child: Container(
+                                          height: 1,
+                                          color: i.isEven
+                                              ? const Color(0xFFCBD5E1)
+                                              : Colors.transparent,
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
                                 ),
 
-                                // ── Right Block (White, Coords, Cores, Details) ──
-                                Expanded(
-                                  flex: 6,
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        // Top row: Coords / Seats and QR Code
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    '${b['departure']}',
-                                                    style: const TextStyle(
-                                                      color: Color(0xFF0A2540),
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      fontSize: 12,
-                                                    ),
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                  const SizedBox(height: 6),
-                                                  Row(
-                                                    children: [
-                                                      Icon(
-                                                        Icons
-                                                            .event_seat_rounded,
-                                                        size: 12,
-                                                        color:
-                                                            const Color(
-                                                              0xFF0A2540,
-                                                            ).withValues(
-                                                              alpha: 0.6,
-                                                            ),
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Expanded(
-                                                        child: Text(
-                                                          'Seats: $seats',
-                                                          style: TextStyle(
-                                                            color:
-                                                                const Color(
-                                                                  0xFF0A2540,
-                                                                ).withValues(
-                                                                  alpha: 0.8,
-                                                                ),
-                                                            fontSize: 11,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    'Fare: Rs. $formattedPrice',
-                                                    style: const TextStyle(
-                                                      color: Color(0xFF0A2540),
-                                                      fontWeight:
-                                                          FontWeight.w800,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            const SizedBox(width: 4),
-                                            // Small QR code on the right
-                                            Container(
-                                              width: 52,
-                                              height: 52,
-                                              padding: const EdgeInsets.all(2),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color: const Color(
-                                                    0xFFE2E8F0,
-                                                  ),
-                                                ),
-                                              ),
-                                              child: QrImageView(
-                                                data: b['id'].toString(),
-                                                version: QrVersions.auto,
-                                                size: 48.0,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        // Bottom Row: Ticket Code & Reg
-                                        Container(
-                                          padding: const EdgeInsets.only(
-                                            top: 8,
+                                // ── Bottom Section: Bus Name, Ticket Code, Reg ──
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(
+                                            Icons.directions_bus_filled_rounded,
+                                            size: 14,
+                                            color: Color(0xFF2563EB),
                                           ),
-                                          decoration: const BoxDecoration(
-                                            border: Border(
-                                              top: BorderSide(
-                                                color: Color(0xFFF1F5F9),
-                                                width: 1,
-                                              ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '${b['bus_name']}',
+                                            style: const TextStyle(
+                                              color: Color(0xFF334155),
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
                                             ),
                                           ),
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                ticketCode,
-                                                style: TextStyle(
-                                                  fontFamily: 'monospace',
-                                                  color: const Color(
-                                                    0xFF0A2540,
-                                                  ).withValues(alpha: 0.5),
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                              Text(
-                                                '${b['reg']}',
-                                                style: TextStyle(
-                                                  fontFamily: 'monospace',
-                                                  color: const Color(
-                                                    0xFF0A2540,
-                                                  ).withValues(alpha: 0.6),
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
+                                        ],
+                                      ),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            ticketCode,
+                                            style: const TextStyle(
+                                              fontFamily: 'monospace',
+                                              color: Color(0xFF94A3B8),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
+                                          const SizedBox(width: 10),
+                                          Text(
+                                            '${b['reg']}',
+                                            style: const TextStyle(
+                                              fontFamily: 'monospace',
+                                              color: Color(0xFF94A3B8),
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
