@@ -20,11 +20,18 @@ subprojects {
 }
 
 subprojects {
-    afterEvaluate {
-        if (plugins.hasPlugin("com.android.library") || plugins.hasPlugin("com.android.application")) {
-            configure<com.android.build.gradle.BaseExtension> {
+    val configureCompileSdk: (Project) -> Unit = { proj ->
+        if (proj.plugins.hasPlugin("com.android.library") || proj.plugins.hasPlugin("com.android.application")) {
+            proj.configure<com.android.build.gradle.BaseExtension> {
                 compileSdkVersion(34)
             }
+        }
+    }
+    if (project.state.executed) {
+        configureCompileSdk(project)
+    } else {
+        afterEvaluate {
+            configureCompileSdk(project)
         }
     }
 }

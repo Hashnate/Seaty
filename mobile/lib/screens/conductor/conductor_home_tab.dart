@@ -58,13 +58,12 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
         : 'Assigned: No Active Bus';
 
     final int totalSeats = activeTrip?['total_seats'] ?? 40;
+    final List<dynamic> bookedSeats = activeTrip?['booked_seats'] ?? [];
     final List<dynamic> manifestList = _manifestData?['manifest'] ?? [];
     final List<dynamic> boardedList = _manifestData?['boarded_seats'] ?? (activeTrip?['boarded_seats'] ?? []);
 
-    final int validatedCount = manifestList
-        .where((m) => boardedList.contains(m['seat']))
-        .length;
-    final int bookedCount = manifestList.length;
+    final int validatedCount = boardedList.length;
+    final int bookedCount = bookedSeats.isNotEmpty ? bookedSeats.length : manifestList.length;
     final int availableSeats = (totalSeats - bookedCount) > 0 ? (totalSeats - bookedCount) : 0;
     final double pricePerSeat = activeTrip?['price'] ?? 0.0;
     final double totalCash = bookedCount * pricePerSeat;

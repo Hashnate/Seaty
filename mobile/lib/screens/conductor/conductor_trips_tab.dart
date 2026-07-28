@@ -95,14 +95,13 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
     final String busReg = activeTrip?['reg'] ?? 'N/A';
     final int capacity = activeTrip?['total_seats'] ?? 40;
 
+    final List<dynamic> bookedSeats = activeTrip?['booked_seats'] ?? [];
     final List<dynamic> manifestList = _manifestData?['manifest'] ?? [];
     final List<dynamic> boardedList =
         _manifestData?['boarded_seats'] ?? (activeTrip?['boarded_seats'] ?? []);
 
-    final int boardedCount = manifestList
-        .where((m) => boardedList.contains(m['seat']))
-        .length;
-    final int totalBooked = manifestList.length;
+    final int boardedCount = boardedList.length;
+    final int totalBooked = bookedSeats.isNotEmpty ? bookedSeats.length : manifestList.length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
