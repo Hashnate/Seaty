@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 
@@ -232,14 +233,38 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                     activeTrackColor: const Color(
                                       0xFF2563EB,
                                     ).withValues(alpha: 0.3),
-                                    onChanged: (val) {
+                                    onChanged: (val) async {
                                       setState(() => _isOnDuty = val);
-                                      SeatyNotifications.show(
-                                        context,
-                                        val
-                                            ? 'Status updated to ON DUTY'
-                                            : 'Status updated to OFF DUTY',
-                                      );
+                                      if (val) {
+                                        SeatyNotifications.show(
+                                          context,
+                                          'Status updated to ON DUTY',
+                                        );
+                                        if (activeTrip != null) {
+                                          final vehicleId = activeTrip['vehicle_id']?.toString() ?? '';
+                                          if (vehicleId.isNotEmpty) {
+                                            bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+                                            LocationPermission permission = await Geolocator.checkPermission();
+                                            if (serviceEnabled && permission != LocationPermission.denied) {
+                                              await state.startStreamingGPS(vehicleId, true);
+                                            } else {
+                                              if (mounted) {
+                                                SeatyNotifications.show(
+                                                  context,
+                                                  'Please enable GPS to start location broadcast.',
+                                                  isWarning: true,
+                                                );
+                                              }
+                                            }
+                                          }
+                                        }
+                                      } else {
+                                        state.stopStreamingGPS();
+                                        SeatyNotifications.show(
+                                          context,
+                                          'Status updated to OFF DUTY',
+                                        );
+                                      }
                                     },
                                   ),
                                 ],
@@ -326,77 +351,90 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
               // ── CURRENT ASSIGNED TRIP ─────────────────────
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.03),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Active Schedule',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF64748B),
+                child: GestureDetector(
+                  onTap: activeTrip == null
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  ConductorTripDetailsScreen(trip: activeTrip),
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(
-                                0xFF10B981,
-                              ).withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              activeTrip != null ? 'EN ROUTE' : 'NO TRIP',
+                          );
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.03),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Active Schedule',
                               style: TextStyle(
-                                color: activeTrip != null
-                                    ? const Color(0xFF10B981)
-                                    : const Color(0xFF64748B),
-                                fontWeight: FontWeight.w800,
-                                fontSize: 11,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF64748B),
                               ),
                             ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(
+                                  0xFF10B981,
+                                ).withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                activeTrip != null ? 'EN ROUTE' : 'NO TRIP',
+                                style: TextStyle(
+                                  color: activeTrip != null
+                                      ? const Color(0xFF10B981)
+                                      : const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          '$origin → $destination',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF0F172A),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        '$origin → $destination',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF0F172A),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Departure: $departure',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(height: 4),
+                        Text(
+                          'Departure: $departure',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

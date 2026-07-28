@@ -1504,7 +1504,7 @@ class SeatyApp extends StatelessWidget {
         primaryColor: const Color(0xFF0A2540), // Navy Blue
         hintColor: const Color(0xFF2563EB), // Blue (matches admin dashboard)
         cardColor: const Color(0xFFF8FAFC), // Slate off-white (matches admin)
-        fontFamily: GoogleFonts.outfit().fontFamily,
+        fontFamily: GoogleFonts.poppins().fontFamily,
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF0A2540),
           secondary: Color(0xFF2563EB),
