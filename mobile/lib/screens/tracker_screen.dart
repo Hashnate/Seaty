@@ -143,11 +143,11 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     ],
   };
 
-  List<LatLng> _getRouteForTrip(AppState state) {
-    if (_selectedBusId == null) return [];
+  List<LatLng> _getRouteForTrip(AppState state, String? selectedBusId) {
+    if (selectedBusId == null) return [];
 
     final trip = state.trips.firstWhere(
-      (t) => t['reg'] == _selectedBusId,
+      (t) => t['reg'] == selectedBusId,
       orElse: () => <String, dynamic>{},
     );
 
@@ -163,7 +163,50 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(appStateProvider);
-    final isTracking = state.isTracking && state.trackedBusLocation != null;
+
+    // Filter trips to only those where:
+    // 1. The user has a confirmed booking for that trip.
+    // 2. The current time is within the active tracking window (starts 30m before departure, ends at arrival).
+    final now = DateTime.now();
+    final trackableTrips = state.trips.where((trip) {
+      final hasBooking = state.bookings.any((booking) =>
+          booking['trip_id'] == trip['id'] &&
+          booking['status'] == 'confirmed');
+      if (!hasBooking) return false;
+
+      final departureStr = trip['departure']?.toString() ?? '';
+      final arrivalStr = trip['arrival']?.toString() ?? '';
+
+      if (departureStr.isEmpty) return false;
+
+      final departureTime = DateTime.tryParse(departureStr);
+      if (departureTime == null) return false;
+
+      final startTime = departureTime.subtract(const Duration(minutes: 30));
+      final arrivalTime = (arrivalStr.isNotEmpty)
+          ? DateTime.tryParse(arrivalStr)
+          : departureTime.add(const Duration(hours: 4)); // Fallback duration if arrival is empty
+
+      if (arrivalTime == null) return false;
+
+      return now.isAfter(startTime) && now.isBefore(arrivalTime);
+    }).toList();
+
+    // Verify if the previously selected bus is still trackable
+    final hasSelected = trackableTrips.any((t) => t['reg'] == _selectedBusId);
+    final String? selectedValue = hasSelected ? _selectedBusId : null;
+
+    // Automatically stop tracking if the bus leaves the active tracking window/eligibility
+    if (_selectedBusId != null && !hasSelected) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        state.stopTracking();
+        setState(() {
+          _selectedBusId = null;
+        });
+      });
+    }
+
+    final isTracking = state.isTracking && state.trackedBusLocation != null && hasSelected;
 
     LatLng? busPosition;
     if (isTracking) {
@@ -174,7 +217,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       }
     }
 
-    final routePoints = _getRouteForTrip(state);
+    final routePoints = _getRouteForTrip(state, selectedValue);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -271,8 +314,8 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           fontWeight: FontWeight.w600,
                           fontSize: 13,
                         ),
-                        value: _selectedBusId,
-                        items: state.trips.map((trip) {
+                        value: selectedValue,
+                        items: trackableTrips.map((trip) {
                           return DropdownMenuItem<String>(
                             value: trip['reg'],
                             child: Text(
@@ -288,6 +331,8 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           setState(() => _selectedBusId = val);
                           if (val != null) {
                             state.startTracking(val);
+                          } else {
+                            state.stopTracking();
                           }
                         },
                       ),

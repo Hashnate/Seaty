@@ -13,6 +13,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:video_player/video_player.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
@@ -782,6 +783,7 @@ class AppState extends ChangeNotifier {
             'amenities': List<String>.from(vehicle['amenities'] ?? []),
             'booked_seats': List<String>.from(tripMap['booked_seats'] ?? []),
             'boarded_seats': List<String>.from(tripMap['boarded_seats'] ?? []),
+            'arrival': tripMap['arrival_time']?.toString().replaceAll('T', ' ').substring(0, 16) ?? '',
           });
         }
         notifyListeners();
@@ -840,11 +842,13 @@ class AppState extends ChangeNotifier {
   }
 
   // Load seat availability for a trip
-  Future<void> loadSeatAvailability(String tripId) async {
-    _bookedSeats.clear();
-    _heldSeats.clear();
-    _seatGenders.clear();
-    notifyListeners();
+  Future<void> loadSeatAvailability(String tripId, {bool clearFirst = false}) async {
+    if (clearFirst) {
+      _bookedSeats.clear();
+      _heldSeats.clear();
+      _seatGenders.clear();
+      notifyListeners();
+    }
 
     try {
       final response = await http
@@ -1398,7 +1402,6 @@ class SeatyNotifications {
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
-                  fontFamily: 'Inter',
                 ),
               ),
             ),
@@ -1501,7 +1504,7 @@ class SeatyApp extends StatelessWidget {
         primaryColor: const Color(0xFF0A2540), // Navy Blue
         hintColor: const Color(0xFF2563EB), // Blue (matches admin dashboard)
         cardColor: const Color(0xFFF8FAFC), // Slate off-white (matches admin)
-        fontFamily: 'Inter',
+        fontFamily: GoogleFonts.outfit().fontFamily,
         colorScheme: const ColorScheme.light(
           primary: Color(0xFF0A2540),
           secondary: Color(0xFF2563EB),
@@ -1515,7 +1518,6 @@ class SeatyApp extends StatelessWidget {
             color: Color(0xFF0A2540),
             fontSize: 20,
             fontWeight: FontWeight.bold,
-            fontFamily: 'Inter',
           ),
         ),
         bottomNavigationBarTheme: const BottomNavigationBarThemeData(
@@ -2726,7 +2728,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                 children: [
                   // Background Video Player / Fallback Gradient
                   SizedBox(
-                    height: 320,
+                    height: 280,
                     width: double.infinity,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.only(
@@ -2771,35 +2773,34 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
-                        vertical: 16,
+                        vertical: 10,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Spacer for sticky header
-                          const SizedBox(height: 64),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 48),
                           // Greeting + Search prompt
                           Text(
                             'Hello, ${state.userName} 👋',
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.w500,
                               color: Colors.white.withOpacity(0.7),
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           const Text(
                             'Where are you\ntraveling today?',
                             style: TextStyle(
-                              fontSize: 30,
+                              fontSize: 26,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                               height: 1.1,
                               letterSpacing: -1,
                             ),
                           ),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 20),
 
                           // Glassmorphic Search Bar
                           ClipRRect(
@@ -3008,78 +3009,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
               ),
             ),
 
-            // ─── Popular Destinations Carousel ───
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 32, bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 24),
-                      child: Text(
-                        'Popular Destinations',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 140,
-                      child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context).copyWith(
-                          dragDevices: {
-                            PointerDeviceKind.touch,
-                            PointerDeviceKind.mouse,
-                            PointerDeviceKind.trackpad,
-                          },
-                        ),
-                        child: ListView.builder(
-                          physics: const BouncingScrollPhysics(
-                            parent: AlwaysScrollableScrollPhysics(),
-                          ),
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          itemBuilder: (context, index) {
-                            final destinations = _getDestinations(state.trips);
-                            if (index == 0) {
-                              final isSelected = _selectedTo == 'All';
-                              return _buildDestinationCard(
-                                'All',
-                                'Everywhere',
-                                0xFFF1F5F9,
-                                0xFFE2E8F0,
-                                isSelected,
-                                true,
-                              );
-                            }
-                            if (destinations.isEmpty)
-                              return const SizedBox.shrink();
-                            final dest = destinations[index - 1];
-                            final isSelected = _selectedTo == dest['name'];
-                            return _buildDestinationCard(
-                              dest['name'] as String,
-                              'Explore',
-                              dest['color1'] as int,
-                              dest['color2'] as int,
-                              isSelected,
-                              false,
-                              icon: dest['icon'] as IconData,
-                              assetImage: dest['asset'] as String,
-                            );
-                          },
-                          itemCount: _getDestinations(state.trips).length + 1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
 
             // ─── Ride Results Title ───
             SliverToBoxAdapter(
@@ -3303,6 +3232,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
               TextField(
                 controller: controller,
                 focusNode: focusNode,
+                cursorColor: Colors.white,
                 onTap: () {
                   controller.clear();
                   onChanged('');
@@ -3692,7 +3622,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                   0xFF0A2540,
                                 ).withValues(alpha: 0.5),
                                 fontFamily: 'monospace',
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
@@ -3763,32 +3693,34 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                   children: [
                     Row(
                       children: [
-                        // Time Tag
+                        // Highlighted Time/Date Tag
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
+                            horizontal: 10,
+                            vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF0A2540,
-                            ).withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(6),
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: const Color(0xFFBFDBFE),
+                              width: 1.2,
+                            ),
                           ),
                           child: Row(
                             children: [
                               const Icon(
                                 Icons.schedule_rounded,
-                                size: 12,
-                                color: Color(0xFF0A2540),
+                                size: 13,
+                                color: Color(0xFF2563EB),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 4.5),
                               Text(
                                 trip['departure'],
                                 style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF0A2540),
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1E40AF),
                                 ),
                               ),
                             ],
@@ -3819,7 +3751,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                 '$seatsLeft seats left',
                                 style: const TextStyle(
                                   fontSize: 10,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w500,
                                   color: Color(0xFF0A2540),
                                 ),
                               ),
@@ -3867,24 +3799,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
-                  children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      size: 14,
-                      color: Color(0xFF10B981),
-                    ),
-                    SizedBox(width: 4),
-                    Text(
-                      'Seaty Verified',
-                      style: TextStyle(
-                        color: Color(0xFF10B981),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
+                const SizedBox.shrink(),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.push(
@@ -4049,7 +3964,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
     setState(() => _isLoading = true);
     final state = ref.read(appStateProvider);
     state.clearSelectedSeats();
-    await state.loadSeatAvailability(widget.trip['id'].toString());
+    await state.loadSeatAvailability(widget.trip['id'].toString(), clearFirst: true);
     if (mounted) {
       setState(() => _isLoading = false);
       _introController.reset();
@@ -4522,75 +4437,59 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
                     return Expanded(
                       child: Container(
                         width: double.infinity,
-                        color: const Color(0xFFE2E8F0),
-                        child: AnimatedBuilder(
-                          animation: _introController,
-                          builder: (context, child) {
-                            return Transform(
-                              transform: Matrix4.identity()
-                                ..setEntry(3, 2, 0.001)
-                                ..rotateX(_perspectiveAnimation.value)
-                                ..scale(_scaleAnimation.value),
-                              alignment: Alignment.center,
-                              child: Transform.translate(
-                                offset: Offset(0, _slideAnimation.value),
-                                child: child,
+                        color: const Color(0xFFF1F5F9),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Center(
+                            child: Container(
+                              constraints: const BoxConstraints(maxWidth: 480),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(28),
+                                  topRight: Radius.circular(28),
+                                  bottomLeft: Radius.circular(16),
+                                  bottomRight: Radius.circular(16),
+                                ),
+                                border: Border.all(
+                                  color: const Color(0xFFCBD5E1),
+                                  width: 2.0,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.05),
+                                    blurRadius: 24,
+                                    offset: const Offset(0, 10),
+                                  ),
+                                ],
                               ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            child: Center(
-                              child: Container(
-                                constraints: const BoxConstraints(maxWidth: 480),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF8FAFC),
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(16),
-                                    topRight: Radius.circular(16),
-                                    bottomLeft: Radius.circular(10),
-                                    bottomRight: Radius.circular(10),
-                                  ),
-                                  border: Border.all(
-                                    color: const Color(0xFF334155),
-                                    width: 3.0,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.15),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final double gridHeight = constraints.maxHeight;
-                                    final double availableGridHeight = gridHeight - 70.0;
-                                    final double rowHeight =
-                                        (availableGridHeight / rows).clamp(34.0, 58.0);
-                                    final double seatHeight = (rowHeight - 6.0).clamp(28.0, 48.0);
-                                    final double seatWidth = (seatHeight * 1.35).clamp(42.0, 58.0);
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final double gridHeight = constraints.maxHeight;
+                                  final double availableGridHeight = gridHeight - 70.0;
+                                  final double rowHeight =
+                                      (availableGridHeight / rows).clamp(34.0, 58.0);
+                                  final double seatHeight = (rowHeight - 6.0).clamp(28.0, 48.0);
+                                  final double seatWidth = (seatHeight * 1.35).clamp(42.0, 58.0);
 
-                                    return Column(
-                                      children: [
-                                        _buildCabinFront(),
-                                        const SizedBox(height: 6),
-                                        Expanded(
-                                          child: _buildFlatGrid(
-                                            state,
-                                            layout,
-                                            rows,
-                                            columns,
-                                            aisleAfter,
-                                            seatWidth,
-                                            seatHeight,
-                                          ),
+                                  return Column(
+                                    children: [
+                                      _buildCabinFront(),
+                                      const SizedBox(height: 6),
+                                      Expanded(
+                                        child: _buildFlatGrid(
+                                          state,
+                                          layout,
+                                          rows,
+                                          columns,
+                                          aisleAfter,
+                                          seatWidth,
+                                          seatHeight,
                                         ),
-                                      ],
-                                    );
-                                  },
-                                ),
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -5074,11 +4973,11 @@ class _Animated3DSeatState extends State<Animated3DSeat>
     );
     _scale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 1.12),
+        tween: Tween<double>(begin: 1.0, end: 1.15),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.12, end: 1.0),
+        tween: Tween<double>(begin: 1.15, end: 1.0),
         weight: 50,
       ),
     ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
@@ -5108,48 +5007,86 @@ class _Animated3DSeatState extends State<Animated3DSeat>
 
   @override
   Widget build(BuildContext context) {
-    Color fillColor = Colors.white;
-    Color borderColor = const Color(0xFFCBD5E1);
-    Color textColor = const Color(0xFF0F172A);
+    Gradient fillGradient;
+    Color borderColor;
+    Color textColor;
     IconData? genderIcon;
 
     if (widget.isSelected) {
       if (widget.gender.toLowerCase() == 'male') {
-        fillColor = const Color(0xFF1E3A8A);
-        borderColor = const Color(0xFF3B82F6);
+        fillGradient = const LinearGradient(
+          colors: [Color(0xFF3B82F6), Color(0xFF1E3A8A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        );
+        borderColor = const Color(0xFF60A5FA);
         textColor = Colors.white;
         genderIcon = Icons.man_rounded;
       } else if (widget.gender.toLowerCase() == 'female') {
-        fillColor = const Color(0xFFE11D48);
-        borderColor = const Color(0xFFF472B6);
+        fillGradient = const LinearGradient(
+          colors: [Color(0xFFF43F5E), Color(0xFFBE123C)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        );
+        borderColor = const Color(0xFFFB7185);
         textColor = Colors.white;
         genderIcon = Icons.woman_rounded;
       } else {
-        fillColor = const Color(0xFF2563EB);
-        borderColor = const Color(0xFFFF8A50);
+        fillGradient = const LinearGradient(
+          colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        );
+        borderColor = const Color(0xFF93C5FD);
         textColor = Colors.white;
       }
     } else if (widget.isBooked) {
       if (widget.gender.toLowerCase() == 'male') {
-        fillColor = const Color(0xFF1E3A8A);
-        borderColor = const Color(0xFF1E3A8A);
-        textColor = Colors.white;
+        fillGradient = const LinearGradient(
+          colors: [Color(0xFF1E3A8A), Color(0xFF0F172A)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        );
+        borderColor = const Color(0xFF2563EB).withValues(alpha: 0.4);
+        textColor = Colors.white.withValues(alpha: 0.6);
         genderIcon = Icons.man_rounded;
       } else if (widget.gender.toLowerCase() == 'female') {
-        fillColor = const Color(0xFFE11D48);
-        borderColor = const Color(0xFFE11D48);
-        textColor = Colors.white;
+        fillGradient = const LinearGradient(
+          colors: [Color(0xFFBE123C), Color(0xFF881337)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        );
+        borderColor = const Color(0xFFE11D48).withValues(alpha: 0.4);
+        textColor = Colors.white.withValues(alpha: 0.6);
         genderIcon = Icons.woman_rounded;
       } else {
-        fillColor = const Color(0xFF64748B);
-        borderColor = const Color(0xFF475569);
-        textColor = Colors.white;
+        fillGradient = const LinearGradient(
+          colors: [Color(0xFF475569), Color(0xFF334155)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        );
+        borderColor = const Color(0xFF475569).withValues(alpha: 0.4);
+        textColor = Colors.white.withValues(alpha: 0.5);
       }
     } else if (widget.isHeld) {
-      fillColor = const Color(0xFFD97706);
-      borderColor = const Color(0xFFB45309);
+      fillGradient = const LinearGradient(
+        colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      );
+      borderColor = const Color(0xFFFFB020);
       textColor = Colors.white;
+    } else {
+      fillGradient = const LinearGradient(
+        colors: [Colors.white, Color(0xFFF8FAFC)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      );
+      borderColor = const Color(0xFFCBD5E1);
+      textColor = const Color(0xFF0F172A);
     }
+
+    final bool isSpecialState = widget.isSelected || widget.isBooked || widget.isHeld;
 
     return GestureDetector(
       onTap: (widget.isBooked || widget.isHeld) ? null : widget.onTap,
@@ -5162,41 +5099,86 @@ class _Animated3DSeatState extends State<Animated3DSeat>
               width: widget.width,
               height: widget.height,
               decoration: BoxDecoration(
-                color: fillColor,
+                gradient: fillGradient,
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: borderColor,
                   width: widget.isSelected ? 2.0 : 1.2,
                 ),
-                boxShadow:
-                    widget.isSelected
-                        ? [
-                          BoxShadow(
-                            color: borderColor.withValues(alpha: 0.4),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                        : [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 3,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                boxShadow: widget.isSelected
+                    ? [
+                        BoxShadow(
+                          color: borderColor.withValues(alpha: 0.5),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
               ),
               child: Stack(
                 children: [
-                  // Top Headrest Cushion Curve
+                  // Upper headrest cushion indicator (real seat look)
                   Positioned(
-                    top: 2,
-                    left: 6,
-                    right: 6,
+                    top: 3,
+                    left: 5,
+                    right: 5,
                     child: Container(
-                      height: 3,
+                      height: 5,
                       decoration: BoxDecoration(
-                        color: textColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(2),
+                        color: isSpecialState
+                            ? Colors.white.withValues(alpha: 0.18)
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                  ),
+                  // Seat bottom cushion crease / design line
+                  Positioned(
+                    bottom: 4,
+                    left: 4,
+                    right: 4,
+                    child: Container(
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color: isSpecialState
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.black.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                  // Armrests (Wing/support armrest indicator lines)
+                  Positioned(
+                    top: 6,
+                    bottom: 6,
+                    left: 2,
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(
+                        color: isSpecialState
+                            ? Colors.white.withValues(alpha: 0.2)
+                            : Colors.black.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(1),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 6,
+                    bottom: 6,
+                    right: 2,
+                    child: Container(
+                      width: 2,
+                      decoration: BoxDecoration(
+                        color: isSpecialState
+                            ? Colors.white.withValues(alpha: 0.2)
+                            : Colors.black.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(1),
                       ),
                     ),
                   ),
@@ -5208,7 +5190,7 @@ class _Animated3DSeatState extends State<Animated3DSeat>
                         fontSize: (widget.height * 0.28).clamp(9.0, 13.0),
                         fontWeight: FontWeight.w900,
                         color: textColor,
-                        letterSpacing: -0.2,
+                        letterSpacing: -0.3,
                       ),
                     ),
                   ),
@@ -5216,11 +5198,18 @@ class _Animated3DSeatState extends State<Animated3DSeat>
                   if (genderIcon != null)
                     Positioned(
                       top: 2,
-                      right: 2,
-                      child: Icon(
-                        genderIcon,
-                        size: 11,
-                        color: Colors.white.withValues(alpha: 0.9),
+                      right: 3,
+                      child: Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          genderIcon,
+                          size: 9,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                 ],
@@ -5255,10 +5244,16 @@ class _ConductorTripDetailsScreenState
     });
   }
 
+  @override
+  void dispose() {
+    ref.read(appStateProvider).stopStreamingGPS();
+    super.dispose();
+  }
+
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final state = ref.read(appStateProvider);
-    await state.loadSeatAvailability(widget.trip['id'].toString());
+    await state.loadSeatAvailability(widget.trip['id'].toString(), clearFirst: true);
     final manifest = await state.fetchTripManifest(
       widget.trip['id'].toString(),
     );
@@ -5267,6 +5262,87 @@ class _ConductorTripDetailsScreenState
         _manifestData = manifest;
         _isLoading = false;
       });
+      _checkAndStartGpsStreaming(state);
+    }
+  }
+
+  Future<void> _checkAndStartGpsStreaming(AppState state) async {
+    final departureStr = widget.trip['departure'];
+    final arrivalStr = widget.trip['arrival'];
+    final vehicleId = widget.trip['vehicle_id']?.toString() ?? '';
+
+    if (departureStr == null || vehicleId.isEmpty) return;
+
+    try {
+      final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
+      final now = DateTime.now();
+      final startTime = departureTime.subtract(const Duration(minutes: 30));
+
+      final arrivalTime = (arrivalStr != null && arrivalStr.toString().isNotEmpty)
+          ? DateTime.parse(arrivalStr.toString().replaceAll(' ', 'T'))
+          : departureTime.add(const Duration(hours: 4)); // Fallback duration
+
+      if (now.isAfter(startTime) && now.isBefore(arrivalTime)) {
+        if (!state.isStreamingGPS) {
+          bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          LocationPermission permission = await Geolocator.checkPermission();
+
+          if (!serviceEnabled || permission == LocationPermission.denied) {
+            if (mounted) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  backgroundColor: const Color(0xFF0A2540),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  title: const Text(
+                    'GPS Broadcast Required',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  content: const Text(
+                    'Live tracking is now active for this ride. Please enable GPS so passengers can view your bus in real-time.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Later', style: TextStyle(color: Colors.white54)),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2E7D32),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await state.startStreamingGPS(vehicleId, true);
+                        if (mounted) {
+                          SeatyNotifications.show(
+                            context,
+                            'GPS Tracking Started Successfully',
+                          );
+                        }
+                      },
+                      child: const Text('Start Broadcast'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          } else {
+            await state.startStreamingGPS(vehicleId, true);
+            if (mounted) {
+              SeatyNotifications.show(
+                context,
+                'GPS Location Broadcast Started Automatically',
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Error starting GPS stream in conductor trip: $e');
     }
   }
 
@@ -5481,6 +5557,51 @@ class _ConductorTripDetailsScreenState
       appBar: AppBar(
         title: const Text('Trip Details'),
         actions: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                state.isStreamingGPS ? Icons.gps_fixed_rounded : Icons.gps_off_rounded,
+                color: state.isStreamingGPS ? const Color(0xFF10B981) : Colors.black38,
+                size: 16,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                state.isStreamingGPS ? 'LIVE ON' : 'LIVE OFF',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: state.isStreamingGPS ? const Color(0xFF10B981) : Colors.black38,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Switch(
+                value: state.isStreamingGPS,
+                activeColor: const Color(0xFF10B981),
+                activeTrackColor: const Color(0xFF10B981).withValues(alpha: 0.2),
+                inactiveThumbColor: Colors.grey,
+                inactiveTrackColor: Colors.black12,
+                onChanged: (bool value) async {
+                  final vehicleId = widget.trip['vehicle_id']?.toString() ?? '';
+                  if (vehicleId.isEmpty) return;
+
+                  if (value) {
+                    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+                    LocationPermission permission = await Geolocator.checkPermission();
+
+                    if (!serviceEnabled || permission == LocationPermission.denied) {
+                      _checkAndStartGpsStreaming(state);
+                    } else {
+                      await state.startStreamingGPS(vehicleId, true);
+                    }
+                  } else {
+                    state.stopStreamingGPS();
+                  }
+                },
+              ),
+            ],
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadData),
         ],
       ),

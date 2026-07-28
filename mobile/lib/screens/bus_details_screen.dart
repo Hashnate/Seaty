@@ -24,7 +24,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final tripId = widget.trip['id']?.toString() ?? '';
       if (tripId.isNotEmpty) {
-        ref.read(appStateProvider).loadSeatAvailability(tripId);
+        ref.read(appStateProvider).loadSeatAvailability(tripId, clearFirst: true);
       }
     });
   }
@@ -370,23 +370,13 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.verified_rounded,
-                                  color: Color(0xFF10B981),
-                                  size: 15,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Luxurious ride details • Verified by Seaty',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.85),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              'Luxurious ride details',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -425,7 +415,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                             'JOURNEY DETAILS',
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w600,
                               color: Color(0xFF64748B),
                               letterSpacing: 0.6,
                             ),
@@ -447,7 +437,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                       widget.trip['origin'] ?? '',
                                       style: const TextStyle(
                                         fontSize: 15,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w700,
                                         color: Color(0xFF0A2540),
                                       ),
                                     ),
@@ -456,7 +446,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                       style: const TextStyle(
                                         fontSize: 12,
                                         color: Color(0xFF64748B),
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
@@ -488,16 +478,36 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                       widget.trip['destination'] ?? '',
                                       style: const TextStyle(
                                         fontSize: 15,
-                                        fontWeight: FontWeight.w800,
+                                        fontWeight: FontWeight.w700,
                                         color: Color(0xFF0A2540),
                                       ),
                                     ),
-                                    const Text(
-                                      'Arrival: Estimated 2 hrs duration',
-                                      style: TextStyle(
+                                    Text(
+                                      () {
+                                        final departureStr = widget.trip['departure']?.toString() ?? '';
+                                        final arrivalStr = widget.trip['arrival']?.toString() ?? '';
+                                        if (departureStr.isNotEmpty && arrivalStr.isNotEmpty) {
+                                          try {
+                                            final dep = DateTime.parse(departureStr.replaceAll(' ', 'T'));
+                                            final arr = DateTime.parse(arrivalStr.replaceAll(' ', 'T'));
+                                            final diff = arr.difference(dep);
+                                            final hours = diff.inHours;
+                                            final mins = diff.inMinutes % 60;
+                                            if (hours > 0) {
+                                              return 'Arrival: Estimated $hours ${hours == 1 ? "hr" : "hrs"}${mins > 0 ? " $mins min" : ""} duration';
+                                            } else if (mins > 0) {
+                                              return 'Arrival: Estimated $mins min duration';
+                                            }
+                                          } catch (e) {
+                                            debugPrint('Error parsing duration: $e');
+                                          }
+                                        }
+                                        return 'Arrival: Estimated duration';
+                                      }(),
+                                      style: const TextStyle(
                                         fontSize: 12,
                                         color: Color(0xFF64748B),
-                                        fontWeight: FontWeight.w600,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ],
@@ -544,24 +554,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                               ),
                             ],
                           ),
-                          const Row(
-                            children: [
-                              Icon(
-                                Icons.verified_user_rounded,
-                                size: 15,
-                                color: Color(0xFF10B981),
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                'Seaty Verified',
-                                style: TextStyle(
-                                  color: Color(0xFF10B981),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                          const SizedBox.shrink(),
                         ],
                       ),
                     ),
