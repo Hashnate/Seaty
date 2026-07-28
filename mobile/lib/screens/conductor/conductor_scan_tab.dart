@@ -31,6 +31,16 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
     super.dispose();
   }
 
+  String _formatRemainingTime(int totalMinutes) {
+    if (totalMinutes < 0) return '0m';
+    if (totalMinutes >= 60) {
+      final hours = totalMinutes ~/ 60;
+      final mins = totalMinutes % 60;
+      return '${hours}h ${mins}m';
+    }
+    return '${totalMinutes}m';
+  }
+
   Future<void> _verifyTicketCode(String code) async {
     if (_isProcessing || code.trim().isEmpty) return;
     setState(() => _isProcessing = true);
@@ -68,10 +78,36 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
     }
 
     final passengerName = booking['passenger_name'] ?? 'Passenger';
-    final seats = (booking['seats'] as List).join(', ');
+    final List<String> bookingSeats = List<String>.from(booking['seats'] ?? []);
+    final seats = bookingSeats.join(', ');
     final routeStr = '${booking['origin']} → ${booking['destination']}';
     final status = booking['status']?.toString().toUpperCase() ?? 'PENDING';
     final tripId = booking['trip_id']?.toString() ?? '';
+
+    // Calculate boarding status and availability
+    final List<String> boardedSeats = List<String>.from(booking['boarded_seats'] ?? []);
+    final List<String> unboardedSeats = bookingSeats.where((s) => !boardedSeats.contains(s)).toList();
+    final bool isAlreadyFullyBoarded = unboardedSeats.isEmpty;
+
+    final departureStr = booking['departure'];
+    bool isBoardingAvailable = true;
+    String disabledReason = "";
+    int differenceInMins = 0;
+
+    if (departureStr != null) {
+      try {
+        final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
+        final now = DateTime.now();
+        final difference = departureTime.difference(now);
+        differenceInMins = difference.inMinutes;
+        if (difference.inMinutes > 30) {
+          isBoardingAvailable = false;
+          disabledReason = "Boarding is only allowed within 30 minutes of the ride. Departure is in ${_formatRemainingTime(difference.inMinutes)} (at $departureStr).";
+        }
+      } catch (e) {
+        debugPrint('Error parsing departure: $e');
+      }
+    }
 
     if (mounted) {
       showDialog(
@@ -87,23 +123,39 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF10B981),
+                  decoration: BoxDecoration(
+                    color: isAlreadyFullyBoarded
+                        ? const Color(0xFF10B981)
+                        : !isBoardingAvailable
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF2563EB),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.check_rounded,
+                  child: Icon(
+                    isAlreadyFullyBoarded
+                        ? Icons.check_rounded
+                        : !isBoardingAvailable
+                            ? Icons.lock_outline_rounded
+                            : Icons.qr_code_scanner_rounded,
                     color: Colors.white,
                     size: 40,
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'TICKET VERIFIED',
+                Text(
+                  isAlreadyFullyBoarded
+                      ? 'PASSENGER BOARDED'
+                      : !isBoardingAvailable
+                          ? 'BOARDING LOCKED'
+                          : 'TICKET VERIFIED',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF10B981),
+                    color: isAlreadyFullyBoarded
+                        ? const Color(0xFF10B981)
+                        : !isBoardingAvailable
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF2563EB),
                     letterSpacing: 0.5,
                   ),
                 ),
@@ -126,29 +178,94 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                 _VerifyRow(label: 'Route:', value: routeStr),
                 const SizedBox(height: 6),
                 _VerifyRow(label: 'Payment Status:', value: status),
+                const SizedBox(height: 6),
+                _VerifyRow(
+                  label: 'Boarding Status:',
+                  value: isAlreadyFullyBoarded
+                      ? 'FULLY BOARDED'
+                      : boardedSeats.isNotEmpty
+                          ? 'PARTIALLY BOARDED'
+                          : 'NOT BOARDED',
+                  valueColor: isAlreadyFullyBoarded
+                      ? const Color(0xFF10B981)
+                      : boardedSeats.isNotEmpty
+                          ? const Color(0xFFF59E0B)
+                          : const Color(0xFFDC2626),
+                ),
+                if (!isAlreadyFullyBoarded && !isBoardingAvailable) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFDC2626),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            "Boarding opens 30 minutes before departure. Departure is in ${_formatRemainingTime(differenceInMins)} (at $departureStr).",
+                            style: const TextStyle(
+                              color: Color(0xFF991B1B),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      setState(() => _isProcessing = true);
-                      
-                      // Toggle boarding for all seats in this booking
-                      final List<String> bookingSeats = List<String>.from(booking['seats'] ?? []);
-                      for (final seat in bookingSeats) {
-                        await state.toggleBoarding(tripId, seat);
-                      }
-                      
-                      if (mounted) {
-                        setState(() => _isProcessing = false);
-                        _manualCodeCtrl.clear();
-                        SeatyNotifications.show(
-                          context,
-                          'Passenger boarded successfully!',
-                        );
-                      }
-                    },
+                    onPressed: (isBoardingAvailable && !isAlreadyFullyBoarded)
+                        ? () async {
+                            Navigator.pop(context);
+                            setState(() => _isProcessing = true);
+                            
+                            bool allSucceeded = true;
+                            String? errorMessage;
+                            try {
+                              for (final seat in unboardedSeats) {
+                                await state.toggleBoarding(tripId, seat, action: "board");
+                              }
+                            } catch (e) {
+                              allSucceeded = false;
+                              errorMessage = e.toString().replaceFirst('Exception: ', '');
+                            }
+                            
+                            if (mounted) {
+                              if (allSucceeded) {
+                                _manualCodeCtrl.clear();
+                                SeatyNotifications.show(
+                                  context,
+                                  'Passenger boarded successfully!',
+                                );
+                              } else {
+                                SeatyNotifications.show(
+                                  context,
+                                  errorMessage ?? 'Failed to board passenger.',
+                                  isError: true,
+                                );
+                              }
+                              Future.delayed(const Duration(milliseconds: 1500), () {
+                                if (mounted) {
+                                  setState(() => _isProcessing = false);
+                                }
+                              });
+                            }
+                          }
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF10B981),
                       foregroundColor: Colors.white,
@@ -157,9 +274,13 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: const Text(
-                      'Confirm Boarding',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    child: Text(
+                      isAlreadyFullyBoarded
+                          ? 'Passenger Boarded'
+                          : isBoardingAvailable
+                              ? 'Confirm Boarding'
+                              : 'Boarding Locked',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -169,7 +290,11 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                   child: OutlinedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      setState(() => _isProcessing = false);
+                      Future.delayed(const Duration(milliseconds: 1000), () {
+                        if (mounted) {
+                          setState(() => _isProcessing = false);
+                        }
+                      });
                     },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF64748B),
@@ -428,7 +553,8 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
 class _VerifyRow extends StatelessWidget {
   final String label;
   final String value;
-  const _VerifyRow({required this.label, required this.value});
+  final Color? valueColor;
+  const _VerifyRow({required this.label, required this.value, this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -441,10 +567,10 @@ class _VerifyRow extends StatelessWidget {
         ),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF0F172A),
+            color: valueColor ?? const Color(0xFF0F172A),
           ),
         ),
       ],

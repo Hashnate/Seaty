@@ -530,26 +530,62 @@ def get_trip_manifest(
 def toggle_seat_board_status(
     trip_id: UUID,
     seat: str,
+    action: Optional[str] = Query(None, description="board, unboard, toggle"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["admin", "owner", "conductor"]))
 ):
-    """Toggle the boarding status of a specific seat."""
+    """Toggle or set the boarding status of a specific seat."""
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
         
     boarded = list(trip.boarded_seats)
-    if seat in boarded:
-        boarded.remove(seat)
-        action = "unboarded"
-    else:
-        boarded.append(seat)
-        action = "boarded"
+    
+    # Resolve action if not specified
+    if not action:
+        action = "unboard" if seat in boarded else "board"
+        
+    if action == "board":
+        # 30-minute validation check
+        now = datetime.datetime.now(datetime.timezone.utc)
+        earliest_boarding_time = trip.departure_time - datetime.timedelta(minutes=30)
+        if now < earliest_boarding_time:
+            minutes_until_boarding = int((earliest_boarding_time - now).total_seconds() / 60)
+            departure_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Boarding is only allowed within 30 minutes of the ride. Departure is in {minutes_until_boarding} minutes (at {departure_str})."
+            )
+            
+        if seat not in boarded:
+            boarded.append(seat)
+        final_action = "boarded"
+    elif action == "unboard":
+        if seat in boarded:
+            boarded.remove(seat)
+        final_action = "unboarded"
+    else:  # toggle
+        if seat in boarded:
+            boarded.remove(seat)
+            final_action = "unboarded"
+        else:
+            # Enforce 30-minute check for boarding inside toggle
+            now = datetime.datetime.now(datetime.timezone.utc)
+            earliest_boarding_time = trip.departure_time - datetime.timedelta(minutes=30)
+            if now < earliest_boarding_time:
+                minutes_until_boarding = int((earliest_boarding_time - now).total_seconds() / 60)
+                departure_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Boarding is only allowed within 30 minutes of the ride. Departure is in {minutes_until_boarding} minutes (at {departure_str})."
+                )
+            boarded.append(seat)
+            final_action = "boarded"
         
     trip.boarded_seats = boarded
     db.commit()
     
-    return {"message": f"Seat {seat} marked as {action}", "boarded_seats": boarded}
+    return {"message": f"Seat {seat} marked as {final_action}", "boarded_seats": boarded}
 
 @router.websocket("/ws/{trip_id}")
 async def websocket_trip_seats(websocket: WebSocket, trip_id: str):

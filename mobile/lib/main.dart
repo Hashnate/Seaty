@@ -936,11 +936,12 @@ class AppState extends ChangeNotifier {
   }
 
   // Toggle boarding status of a seat
-  Future<List<String>?> toggleBoarding(String tripId, String seat) async {
+  Future<List<String>?> toggleBoarding(String tripId, String seat, {String? action}) async {
     try {
+      final queryParams = action != null ? '?seat=$seat&action=$action' : '?seat=$seat';
       final response = await http
           .post(
-            Uri.parse('$apiBaseUrl/trips/$tripId/toggle-board?seat=$seat'),
+            Uri.parse('$apiBaseUrl/trips/$tripId/toggle-board$queryParams'),
             headers: {'Authorization': 'Bearer $_token'},
           )
           .timeout(const Duration(seconds: 3));
@@ -948,11 +949,15 @@ class AppState extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         return List<String>.from(data['boarded_seats'] ?? []);
+      } else {
+        final data = json.decode(response.body);
+        final errorMsg = data['detail'] ?? 'Failed to toggle boarding';
+        throw Exception(errorMsg);
       }
     } catch (e) {
       debugPrint('Error toggling boarding: $e');
+      rethrow;
     }
-    return null;
   }
 
   // Initiate Booking (creates pending booking and holds seats)
@@ -5265,12 +5270,39 @@ class _ConductorTripDetailsScreenState
     }
   }
 
+  String _formatRemainingTime(int totalMinutes) {
+    if (totalMinutes < 0) return '0m';
+    if (totalMinutes >= 60) {
+      final hours = totalMinutes ~/ 60;
+      final mins = totalMinutes % 60;
+      return '${hours}h ${mins}m';
+    }
+    return '${totalMinutes}m';
+  }
+
   void _showPassengerDetails(
     Map<String, dynamic> passenger,
     AppState state,
     List<String> boardedSeats,
   ) {
     bool isBoarded = boardedSeats.contains(passenger['seat']);
+
+    final departureStr = widget.trip['departure'];
+    bool isBoardingAvailable = true;
+    String disabledReason = "";
+    if (departureStr != null) {
+      try {
+        final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
+        final now = DateTime.now();
+        final difference = departureTime.difference(now);
+        if (difference.inMinutes > 30) {
+          isBoardingAvailable = false;
+          disabledReason = "Boarding opens 30 minutes before departure. Departure is in ${_formatRemainingTime(difference.inMinutes)} (at $departureStr).";
+        }
+      } catch (e) {
+        debugPrint('Error parsing departure time: $e');
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -5324,33 +5356,49 @@ class _ConductorTripDetailsScreenState
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
-                    onPressed: () async {
-                      final updatedBoarded = await state.toggleBoarding(
-                        widget.trip['id'].toString(),
-                        passenger['seat'],
-                      );
-                      if (updatedBoarded != null) {
-                        setState(() {
-                          _manifestData!['boarded_seats'] = updatedBoarded;
-                        });
-                        setModalState(() {
-                          isBoarded = updatedBoarded.contains(
-                            passenger['seat'],
-                          );
-                        });
-                        if (mounted) Navigator.pop(context);
-                        SeatyNotifications.show(
-                          context,
-                          isBoarded
-                              ? 'Passenger Marked as Boarded'
-                              : 'Boarding Undone',
-                        );
-                      }
-                    },
+                    onPressed: (isBoarded || isBoardingAvailable)
+                        ? () async {
+                            try {
+                              final updatedBoarded = await state.toggleBoarding(
+                                widget.trip['id'].toString(),
+                                passenger['seat'],
+                              );
+                              if (updatedBoarded != null) {
+                                setState(() {
+                                  _manifestData!['boarded_seats'] = updatedBoarded;
+                                });
+                                setModalState(() {
+                                  isBoarded = updatedBoarded.contains(
+                                    passenger['seat'],
+                                  );
+                                });
+                                if (mounted) Navigator.pop(context);
+                                SeatyNotifications.show(
+                                  context,
+                                  isBoarded
+                                      ? 'Passenger Marked as Boarded'
+                                      : 'Boarding Undone',
+                                );
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                Navigator.pop(context);
+                                final errorMsg = e.toString().replaceFirst('Exception: ', '');
+                                SeatyNotifications.show(
+                                  context,
+                                  errorMsg,
+                                  isError: true,
+                                );
+                              }
+                            }
+                          }
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isBoarded
                           ? Colors.red.shade400
-                          : const Color(0xFF2E7D32),
+                          : isBoardingAvailable
+                              ? const Color(0xFF2E7D32)
+                              : Colors.grey,
                       foregroundColor: Colors.white,
                       minimumSize: const Size.fromHeight(50),
                       shape: RoundedRectangleBorder(
@@ -5358,10 +5406,25 @@ class _ConductorTripDetailsScreenState
                       ),
                     ),
                     child: Text(
-                      isBoarded ? 'Undo Boarding' : 'Mark as Boarded',
+                      isBoarded
+                          ? 'Undo Boarding'
+                          : isBoardingAvailable
+                              ? 'Mark as Boarded'
+                              : 'Boarding Locked',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
+                  if (!isBoarded && !isBoardingAvailable) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      disabledReason,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.red.shade200,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );

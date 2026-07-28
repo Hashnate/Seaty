@@ -42,24 +42,45 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
     }
   }
 
+  String _formatRemainingTime(int totalMinutes) {
+    if (totalMinutes < 0) return '0m';
+    if (totalMinutes >= 60) {
+      final hours = totalMinutes ~/ 60;
+      final mins = totalMinutes % 60;
+      return '${hours}h ${mins}m';
+    }
+    return '${totalMinutes}m';
+  }
+
   Future<void> _toggleSeatBoarding(String seat) async {
     final state = ref.read(appStateProvider);
     if (state.trips.isEmpty) return;
     final tripId = state.trips.first['id'].toString();
     
-    final updatedBoarded = await state.toggleBoarding(tripId, seat);
-    if (updatedBoarded != null && mounted) {
-      setState(() {
-        if (_manifestData != null) {
-          _manifestData!['boarded_seats'] = updatedBoarded;
-        }
-      });
-      SeatyNotifications.show(
-        context,
-        updatedBoarded.contains(seat)
-            ? 'Seat $seat marked as BOARDED'
-            : 'Seat $seat marked as UNBOARDED',
-      );
+    try {
+      final updatedBoarded = await state.toggleBoarding(tripId, seat);
+      if (updatedBoarded != null && mounted) {
+        setState(() {
+          if (_manifestData != null) {
+            _manifestData!['boarded_seats'] = updatedBoarded;
+          }
+        });
+        SeatyNotifications.show(
+          context,
+          updatedBoarded.contains(seat)
+              ? 'Seat $seat marked as BOARDED'
+              : 'Seat $seat marked as UNBOARDED',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMsg = e.toString().replaceFirst('Exception: ', '');
+        SeatyNotifications.show(
+          context,
+          errorMsg,
+          isError: true,
+        );
+      }
     }
   }
 
@@ -178,6 +199,7 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
                   children: [
                     _buildLegendItem('Boarded', const Color(0xFF10B981)),
                     _buildLegendItem('Booked', const Color(0xFF2563EB)),
+                    _buildLegendItem('Locked', const Color(0xFF94A3B8)),
                     _buildLegendItem('Available', const Color(0xFFCBD5E1)),
                   ],
                 ),
@@ -236,15 +258,50 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
                               final item = manifestList[index] as Map<String, dynamic>;
                               final seat = item['seat']?.toString() ?? 'N/A';
                               final isBoarded = boardedList.contains(seat);
-                              final status = isBoarded ? 'BOARDED' : 'BOOKED';
+                              
+                              final departureStr = activeTrip?['departure'];
+                              bool isBoardingAvailable = true;
+                              String disabledReason = "";
+                              if (departureStr != null) {
+                                try {
+                                  final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
+                                  final now = DateTime.now();
+                                  final difference = departureTime.difference(now);
+                                  if (difference.inMinutes > 30) {
+                                    isBoardingAvailable = false;
+                                    disabledReason = "Boarding is only allowed within 30 minutes of the ride. Departure is in ${_formatRemainingTime(difference.inMinutes)} (at $departureStr).";
+                                  }
+                                } catch (e) {
+                                  debugPrint('Error parsing departure: $e');
+                                }
+                              }
+                              
+                              final isLocked = !isBoarded && !isBoardingAvailable;
+                              final status = isBoarded 
+                                  ? 'BOARDED' 
+                                  : isLocked
+                                      ? 'LOCKED'
+                                      : 'BOOKED';
                               final Color statusColor = isBoarded
                                   ? const Color(0xFF10B981)
-                                  : const Color(0xFF2563EB);
+                                  : isLocked
+                                      ? const Color(0xFF94A3B8)
+                                      : const Color(0xFF2563EB);
 
                               final genderStr = (item['gender'] ?? '').toString();
 
                               return InkWell(
-                                onTap: () => _toggleSeatBoarding(seat),
+                                onTap: () {
+                                  if (isLocked) {
+                                    SeatyNotifications.show(
+                                      context,
+                                      disabledReason,
+                                      isError: true,
+                                    );
+                                    return;
+                                  }
+                                  _toggleSeatBoarding(seat);
+                                },
                                 borderRadius: BorderRadius.circular(14),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -252,7 +309,7 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
                                     horizontal: 14,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: isLocked ? const Color(0xFFF8FAFC) : Colors.white,
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
                                       color: const Color(0xFFF1F5F9),
@@ -289,10 +346,10 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
                                           children: [
                                             Text(
                                               item['name'] ?? 'Passenger',
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontWeight: FontWeight.w800,
                                                 fontSize: 14,
-                                                color: Color(0xFF0F172A),
+                                                color: isLocked ? const Color(0xFF94A3B8) : const Color(0xFF0F172A),
                                               ),
                                             ),
                                             const SizedBox(height: 2),
@@ -318,13 +375,26 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
                                           borderRadius:
                                               BorderRadius.circular(10),
                                         ),
-                                        child: Text(
-                                          status,
-                                          style: TextStyle(
-                                            color: statusColor,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 10,
-                                          ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            if (isLocked) ...[
+                                              const Icon(
+                                                Icons.lock_outline_rounded,
+                                                size: 10,
+                                                color: Color(0xFF94A3B8),
+                                              ),
+                                              const SizedBox(width: 4),
+                                            ],
+                                            Text(
+                                              status,
+                                              style: TextStyle(
+                                                color: statusColor,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ],
