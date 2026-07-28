@@ -165,7 +165,7 @@ class PassengerBookingsTab extends ConsumerWidget {
       final rawTicketId = b['id'].toString().replaceAll('-', '').toUpperCase();
       final ticketCode = 'TQ${rawTicketId.substring(0, 10)}';
       final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
-      final seatsList = (b['seats'] as List?)?.join(', ') ?? 'A1';
+      final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
       final numPassengers = (b['seats'] as List?)?.length ?? 1;
       final formattedPrice =
           double.tryParse(b['price'].toString())?.toStringAsFixed(1) ??

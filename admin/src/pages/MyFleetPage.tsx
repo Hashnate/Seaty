@@ -26,6 +26,17 @@ const getAmenityIcon = (name: string, size = 14) => {
   return null;
 };
 
+const numberSeatsSequentially = (seats: { row: number; col: number; label: string }[]) => {
+  const sorted = [...seats].sort((a, b) => {
+    if (a.row !== b.row) return a.row - b.row;
+    return a.col - b.col;
+  });
+  return sorted.map((s, index) => ({
+    ...s,
+    label: String(index + 1),
+  }));
+};
+
 export default function MyFleetPage() {
   const { token } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
@@ -78,13 +89,14 @@ export default function MyFleetPage() {
 
     const newSeats = [];
     const gridColumnsCount = newAisle > 0 ? newCols + 1 : newCols;
+    let seatNum = 1;
     for (let r = 1; r <= newRows; r++) {
       for (let c = 0; c < gridColumnsCount; c++) {
         if (newAisle > 0 && c === newAisle && r < newRows) {
           continue; // Skip aisle except for last row
         }
-        const colLetter = String.fromCharCode(65 + c);
-        newSeats.push({ row: r, col: c, label: `${colLetter}${r}` });
+        newSeats.push({ row: r, col: c, label: String(seatNum) });
+        seatNum++;
       }
     }
     setCustomSeats(newSeats);
@@ -128,7 +140,7 @@ export default function MyFleetPage() {
     setRows(layout.rows || 10);
     setColumns(layout.columns || 4);
     setAisleAfter(layout.aisle_after_column ?? 2);
-    setCustomSeats(layout.seats || []);
+    setCustomSeats(numberSeatsSequentially(layout.seats || []));
     setAmenities(v.amenities || []);
     setPreset('custom');
     setShowAddModal(true);
@@ -662,8 +674,7 @@ export default function MyFleetPage() {
                                   const dragType = e.dataTransfer.getData('drag-type');
                                   if (dragType === 'new-seat') {
                                     if (!seat) {
-                                      const colLetter = String.fromCharCode(65 + cIdx);
-                                      setCustomSeats(prev => [...prev, { row: r, col: cIdx, label: `${colLetter}${r}` }]);
+                                      setCustomSeats(prev => numberSeatsSequentially([...prev, { row: r, col: cIdx, label: '' }]));
                                     }
                                   } else if (dragType === 'move-seat') {
                                     const fromRow = Number(e.dataTransfer.getData('from-row'));
@@ -671,18 +682,16 @@ export default function MyFleetPage() {
                                     if (fromRow !== r || fromCol !== cIdx) {
                                       setCustomSeats(prev => {
                                         const filtered = prev.filter(s => !(s.row === fromRow && s.col === fromCol));
-                                        const colLetter = String.fromCharCode(65 + cIdx);
-                                        return [...filtered, { row: r, col: cIdx, label: `${colLetter}${r}` }];
+                                        return numberSeatsSequentially([...filtered, { row: r, col: cIdx, label: '' }]);
                                       });
                                     }
                                   }
                                 }}
                                 onClick={() => {
                                   if (seat) {
-                                    setCustomSeats(prev => prev.filter(s => !(s.row === r && s.col === cIdx)));
+                                    setCustomSeats(prev => numberSeatsSequentially(prev.filter(s => !(s.row === r && s.col === cIdx))));
                                   } else {
-                                    const colLetter = String.fromCharCode(65 + cIdx);
-                                    setCustomSeats(prev => [...prev, { row: r, col: cIdx, label: `${colLetter}${r}` }]);
+                                    setCustomSeats(prev => numberSeatsSequentially([...prev, { row: r, col: cIdx, label: '' }]));
                                   }
                                 }}
                                 style={{

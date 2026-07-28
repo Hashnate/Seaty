@@ -5705,7 +5705,7 @@ class _ConductorTripDetailsScreenState
                       }
                       String seatLabel = customSeat != null
                           ? customSeat['label']
-                          : '${String.fromCharCode(65 + seatColIndex)}$row';
+                          : '${(row - 1) * columns + (aisleAfter > 0 && colIndex > aisleAfter ? colIndex - 1 : colIndex) + 1}';
 
                       bool isBooked = state.bookedSeats.contains(seatLabel);
                       bool isBoarded = boardedSeats.contains(seatLabel);
