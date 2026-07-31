@@ -70,7 +70,7 @@ void setupPushNotifications() async {
   debugPrint('User granted permission: ${settings.authorizationStatus}');
 
   // Enable foreground notification presentation options for iOS
-  await FirebaseMessaging.instance.setForegroundNotificationOptions(
+  await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
     alert: true,
     badge: true,
     sound: true,
