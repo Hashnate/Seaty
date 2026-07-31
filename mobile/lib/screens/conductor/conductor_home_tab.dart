@@ -27,16 +27,19 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
   }
 
   Future<void> _loadActiveManifest() async {
-    final state = ref.read(appStateProvider);
-    if (state.trips.isEmpty) {
-      await state.loadTrips();
+    final tripsState = ref.read(tripsProvider);
+    final tripsNotifier = ref.read(tripsProvider.notifier);
+    final bookingsNotifier = ref.read(bookingsProvider.notifier);
+
+    if (tripsState.trips.isEmpty) {
+      await tripsNotifier.loadTrips();
     }
-    final trips = ref.read(appStateProvider).trips;
+    final trips = ref.read(tripsProvider).trips;
     if (trips.isNotEmpty) {
       final activeTrip = trips.first;
       final tripId = activeTrip['id'].toString();
       setState(() => _isLoadingManifest = true);
-      final manifest = await state.fetchTripManifest(tripId);
+      final manifest = await bookingsNotifier.fetchTripManifest(tripId);
       if (mounted) {
         setState(() {
           _manifestData = manifest;
@@ -48,12 +51,13 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
+    final authState = ref.watch(authProvider);
+    final tripsState = ref.watch(tripsProvider);
     final conductorName =
-        state.userName.isNotEmpty ? state.userName : 'Conductor';
+        authState.userName.isNotEmpty ? authState.userName : 'Conductor';
 
     // Pick active assigned trip for conductor if available
-    final activeTrip = state.trips.isNotEmpty ? state.trips.first : null;
+    final activeTrip = tripsState.trips.isNotEmpty ? tripsState.trips.first : null;
 
     final String assignedBusText = activeTrip != null
         ? 'Assigned: ${activeTrip['reg'] ?? 'N/A'} (${activeTrip['bus_name'] ?? 'Bus'})'
@@ -247,7 +251,7 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                             bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
                                             LocationPermission permission = await Geolocator.checkPermission();
                                             if (serviceEnabled && permission != LocationPermission.denied) {
-                                              await state.startStreamingGPS(vehicleId, true);
+                                              await ref.read(gpsTrackingProvider.notifier).startStreamingGPS(vehicleId, true);
                                             } else {
                                               if (mounted) {
                                                 SeatyNotifications.show(
@@ -260,7 +264,7 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                           }
                                         }
                                       } else {
-                                        state.stopStreamingGPS();
+                                        ref.read(gpsTrackingProvider.notifier).stopStreamingGPS();
                                         SeatyNotifications.show(
                                           context,
                                           'Status updated to OFF DUTY',

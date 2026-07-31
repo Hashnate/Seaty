@@ -58,8 +58,8 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
     );
 
     final cleanCode = code.trim();
-    final state = ref.read(appStateProvider);
-    final booking = await state.fetchBookingDetails(cleanCode);
+    final bookingsNotifier = ref.read(bookingsProvider.notifier);
+    final booking = await bookingsNotifier.fetchBookingDetails(cleanCode);
 
     // Dismiss the loading indicator
     if (mounted) {
@@ -238,7 +238,7 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                             String? errorMessage;
                             try {
                               for (final seat in unboardedSeats) {
-                                await state.toggleBoarding(tripId, seat, action: "board");
+                                await ref.read(bookingsProvider.notifier).toggleBoarding(tripId, seat, action: "board");
                               }
                             } catch (e) {
                               allSucceeded = false;

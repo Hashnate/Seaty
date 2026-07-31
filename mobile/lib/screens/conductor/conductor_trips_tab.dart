@@ -24,16 +24,19 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
   }
 
   Future<void> _loadManifest() async {
-    final state = ref.read(appStateProvider);
-    if (state.trips.isEmpty) {
-      await state.loadTrips();
+    final tripsState = ref.read(tripsProvider);
+    final tripsNotifier = ref.read(tripsProvider.notifier);
+    final bookingsNotifier = ref.read(bookingsProvider.notifier);
+
+    if (tripsState.trips.isEmpty) {
+      await tripsNotifier.loadTrips();
     }
-    final trips = ref.read(appStateProvider).trips;
+    final trips = ref.read(tripsProvider).trips;
     if (trips.isNotEmpty) {
       final activeTrip = trips.first;
       final tripId = activeTrip['id'].toString();
       setState(() => _isLoading = true);
-      final manifest = await state.fetchTripManifest(tripId);
+      final manifest = await bookingsNotifier.fetchTripManifest(tripId);
       if (mounted) {
         setState(() {
           _manifestData = manifest;
@@ -54,12 +57,13 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
   }
 
   Future<void> _toggleSeatBoarding(String seat) async {
-    final state = ref.read(appStateProvider);
-    if (state.trips.isEmpty) return;
-    final tripId = state.trips.first['id'].toString();
+    final tripsState = ref.read(tripsProvider);
+    final bookingsNotifier = ref.read(bookingsProvider.notifier);
+    if (tripsState.trips.isEmpty) return;
+    final tripId = tripsState.trips.first['id'].toString();
     
     try {
-      final updatedBoarded = await state.toggleBoarding(tripId, seat);
+      final updatedBoarded = await bookingsNotifier.toggleBoarding(tripId, seat);
       if (updatedBoarded != null && mounted) {
         setState(() {
           if (_manifestData != null) {
@@ -87,8 +91,8 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
-    final activeTrip = state.trips.isNotEmpty ? state.trips.first : null;
+    final tripsState = ref.watch(tripsProvider);
+    final activeTrip = tripsState.trips.isNotEmpty ? tripsState.trips.first : null;
 
     final String routeTitle = activeTrip != null
         ? '${activeTrip['origin']} → ${activeTrip['destination']}'

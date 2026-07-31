@@ -14,11 +14,12 @@ class OwnerHomeTab extends ConsumerStatefulWidget {
 class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
-    final ownerName = state.userName.isNotEmpty ? state.userName : 'Bus Owner';
-    final vehicleCount = state.vehicles.isNotEmpty ? state.vehicles.length : 12;
-    final conductorCount = state.conductorsList.isNotEmpty
-        ? state.conductorsList.length
+    final authState = ref.watch(authProvider);
+    final fleetState = ref.watch(fleetProvider);
+    final ownerName = authState.userName.isNotEmpty ? authState.userName : 'Bus Owner';
+    final vehicleCount = fleetState.vehicles.isNotEmpty ? fleetState.vehicles.length : 12;
+    final conductorCount = fleetState.conductors.isNotEmpty
+        ? fleetState.conductors.length
         : 8;
 
     return Scaffold(
@@ -27,9 +28,9 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
         child: RefreshIndicator(
           color: const Color(0xFF2563EB),
           onRefresh: () async {
-            await ref.read(appStateProvider).loadVehicles();
-            await ref.read(appStateProvider).loadConductors();
-            await ref.read(appStateProvider).loadTrips();
+            await ref.read(fleetProvider.notifier).loadVehicles();
+            await ref.read(fleetProvider.notifier).loadConductors();
+            await ref.read(tripsProvider.notifier).loadTrips();
           },
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(

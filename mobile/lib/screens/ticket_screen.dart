@@ -614,7 +614,7 @@ class PassengerBookingsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(appStateProvider);
+    final bookingsState = ref.watch(bookingsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -633,7 +633,7 @@ class PassengerBookingsTab extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // ── Ticket Count Badge ──
-            if (state.bookings.isNotEmpty)
+            if (bookingsState.bookings.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
@@ -646,7 +646,7 @@ class PassengerBookingsTab extends ConsumerWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    '${state.bookings.length} active ticket${state.bookings.length == 1 ? '' : 's'}',
+                    '${bookingsState.bookings.length} active ticket${bookingsState.bookings.length == 1 ? '' : 's'}',
                     style: const TextStyle(
                       color: Color(0xFF2563EB),
                       fontSize: 11,
@@ -662,9 +662,9 @@ class PassengerBookingsTab extends ConsumerWidget {
               child: RefreshIndicator(
                 color: const Color(0xFF2563EB),
                 onRefresh: () async {
-                  await ref.read(appStateProvider).loadBookings();
+                  await ref.read(bookingsProvider.notifier).loadBookings();
                 },
-                child: state.bookings.isEmpty
+                child: bookingsState.bookings.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
@@ -717,9 +717,9 @@ class PassengerBookingsTab extends ConsumerWidget {
                             right: 20,
                             bottom: 110,
                           ),
-                          itemCount: state.bookings.length,
+                          itemCount: bookingsState.bookings.length,
                           itemBuilder: (context, index) {
-                            final b = state.bookings[index];
+                            final b = bookingsState.bookings[index];
                             final ticketCode =
                                 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
                             final seats = (b['seats'] as List).join(', ');

@@ -94,7 +94,7 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                             setDialogState(() => isLoading = true);
                             try {
                               await ref
-                                  .read(appStateProvider)
+                                  .read(fleetProvider.notifier)
                                   .addConductor(
                                     nameCtrl.text.trim(),
                                     phoneCtrl.text.trim(),
@@ -133,8 +133,8 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
-    final vehicles = state.vehicles;
+    final fleetState = ref.watch(fleetProvider);
+    final vehicles = fleetState.vehicles;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -315,7 +315,7 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                         ),
                         const SizedBox(height: 16),
                         Expanded(
-                          child: state.conductorsList.isEmpty
+                          child: fleetState.conductors.isEmpty
                               ? const Center(
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -346,9 +346,9 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                                 )
                               : ListView.builder(
                                   physics: const BouncingScrollPhysics(),
-                                  itemCount: state.conductorsList.length,
+                                  itemCount: fleetState.conductors.length,
                                   itemBuilder: (context, index) {
-                                    final c = state.conductorsList[index];
+                                    final c = fleetState.conductors[index];
                                     final name =
                                         c['full_name'] ??
                                         c['name'] ??

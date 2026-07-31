@@ -144,10 +144,10 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     ],
   };
 
-  List<LatLng> _getRouteForTrip(AppState state, String? selectedBusId) {
+  List<LatLng> _getRouteForTrip(List<Map<String, dynamic>> trips, String? selectedBusId) {
     if (selectedBusId == null) return [];
 
-    final trip = state.trips.firstWhere(
+    final trip = trips.firstWhere(
       (t) => t['reg'] == selectedBusId,
       orElse: () => <String, dynamic>{},
     );
@@ -163,14 +163,16 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
+    final tripsState = ref.watch(tripsProvider);
+    final bookingsState = ref.watch(bookingsProvider);
+    final gpsState = ref.watch(gpsTrackingProvider);
 
     // Filter trips to only those where:
     // 1. The user has a confirmed booking for that trip.
     // 2. The current time is within the active tracking window (starts 30m before departure, ends at arrival).
     final now = DateTime.now();
-    final trackableTrips = state.trips.where((trip) {
-      final hasBooking = state.bookings.any((booking) =>
+    final trackableTrips = tripsState.trips.where((trip) {
+      final hasBooking = bookingsState.bookings.any((booking) =>
           booking['trip_id'] == trip['id'] &&
           booking['status'] == 'confirmed');
       if (!hasBooking) return false;
@@ -200,25 +202,25 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     // Automatically stop tracking if the bus leaves the active tracking window/eligibility
     if (_selectedBusId != null && !hasSelected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        state.stopTracking();
+        ref.read(gpsTrackingProvider.notifier).stopTracking();
         setState(() {
           _selectedBusId = null;
         });
       });
     }
 
-    final isTracking = state.isTracking && state.trackedBusLocation != null && hasSelected;
+    final isTracking = gpsState.isTracking && gpsState.trackedBusLocation != null && hasSelected;
 
     LatLng? busPosition;
     if (isTracking) {
-      final lat = state.trackedBusLocation!['latitude'] as double?;
-      final lng = state.trackedBusLocation!['longitude'] as double?;
+      final lat = gpsState.trackedBusLocation!['latitude'] as double?;
+      final lng = gpsState.trackedBusLocation!['longitude'] as double?;
       if (lat != null && lng != null) {
         busPosition = LatLng(lat, lng);
       }
     }
 
-    final routePoints = _getRouteForTrip(state, selectedValue);
+    final routePoints = _getRouteForTrip(tripsState.trips, selectedValue);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -331,9 +333,9 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                         onChanged: (val) {
                           setState(() => _selectedBusId = val);
                           if (val != null) {
-                            state.startTracking(val);
+                            ref.read(gpsTrackingProvider.notifier).startTracking(val);
                           } else {
-                            state.stopTracking();
+                            ref.read(gpsTrackingProvider.notifier).stopTracking();
                           }
                         },
                       ),
@@ -667,7 +669,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${state.trackedBusLocation!['latitude']?.toStringAsFixed(4)}, ${state.trackedBusLocation!['longitude']?.toStringAsFixed(4)}',
+                                            '${gpsState.trackedBusLocation!['latitude']?.toStringAsFixed(4)}, ${gpsState.trackedBusLocation!['longitude']?.toStringAsFixed(4)}',
                                             style: const TextStyle(
                                               fontFamily: 'monospace',
                                               fontSize: 11,
@@ -684,14 +686,14 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                   children: [
                                     _buildStatChip(
                                       Icons.speed_rounded,
-                                      '${state.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? '0'}',
+                                      '${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? '0'}',
                                       'km/h',
                                       const Color(0xFF2563EB),
                                     ),
                                     const SizedBox(width: 8),
                                     _buildStatChip(
                                       Icons.explore_rounded,
-                                      '${state.trackedBusLocation!['heading']?.toStringAsFixed(0) ?? '0'}°',
+                                      '${gpsState.trackedBusLocation!['heading']?.toStringAsFixed(0) ?? '0'}°',
                                       'bearing',
                                       const Color(0xFF0A2540),
                                     ),

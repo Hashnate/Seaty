@@ -23,15 +23,15 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
   @override
   void initState() {
     super.initState();
-    final state = ref.read(appStateProvider);
-    _nameController = TextEditingController(text: state.userName);
-    _nicController = TextEditingController(text: state.userNic);
+    final auth = ref.read(authProvider);
+    _nameController = TextEditingController(text: auth.userName);
+    _nicController = TextEditingController(text: auth.userNic);
     _phoneController = TextEditingController(
-      text: state.userPhone.isEmpty
-          ? (state.role == 'passenger' ? '0771234567' : '0777654321')
-          : state.userPhone,
+      text: auth.userPhone.isEmpty
+          ? (auth.role == 'passenger' ? '0771234567' : '0777654321')
+          : auth.userPhone,
     );
-    _gender = state.userGender.isEmpty ? 'Male' : state.userGender;
+    _gender = auth.userGender.isEmpty ? 'Male' : auth.userGender;
   }
 
   @override
@@ -46,8 +46,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final state = ref.read(appStateProvider);
-    final success = await state.updateProfile(
+    final success = await ref.read(authProvider.notifier).updateProfile(
       _nameController.text.trim(),
       _nicController.text.trim(),
       _gender,
@@ -73,11 +72,11 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
-    final initialLetter = state.userName.isNotEmpty
-        ? state.userName[0].toUpperCase()
+    final auth = ref.watch(authProvider);
+    final initialLetter = auth.userName.isNotEmpty
+        ? auth.userName[0].toUpperCase()
         : 'U';
-    final isPhoneLocked = state.role == 'owner';
+    final isPhoneLocked = auth.role == 'owner';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -149,7 +148,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              state.userName,
+                              auth.userName,
                               style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w800,
@@ -170,7 +169,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                state.role.toUpperCase(),
+                                auth.role.toUpperCase(),
                                 style: const TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
@@ -415,7 +414,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                         width: double.infinity,
                         height: 44,
                         child: OutlinedButton.icon(
-                          onPressed: () => ref.read(appStateProvider).logout(),
+                          onPressed: () => ref.read(authProvider.notifier).logout(),
                           icon: const Icon(
                             Icons.logout_rounded,
                             color: Colors.redAccent,

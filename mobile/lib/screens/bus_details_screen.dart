@@ -25,7 +25,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final tripId = widget.trip['id']?.toString() ?? '';
       if (tripId.isNotEmpty) {
-        ref.read(appStateProvider).loadSeatAvailability(tripId, clearFirst: true);
+        ref.read(bookingsProvider.notifier).loadSeatAvailability(tripId, clearFirst: true);
       }
     });
   }
@@ -37,8 +37,8 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
       return;
     }
 
-    final state = ref.read(appStateProvider);
-    final data = await state.fetchVehicleReviews(vehicleId);
+    final fleetNotifier = ref.read(fleetProvider.notifier);
+    final data = await fleetNotifier.fetchVehicleReviews(vehicleId);
 
     if (mounted) {
       setState(() {
@@ -161,7 +161,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                         );
 
                         final success = await ref
-                            .read(appStateProvider)
+                            .read(fleetProvider.notifier)
                             .submitVehicleReview(vehicleId, selectedRating, commentText);
 
                         if (success) {
@@ -246,14 +246,14 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(appStateProvider);
+    final bookingsState = ref.watch(bookingsProvider);
     final String priceStr =
         double.tryParse(widget.trip['price'].toString())?.toStringAsFixed(2) ??
         widget.trip['price'].toString();
     final int totalSeats = widget.trip['total_seats'] as int? ?? 40;
     final List<dynamic> tripBookedSeats = (widget.trip['booked_seats'] as List?) ?? [];
-    final int bookedCount = state.bookedSeats.isNotEmpty 
-        ? state.bookedSeats.length 
+    final int bookedCount = bookingsState.bookedSeats.isNotEmpty 
+        ? bookingsState.bookedSeats.length 
         : tripBookedSeats.length;
     final int seatsLeft = (totalSeats - bookedCount).clamp(0, totalSeats);
 

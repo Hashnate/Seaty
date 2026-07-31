@@ -1,0 +1,308 @@
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
+import 'package:seaty/providers/shared_providers.dart';
+
+class AuthState {
+  final bool isAuthenticated;
+  final String role;
+  final String userName;
+  final String token;
+  final String userNic;
+  final String userGender;
+  final String userPhone;
+
+  AuthState({
+    required this.isAuthenticated,
+    required this.role,
+    required this.userName,
+    required this.token,
+    required this.userNic,
+    required this.userGender,
+    required this.userPhone,
+  });
+
+  AuthState copyWith({
+    bool? isAuthenticated,
+    String? role,
+    String? userName,
+    String? token,
+    String? userNic,
+    String? userGender,
+    String? userPhone,
+  }) {
+    return AuthState(
+      isAuthenticated: isAuthenticated ?? this.isAuthenticated,
+      role: role ?? this.role,
+      userName: userName ?? this.userName,
+      token: token ?? this.token,
+      userNic: userNic ?? this.userNic,
+      userGender: userGender ?? this.userGender,
+      userPhone: userPhone ?? this.userPhone,
+    );
+  }
+}
+
+class AuthNotifier extends Notifier<AuthState> {
+  @override
+  AuthState build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    final isAuthenticated = prefs.getBool('isAuthenticated') ?? false;
+    final role = prefs.getString('role') ?? 'passenger';
+    final userName = prefs.getString('userName') ?? 'Guest User';
+    final token = prefs.getString('token') ?? '';
+    final userNic = prefs.getString('userNic') ?? '';
+    final userGender = prefs.getString('userGender') ?? '';
+    final userPhone = prefs.getString('userPhone') ?? '';
+
+    return AuthState(
+      isAuthenticated: isAuthenticated,
+      role: role,
+      userName: userName,
+      token: token,
+      userNic: userNic,
+      userGender: userGender,
+      userPhone: userPhone,
+    );
+  }
+
+  void _saveSession(AuthState newState) {
+    final prefs = ref.read(sharedPreferencesProvider);
+    prefs.setBool('isAuthenticated', newState.isAuthenticated);
+    prefs.setString('role', newState.role);
+    prefs.setString('userName', newState.userName);
+    prefs.setString('token', newState.token);
+    prefs.setString('userNic', newState.userNic);
+    prefs.setString('userGender', newState.userGender);
+    prefs.setString('userPhone', newState.userPhone);
+  }
+
+  void setRole(String newRole) {
+    final newState = state.copyWith(role: newRole);
+    state = newState;
+    _saveSession(newState);
+  }
+
+  Future<Map<String, dynamic>> checkPhoneDB(
+    String phone, {
+    String? preferredRole,
+  }) async {
+    final settings = ref.read(settingsProvider);
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    final normPhone = normalizePhone(phone);
+    if (normPhone.isEmpty) {
+      return {'exists': false, 'name': 'Guest User', 'role': 'passenger'};
+    }
+
+    final String roleHint = preferredRole ?? 'passenger';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${settings.apiBaseUrl}/auth/phone/check'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': cleanPhone,
+              'role': roleHint,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      debugPrint('VPS check response [${response.statusCode}]: ${response.body}');
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final dynamic data = json.decode(response.body);
+        if (data is Map<String, dynamic> && data['exists'] == true) {
+          final String name =
+              (data['name'] ?? data['full_name'] ?? 'User').toString();
+          final String? serverRole = data['role']?.toString();
+          final String finalRole = (serverRole != null && serverRole.isNotEmpty)
+              ? serverRole
+              : roleHint;
+          debugPrint(
+            'VPS DB Found: $cleanPhone -> $name | serverRole=$serverRole | preferredRole=$preferredRole | finalRole=$finalRole',
+          );
+          return {'exists': true, 'name': name, 'role': finalRole};
+        }
+      }
+    } catch (e) {
+      debugPrint('VPS API check error: $e');
+    }
+
+    return {
+      'exists': false,
+      'name': 'Guest User',
+      'role': preferredRole ?? 'passenger',
+    };
+  }
+
+  Future<bool> registerPhoneDB(String name, String phone, String role) async {
+    final settings = ref.read(settingsProvider);
+    final assignedRole = role.isNotEmpty ? role : 'passenger';
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${settings.apiBaseUrl}/auth/phone/register'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': phone,
+              'full_name': name,
+              'role': assignedRole,
+            }),
+          )
+          .timeout(const Duration(seconds: 2));
+
+      return response.statusCode == 201;
+    } catch (e) {
+      debugPrint('API Registration Error: $e');
+      return true;
+    }
+  }
+
+  Future<void> login(String name, String roleSelected, String phoneNumber) async {
+    final settings = ref.read(settingsProvider);
+    String token = '';
+    String finalRole = roleSelected;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${settings.apiBaseUrl}/auth/phone/login'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': phoneNumber,
+              'role': roleSelected,
+            }),
+          )
+          .timeout(const Duration(seconds: 2));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        token = data['access_token'] ?? '';
+        if (data['role'] != null && data['role'].toString().isNotEmpty) {
+          finalRole = data['role'].toString();
+        }
+      }
+    } catch (e) {
+      debugPrint('API Login error: $e.');
+      rethrow;
+    }
+
+    final newState = AuthState(
+      isAuthenticated: true,
+      role: finalRole,
+      userName: name,
+      token: token,
+      userNic: state.userNic,
+      userGender: state.userGender,
+      userPhone: phoneNumber,
+    );
+
+    state = newState;
+    _saveSession(newState);
+
+    // Load profile immediately to populate gender, NIC etc.
+    loadProfile();
+  }
+
+  Future<void> loadProfile() async {
+    if (state.token.isEmpty || state.token.startsWith('simulated')) return;
+    final settings = ref.read(settingsProvider);
+    try {
+      final response = await http
+          .get(
+            Uri.parse('${settings.apiBaseUrl}/auth/me'),
+            headers: {'Authorization': 'Bearer ${state.token}'},
+          )
+          .timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final newState = state.copyWith(
+          userName: data['full_name'] ?? state.userName,
+          userPhone: data['phone_number'] ?? state.userPhone,
+          userNic: data['nic_number'] ?? '',
+          userGender: data['gender'] ?? '',
+          role: (data['role'] != null && data['role'].toString().isNotEmpty)
+              ? data['role'].toString()
+              : state.role,
+        );
+        state = newState;
+        _saveSession(newState);
+      }
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+    }
+  }
+
+  Future<bool> updateProfile(
+    String name,
+    String nic,
+    String gender,
+    String phone,
+  ) async {
+    final settings = ref.read(settingsProvider);
+    final localState = state.copyWith(
+      userName: name,
+      userNic: nic,
+      userGender: gender,
+      userPhone: phone,
+    );
+    state = localState;
+    _saveSession(localState);
+
+    if (state.token.isEmpty || state.token.startsWith('simulated')) return true;
+
+    try {
+      final response = await http
+          .put(
+            Uri.parse('${settings.apiBaseUrl}/auth/profile'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${state.token}',
+            },
+            body: json.encode({
+              'full_name': name,
+              'nic_number': nic,
+              'gender': gender,
+              'phone_number': phone,
+            }),
+          )
+          .timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final serverState = state.copyWith(
+          userName: data['full_name'] ?? state.userName,
+          userNic: data['nic_number'] ?? state.userNic,
+          userGender: data['gender'] ?? state.userGender,
+          userPhone: data['phone_number'] ?? state.userPhone,
+        );
+        state = serverState;
+        _saveSession(serverState);
+        return true;
+      } else if (response.statusCode == 401) {
+        logout();
+      }
+    } catch (e) {
+      debugPrint('Error updating profile: $e');
+    }
+    return false;
+  }
+
+  void logout() {
+    final newState = AuthState(
+      isAuthenticated: false,
+      role: 'passenger',
+      userName: 'Guest User',
+      token: '',
+      userNic: '',
+      userGender: '',
+      userPhone: '',
+    );
+    state = newState;
+    _saveSession(newState);
+  }
+}
+
+final authProvider = NotifierProvider<AuthNotifier, AuthState>(() => AuthNotifier());
