@@ -215,21 +215,26 @@ class AuthNotifier extends Notifier<AuthState> {
   Future<void> syncFcmToken() async {
     if (state.token.isEmpty || state.token.startsWith('simulated')) return;
     final settings = ref.read(settingsProvider);
-    try {
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-      if (fcmToken != null && fcmToken.isNotEmpty) {
-        await http.post(
-          Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${state.token}',
-          },
-          body: json.encode({'fcm_token': fcmToken}),
-        );
-        debugPrint('FCM Token synced from AuthProvider: $fcmToken');
+
+    for (int attempt = 0; attempt < 5; attempt++) {
+      try {
+        final fcmToken = await FirebaseMessaging.instance.getToken();
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          final res = await http.post(
+            Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${state.token}',
+            },
+            body: json.encode({'fcm_token': fcmToken}),
+          );
+          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: $fcmToken');
+          break;
+        }
+      } catch (e) {
+        debugPrint('FCM token sync attempt ${attempt + 1} failed: $e');
+        await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
       }
-    } catch (e) {
-      debugPrint('Error syncing FCM token from AuthProvider: $e');
     }
   }
 
