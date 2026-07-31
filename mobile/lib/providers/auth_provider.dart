@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
 
 class AuthState {
@@ -56,7 +57,7 @@ class AuthNotifier extends Notifier<AuthState> {
     final userGender = prefs.getString('userGender') ?? '';
     final userPhone = prefs.getString('userPhone') ?? '';
 
-    return AuthState(
+    final authState = AuthState(
       isAuthenticated: isAuthenticated,
       role: role,
       userName: userName,
@@ -65,6 +66,12 @@ class AuthNotifier extends Notifier<AuthState> {
       userGender: userGender,
       userPhone: userPhone,
     );
+
+    if (isAuthenticated && token.isNotEmpty && !token.startsWith('simulated')) {
+      Future.microtask(() => loadProfile());
+    }
+
+    return authState;
   }
 
   void _saveSession(AuthState newState) {
@@ -205,8 +212,30 @@ class AuthNotifier extends Notifier<AuthState> {
     loadProfile();
   }
 
+  Future<void> syncFcmToken() async {
+    if (state.token.isEmpty || state.token.startsWith('simulated')) return;
+    final settings = ref.read(settingsProvider);
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        await http.post(
+          Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${state.token}',
+          },
+          body: json.encode({'fcm_token': fcmToken}),
+        );
+        debugPrint('FCM Token synced from AuthProvider: $fcmToken');
+      }
+    } catch (e) {
+      debugPrint('Error syncing FCM token from AuthProvider: $e');
+    }
+  }
+
   Future<void> loadProfile() async {
     if (state.token.isEmpty || state.token.startsWith('simulated')) return;
+    syncFcmToken();
     final settings = ref.read(settingsProvider);
     try {
       final response = await http
