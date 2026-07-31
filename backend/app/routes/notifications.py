@@ -44,6 +44,28 @@ class NotificationManager:
 
 manager = NotificationManager()
 
+def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
+    """Sends native FCM push notification via firebase_admin SDK."""
+    if not fcm_token:
+        return
+    try:
+        import firebase_admin
+        from firebase_admin import messaging
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        
+        msg = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=message,
+            ),
+            data={k: str(v) for k, v in (data or {}).items()},
+            token=fcm_token,
+        )
+        messaging.send(msg)
+    except Exception as e:
+        print(f"FCM Push notification error: {e}")
+
 # =====================================================================
 # Database Saver and Broadcaster Utility
 # =====================================================================
@@ -54,7 +76,7 @@ async def create_and_send_notification(
     message: str,
     noti_type: str
 ):
-    """Save notification to Postgres and broadcast live if user online."""
+    """Save notification to Postgres, broadcast live via WS, and send FCM Push."""
     db_noti = models.Notification(
         user_id=user_id,
         title=title,
@@ -76,6 +98,12 @@ async def create_and_send_notification(
         "created_at": db_noti.created_at.isoformat()
     }
     await manager.send_to_user(user_id, payload)
+
+    # Send native FCM Push Notification if user has registered FCM token
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user and user.fcm_token:
+        send_fcm_push(user.fcm_token, title, message, {"type": noti_type, "id": str(db_noti.id)})
+
     return db_noti
 
 # =====================================================================
@@ -193,5 +221,23 @@ async def broadcast_notification(
         }
         await manager.send_to_user(db_noti.user_id, ws_payload)
 
+        # Trigger native FCM push
+        user_obj = next((u for u in users if u.id == db_noti.user_id), None)
+        if user_obj and user_obj.fcm_token:
+            send_fcm_push(user_obj.fcm_token, payload.title, payload.message, {"type": "system", "id": str(db_noti.id)})
+
     return {"status": "success", "message": f"Notification broadcasted to {len(users)} users"}
+
+
+@router.post("/fcm-token")
+def update_fcm_token(
+    payload: schemas.FCMTokenUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Update current user's FCM device token for native push notifications."""
+    current_user.fcm_token = payload.fcm_token
+    db.commit()
+    return {"status": "success", "message": "FCM token updated successfully"}
+
 

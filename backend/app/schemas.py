@@ -438,6 +438,10 @@ class NotificationBroadcast(BaseModel):
     target_role: str = Field(default="passenger", description="passenger, owner, conductor, admin, or all")
 
 
+class FCMTokenUpdate(BaseModel):
+    fcm_token: str
+
+
 # ==========================================
 # Review Schemas
 # ==========================================

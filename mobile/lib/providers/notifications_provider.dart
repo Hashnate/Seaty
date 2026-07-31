@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
@@ -46,6 +47,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
       Future.microtask(() {
         fetchNotifications();
         startNotificationsListener();
+        registerFcmTokenWithBackend();
       });
     } else {
       Future.microtask(() => stopNotificationsListener());
@@ -55,6 +57,29 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
       notifications: [],
       isNotiListenerConnected: false,
     );
+  }
+
+  Future<void> registerFcmTokenWithBackend() async {
+    final auth = ref.read(authProvider);
+    if (auth.token.isEmpty || auth.token.startsWith('simulated')) return;
+    final settings = ref.read(settingsProvider);
+
+    try {
+      final fcmToken = await FirebaseMessaging.instance.getToken();
+      if (fcmToken != null && fcmToken.isNotEmpty) {
+        await http.post(
+          Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${auth.token}',
+          },
+          body: json.encode({'fcm_token': fcmToken}),
+        );
+        debugPrint('FCM token registered with backend successfully.');
+      }
+    } catch (e) {
+      debugPrint('Error registering FCM token with backend: $e');
+    }
   }
 
   Future<void> fetchNotifications() async {
