@@ -2728,7 +2728,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                 children: [
                   // Background Video Player / Fallback Gradient
                   SizedBox(
-                    height: 280,
+                    height: 230,
                     width: double.infinity,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.only(
@@ -2773,13 +2773,13 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 24,
-                        vertical: 10,
+                        vertical: 8,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // Spacer for sticky header
-                          const SizedBox(height: 48),
+                          const SizedBox(height: 44),
                           // Greeting + Search prompt
                           Text(
                             'Hello, ${state.userName} 👋',
@@ -2793,46 +2793,115 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                           const Text(
                             'Where are you\ntraveling today?',
                             style: TextStyle(
-                              fontSize: 26,
+                              fontSize: 24,
                               fontWeight: FontWeight.w800,
                               color: Colors.white,
                               height: 1.1,
                               letterSpacing: -1,
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
 
-                          // Glassmorphic Search Bar
+                          // Glassmorphic Search Bar (Style 1: Electric Blue Accents)
                           ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: BorderRadius.circular(20),
                             child: BackdropFilter(
                               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 12,
+                                  horizontal: 12,
+                                  vertical: 8,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(
-                                    0xFF0F172A,
-                                  ).withOpacity(0.85),
-                                  borderRadius: BorderRadius.circular(24),
+                                  color: const Color(0xFF0F172A).withOpacity(0.88),
+                                  borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.15),
+                                    color: const Color(0xFF2563EB).withOpacity(0.4),
+                                    width: 1.5,
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF2563EB).withOpacity(0.2),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
                                 child: Column(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _buildGlassField(
-                                      icon: Icons.my_location_rounded,
-                                      label: 'From',
-                                      controller: _fromController,
-                                      focusNode: _fromFocusNode,
-                                      onChanged: (val) {
-                                        setState(() {
-                                          _selectedFrom = val;
-                                        });
-                                      },
+                                    // Row 1: Side-by-Side From & To Inputs with Swap
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildGlassField(
+                                            icon: Icons.my_location_rounded,
+                                            label: 'From',
+                                            controller: _fromController,
+                                            focusNode: _fromFocusNode,
+                                            onChanged: (val) {
+                                              setState(() {
+                                                _selectedFrom = val;
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              final temp = _selectedFrom;
+                                              _selectedFrom = _selectedTo;
+                                              _selectedTo = temp;
+                                              _fromController.text =
+                                                  _selectedFrom;
+                                              _toController.text =
+                                                  _selectedTo;
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(7),
+                                            margin: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              gradient: const LinearGradient(
+                                                colors: [
+                                                  Color(0xFF2563EB),
+                                                  Color(0xFF3B82F6),
+                                                ],
+                                              ),
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: const Color(
+                                                    0xFF2563EB,
+                                                  ).withOpacity(0.5),
+                                                  blurRadius: 8,
+                                                  offset: const Offset(0, 2),
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.swap_horiz_rounded,
+                                              size: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: _buildGlassField(
+                                            icon: Icons.location_on_rounded,
+                                            label: 'To',
+                                            controller: _toController,
+                                            focusNode: _toFocusNode,
+                                            onChanged: (val) {
+                                              setState(() {
+                                                _selectedTo = val;
+                                              });
+                                            },
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     if (_fromFocusNode.hasFocus)
                                       _buildSuggestionsList(
@@ -2846,81 +2915,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                           });
                                         },
                                       ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 8,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const SizedBox(width: 20),
-                                          Expanded(
-                                            child: Container(
-                                              height: 1,
-                                              color: Colors.white.withOpacity(
-                                                0.1,
-                                              ),
-                                            ),
-                                          ),
-                                          GestureDetector(
-                                            onTap: () {
-                                              setState(() {
-                                                final temp = _selectedFrom;
-                                                _selectedFrom = _selectedTo;
-                                                _selectedTo = temp;
-                                                _fromController.text =
-                                                    _selectedFrom;
-                                                _toController.text =
-                                                    _selectedTo;
-                                              });
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.all(6),
-                                              margin:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF2563EB),
-                                                shape: BoxShape.circle,
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: const Color(
-                                                      0xFF2563EB,
-                                                    ).withOpacity(0.4),
-                                                    blurRadius: 8,
-                                                    offset: const Offset(0, 4),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: const Icon(
-                                                Icons.swap_vert_rounded,
-                                                size: 16,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                          Expanded(
-                                            child: Container(
-                                              height: 1,
-                                              color: Colors.white.withOpacity(
-                                                0.1,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    _buildGlassField(
-                                      icon: Icons.location_on_rounded,
-                                      label: 'To',
-                                      controller: _toController,
-                                      focusNode: _toFocusNode,
-                                      onChanged: (val) {
-                                        setState(() {
-                                          _selectedTo = val;
-                                        });
-                                      },
-                                    ),
                                     if (_toFocusNode.hasFocus)
                                       _buildSuggestionsList(
                                         query: _selectedTo,
@@ -2935,66 +2929,148 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                       ),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(
-                                        vertical: 8,
+                                        vertical: 6,
                                       ),
                                       child: Container(
                                         height: 1,
                                         color: Colors.white.withOpacity(0.1),
                                       ),
                                     ),
-                                    _buildGlassDateField(
-                                      icon: Icons.calendar_today_rounded,
-                                      label: 'Departure Date',
-                                      controller: _dateController,
-                                      onTap: () async {
-                                        final DateTime?
-                                        picked = await showDatePicker(
-                                          context: context,
-                                          initialDate:
-                                              _selectedDate ?? DateTime.now(),
-                                          firstDate: DateTime.now().subtract(
-                                            const Duration(days: 365),
+                                    // Row 2: Departure Date Picker Chip + Reset Filters
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Expanded(
+                                          child: _buildGlassDateField(
+                                            icon: Icons.calendar_today_rounded,
+                                            label: 'Departure Date',
+                                            controller: _dateController,
+                                            onTap: () async {
+                                              final DateTime? picked =
+                                                  await showDatePicker(
+                                                    context: context,
+                                                    initialDate:
+                                                        _selectedDate ??
+                                                        DateTime.now(),
+                                                    firstDate: DateTime.now()
+                                                        .subtract(
+                                                          const Duration(
+                                                            days: 365,
+                                                          ),
+                                                        ),
+                                                    lastDate: DateTime.now()
+                                                        .add(
+                                                          const Duration(
+                                                            days: 365,
+                                                          ),
+                                                        ),
+                                                    builder: (context, child) {
+                                                      return Theme(
+                                                        data: Theme.of(
+                                                          context,
+                                                        ).copyWith(
+                                                          colorScheme:
+                                                              const ColorScheme.dark(
+                                                                primary: Color(
+                                                                  0xFF2563EB,
+                                                                ),
+                                                                onPrimary:
+                                                                    Colors.white,
+                                                                surface: Color(
+                                                                  0xFF0F172A,
+                                                                ),
+                                                                onSurface:
+                                                                    Colors.white,
+                                                              ),
+                                                          dialogBackgroundColor:
+                                                              const Color(
+                                                                0xFF0F172A,
+                                                              ),
+                                                        ),
+                                                        child: child!,
+                                                      );
+                                                    },
+                                                  );
+                                              if (picked != null) {
+                                                final dateStr =
+                                                    "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                                setState(() {
+                                                  _selectedDate = picked;
+                                                  _dateController.text =
+                                                      dateStr;
+                                                });
+                                                ref
+                                                    .read(appStateProvider)
+                                                    .loadTrips(date: dateStr);
+                                              }
+                                            },
+                                            onClear: () {
+                                              setState(() {
+                                                _selectedDate = null;
+                                                _dateController.text =
+                                                    'All Dates';
+                                              });
+                                              ref
+                                                  .read(appStateProvider)
+                                                  .loadTrips();
+                                            },
                                           ),
-                                          lastDate: DateTime.now().add(
-                                            const Duration(days: 365),
-                                          ),
-                                          builder: (context, child) {
-                                            return Theme(
-                                              data: Theme.of(context).copyWith(
-                                                colorScheme:
-                                                    const ColorScheme.dark(
-                                                      primary: Color(
-                                                        0xFF2563EB,
-                                                      ),
-                                                      onPrimary: Colors.white,
-                                                      surface: Color(
-                                                        0xFF0F172A,
-                                                      ),
-                                                      onSurface: Colors.white,
-                                                    ),
-                                                dialogBackgroundColor:
-                                                    const Color(0xFF0F172A),
+                                        ),
+                                        if (_selectedFrom != 'All' ||
+                                            _selectedTo != 'All' ||
+                                            _selectedDate != null)
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _selectedFrom = 'All';
+                                                _selectedTo = 'All';
+                                                _selectedDate = null;
+                                                _fromController.text = 'All';
+                                                _toController.text = 'All';
+                                                _dateController.text =
+                                                    'All Dates';
+                                              });
+                                              ref
+                                                  .read(appStateProvider)
+                                                  .loadTrips();
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 6,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF2563EB).withOpacity(0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                border: Border.all(
+                                                  color: const Color(0xFF60A5FA).withOpacity(0.4),
+                                                ),
                                               ),
-                                              child: child!,
-                                            );
-                                          },
-                                        );
-                                        if (picked != null) {
-                                          final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                          setState(() {
-                                            _selectedDate = picked;
-                                            _dateController.text = dateStr;
-                                          });
-                                          ref.read(appStateProvider).loadTrips(date: dateStr);
-                                        }
-                                      },
-                                      onClear: () {
-                                        setState(() {
-                                          _selectedDate = null;
-                                          _dateController.text = 'All Dates';
-                                        });
-                                        ref.read(appStateProvider).loadTrips();
-                                      },
+                                              child: const Row(
+                                                children: [
+                                                  Icon(
+                                                    Icons.refresh_rounded,
+                                                    color: Color(0xFF60A5FA),
+                                                    size: 13,
+                                                  ),
+                                                  SizedBox(width: 4),
+                                                  Text(
+                                                    'Reset',
+                                                    style: TextStyle(
+                                                      color: Color(0xFF60A5FA),
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -3212,53 +3288,76 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     required FocusNode focusNode,
     required ValueChanged<String> onChanged,
   }) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.white.withOpacity(0.9), size: 22),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white.withOpacity(0.6),
-                ),
-              ),
-              const SizedBox(height: 4),
-              TextField(
-                controller: controller,
-                focusNode: focusNode,
-                cursorColor: Colors.white,
-                onTap: () {
-                  controller.clear();
-                  onChanged('');
-                },
-                onChanged: onChanged,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-                decoration: InputDecoration(
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                  hintText: 'Type place...',
-                  hintStyle: TextStyle(
-                    color: Colors.white.withOpacity(0.3),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: focusNode.hasFocus
+            ? const Color(0xFF1E293B)
+            : const Color(0xFF1E293B).withOpacity(0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: focusNode.hasFocus
+              ? const Color(0xFF60A5FA)
+              : Colors.white.withOpacity(0.08),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: focusNode.hasFocus
+                ? const Color(0xFF60A5FA)
+                : const Color(0xFF93C5FD),
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF93C5FD).withOpacity(0.7),
+                    letterSpacing: 0.3,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 1),
+                TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  cursorColor: const Color(0xFF60A5FA),
+                  onTap: () {
+                    controller.clear();
+                    onChanged('');
+                  },
+                  onChanged: onChanged,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: 'Place...',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withOpacity(0.35),
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -3272,58 +3371,66 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white.withOpacity(0.9), size: 22),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B).withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.08),
+            width: 1.2,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: const Color(0xFF60A5FA), size: 15),
+            const SizedBox(width: 8),
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white.withOpacity(0.6),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF93C5FD).withOpacity(0.7),
                   ),
                 ),
-                const SizedBox(height: 4),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Text(
-                        controller.text,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Text(
+                      controller.text,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(width: 4),
                     if (controller.text != 'All Dates')
                       GestureDetector(
-                        onTap: () {
-                          onClear();
-                        },
+                        onTap: onClear,
                         child: Icon(
                           Icons.close_rounded,
-                          color: Colors.white.withOpacity(0.6),
-                          size: 18,
+                          color: Colors.white.withOpacity(0.7),
+                          size: 14,
                         ),
                       )
                     else
                       Icon(
                         Icons.keyboard_arrow_down_rounded,
                         color: Colors.white.withOpacity(0.5),
-                        size: 20,
+                        size: 16,
                       ),
                   ],
                 ),
               ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -3561,23 +3668,23 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     final int seatsLeft = (totalSeats - bookedCount).clamp(0, totalSeats);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0A2540).withValues(alpha: 0.04),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -3588,7 +3695,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
                             color: const Color(
                               0xFF0A2540,
@@ -3598,7 +3705,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                           child: const Icon(
                             Icons.directions_bus_rounded,
                             color: Color(0xFF0A2540),
-                            size: 18,
+                            size: 16,
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -3608,7 +3715,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             Text(
                               trip['bus_name'],
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF0A2540),
                                 letterSpacing: -0.3,
@@ -3617,7 +3724,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             Text(
                               trip['reg'],
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 9.5,
                                 color: const Color(
                                   0xFF0A2540,
                                 ).withValues(alpha: 0.5),
@@ -3631,25 +3738,25 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
+                        horizontal: 9,
+                        vertical: 3.5,
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF2563EB),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(7),
                       ),
                       child: Text(
                         'Rs. $priceStr',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
-                          fontSize: 13,
+                          fontSize: 12.5,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 10),
 
                 // ── Route Row (Large Bold Dark Blue Text with Arrow) ──
                 Row(
@@ -3657,27 +3764,27 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     Text(
                       trip['origin'],
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF0A2540),
-                        letterSpacing: -0.5,
+                        letterSpacing: -0.4,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     const Icon(
                       Icons.east_rounded,
                       color: Color(0xFF2563EB),
-                      size: 16,
+                      size: 15,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         trip['destination'],
                         style: const TextStyle(
-                          fontSize: 16,
+                          fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF0A2540),
-                          letterSpacing: -0.5,
+                          letterSpacing: -0.4,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -3685,98 +3792,102 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 8),
 
                 // ── Ice-Blue Tags and Amenities Icon Row ──
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        // Highlighted Time/Date Tag
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFF6FF),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: const Color(0xFFBFDBFE),
-                              width: 1.2,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          // Highlighted Time/Date Tag
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: const Color(0xFFBFDBFE),
+                                width: 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.schedule_rounded,
+                                  size: 12,
+                                  color: Color(0xFF2563EB),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  trip['departure'],
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF1E40AF),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.schedule_rounded,
-                                size: 13,
-                                color: Color(0xFF2563EB),
-                              ),
-                              const SizedBox(width: 4.5),
-                              Text(
-                                trip['departure'],
-                                style: const TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: Color(0xFF1E40AF),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        // Seats Left Tag
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF0A2540,
-                            ).withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.event_seat_rounded,
-                                size: 12,
-                                color: Color(0xFF0A2540),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                '$seatsLeft seats left',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
+                          const SizedBox(width: 6),
+                          // Seats Left Tag
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF0A2540,
+                              ).withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.event_seat_rounded,
+                                  size: 11,
                                   color: Color(0xFF0A2540),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    // Amenities Icon Only Wrap (monochromatic gray)
-                    if (trip['amenities'] != null &&
-                        (trip['amenities'] as List).isNotEmpty)
-                      Row(
-                        children: (trip['amenities'] as List).map<Widget>((
-                          ame,
-                        ) {
-                          return Padding(
-                            padding: const EdgeInsets.only(left: 6.0),
-                            child: Tooltip(
-                              message: ame.toString(),
-                              child: _getAmenityIcon(ame.toString()),
+                                const SizedBox(width: 3.5),
+                                Text(
+                                  '$seatsLeft seats left',
+                                  style: const TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: Color(0xFF0A2540),
+                                  ),
+                                ),
+                              ],
                             ),
-                          );
-                        }).toList(),
+                          ),
+                        ],
                       ),
-                  ],
+                      // Amenities Icon Only Wrap (monochromatic gray)
+                      if (trip['amenities'] != null &&
+                          (trip['amenities'] as List).isNotEmpty)
+                        Row(
+                          children: (trip['amenities'] as List).map<Widget>((
+                            ame,
+                          ) {
+                            return Padding(
+                              padding: const EdgeInsets.only(left: 6.0),
+                              child: Tooltip(
+                                message: ame.toString(),
+                                child: _getAmenityIcon(ame.toString()),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -3784,11 +3895,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
           // ── Divider & Action Button Block ──
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFC),
               borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(20),
+                bottom: Radius.circular(16),
               ),
               border: Border(
                 top: BorderSide(
