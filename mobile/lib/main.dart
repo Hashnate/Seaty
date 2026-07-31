@@ -14,6 +14,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:video_player/video_player.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:seaty/theme/app_colors.dart';
+import 'package:seaty/theme/app_theme.dart';
+import 'package:seaty/widgets/shimmer_loading.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
@@ -1498,36 +1503,7 @@ class SeatyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'Seaty Luxury Transport',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Colors.white,
-        primaryColor: const Color(0xFF0A2540), // Navy Blue
-        hintColor: const Color(0xFF2563EB), // Blue (matches admin dashboard)
-        cardColor: const Color(0xFFF8FAFC), // Slate off-white (matches admin)
-        fontFamily: GoogleFonts.poppins().fontFamily,
-        colorScheme: const ColorScheme.light(
-          primary: Color(0xFF0A2540),
-          secondary: Color(0xFF2563EB),
-          surface: Colors.white,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          iconTheme: IconThemeData(color: Color(0xFF0A2540)),
-          titleTextStyle: TextStyle(
-            color: Color(0xFF0A2540),
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-          backgroundColor: Colors.white,
-          selectedItemColor: Color(0xFF2563EB),
-          unselectedItemColor: Color(0xFF64748B),
-          elevation: 8,
-        ),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.lightTheme,
       home: const SplashScreen(),
     );
   }
@@ -1546,23 +1522,21 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1400),
     );
-    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
 
-    Timer(const Duration(seconds: 3), () {
+    Timer(const Duration(milliseconds: 2800), () {
       if (mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+          SeatyPageRoute(page: const AuthWrapper()),
         );
       }
     });
@@ -1577,19 +1551,70 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: Center(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: Image.asset(
-            'assets/images/app_logo.png',
-            height: 320,
-            fit: BoxFit.contain,
-            errorBuilder: (context, error, stackTrace) => const Icon(
-              Icons.explore_rounded,
-              size: 80,
-              color: Color(0xFF6366F1),
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0F172A), Color(0xFF0A2540), Color(0xFF1E3A8A)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: SafeArea(
+          child: Stack(
+            children: [
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/images/app_logo.png',
+                      height: 220,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => const Icon(
+                        Icons.directions_bus_rounded,
+                        size: 90,
+                        color: Color(0xFF60A5FA),
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(duration: 800.ms, curve: Curves.easeOut)
+                        .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.0, 1.0), duration: 1000.ms, curve: Curves.easeOutBack),
+                    const SizedBox(height: 16),
+                    Text(
+                      'LUXURY TRANSPORT',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF93C5FD),
+                        letterSpacing: 3.5,
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(delay: 500.ms, duration: 600.ms)
+                        .slideY(begin: 0.3, end: 0, delay: 500.ms, duration: 600.ms),
+                  ],
+                ),
+              ),
+              Positioned(
+                bottom: 40,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        const Color(0xFF60A5FA).withValues(alpha: 0.8),
+                      ),
+                    ),
+                  ).animate().fadeIn(delay: 800.ms),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1672,9 +1697,8 @@ class AuthScreen extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const PhoneAuthScreen(initialRole: 'passenger'),
+                            SeatyPageRoute(
+                              page: const PhoneAuthScreen(initialRole: 'passenger'),
                             ),
                           );
                         },
@@ -1731,9 +1755,8 @@ class AuthScreen extends StatelessWidget {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  const PhoneAuthScreen(initialRole: 'owner'),
+                            SeatyPageRoute(
+                              page: const PhoneAuthScreen(initialRole: 'owner'),
                             ),
                           );
                         },
@@ -3235,9 +3258,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                               onPressed: () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const NotificationsScreen(),
+                                  SeatyPageRoute(
+                                    page: const NotificationsScreen(),
                                   ),
                                 );
                               },
@@ -3915,8 +3937,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => BusDetailsScreen(trip: trip),
+                      SeatyPageRoute(
+                        page: BusDetailsScreen(trip: trip),
                       ),
                     );
                   },
@@ -4125,8 +4147,8 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
       // Navigate to sandbox payment screen
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(
-          builder: (context) => SandboxPaymentScreen(
+        SeatyPageRoute(
+          page: SandboxPaymentScreen(
             payment: payment,
             trip: widget.trip,
             booking: booking,
@@ -4472,8 +4494,121 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.redAccent),
       ),
+    );
+  }
+
+  void _showGenderSelectionDialog(
+    BuildContext context,
+    AppState state,
+    String seatLabel,
+  ) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Select Passenger for Seat $seatLabel',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          state.selectSeatWithGender(seatLabel, 'Male');
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E3A8A).withValues(alpha: 0.2),
+                            border: Border.all(
+                              color: const Color(0xFF1E3A8A),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Column(
+                            children: [
+                              Icon(
+                                Icons.face_rounded,
+                                color: Color(0xFF60A5FA),
+                                size: 36,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Male',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          state.selectSeatWithGender(seatLabel, 'Female');
+                          Navigator.pop(context);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE11D48).withValues(alpha: 0.2),
+                            border: Border.all(
+                              color: const Color(0xFFE11D48),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Column(
+                            children: [
+                              Icon(
+                                Icons.face_3_rounded,
+                                color: Color(0xFFF472B6),
+                                size: 36,
+                              ),
+                              SizedBox(height: 8),
+                              Text(
+                                'Female',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -4894,124 +5029,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
           ),
         );
       }),
-    );
-  }
-
-  void _showGenderSelectionDialog(
-    BuildContext context,
-    AppState state,
-    String seatLabel,
-  ) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          backgroundColor: const Color(0xFF0F172A),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Select Passenger for Seat $seatLabel',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          state.selectSeatWithGender(seatLabel, 'Male');
-                          Navigator.pop(context);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF1E3A8A,
-                            ).withValues(alpha: 0.2),
-                            border: Border.all(
-                              color: const Color(0xFF1E3A8A),
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Column(
-                            children: [
-                              Icon(
-                                Icons.face_rounded,
-                                color: Color(0xFF60A5FA),
-                                size: 36,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Male',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          state.selectSeatWithGender(seatLabel, 'Female');
-                          Navigator.pop(context);
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFE11D48,
-                            ).withValues(alpha: 0.2),
-                            border: Border.all(
-                              color: const Color(0xFFE11D48),
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Column(
-                            children: [
-                              Icon(
-                                Icons.face_3_rounded,
-                                color: Color(0xFFF472B6),
-                                size: 36,
-                              ),
-                              SizedBox(height: 8),
-                              Text(
-                                'Female',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 

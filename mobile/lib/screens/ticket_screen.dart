@@ -6,6 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 
@@ -657,57 +659,83 @@ class PassengerBookingsTab extends ConsumerWidget {
 
             // ── Ticket List ──
             Expanded(
-              child: state.bookings.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+              child: RefreshIndicator(
+                color: const Color(0xFF2563EB),
+                onRefresh: () async {
+                  await ref.read(appStateProvider).loadBookings();
+                },
+                child: state.bookings.isEmpty
+                    ? ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          Icon(
-                            Icons.confirmation_num_outlined,
-                            size: 56,
-                            color: const Color(
-                              0xFF0A2540,
-                            ).withValues(alpha: 0.12),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No tickets booked yet',
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Book a trip to see your tickets here.',
-                            style: TextStyle(
-                              color: Color(0xFFCBD5E1),
-                              fontSize: 12,
+                          const SizedBox(height: 100),
+                          Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.confirmation_num_outlined,
+                                    size: 56,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ).animate().scale(duration: 500.ms, curve: Curves.easeOutBack),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No tickets booked yet',
+                                  style: TextStyle(
+                                    color: Color(0xFF0F172A),
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Book a trip to see your tickets here.',
+                                  style: TextStyle(
+                                    color: Color(0xFF64748B),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(
-                        left: 20,
-                        right: 20,
-                        bottom: 110,
-                      ),
-                      itemCount: state.bookings.length,
-                      itemBuilder: (context, index) {
-                        final b = state.bookings[index];
-                        final ticketCode =
-                            'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
-                        final seats = (b['seats'] as List).join(', ');
-                        final formattedPrice =
-                            double.tryParse(
-                              b['price'].toString(),
-                            )?.toStringAsFixed(2) ??
-                            b['price'].toString();
+                      )
+                    : AnimationLimiter(
+                        child: ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          padding: const EdgeInsets.only(
+                            left: 20,
+                            right: 20,
+                            bottom: 110,
+                          ),
+                          itemCount: state.bookings.length,
+                          itemBuilder: (context, index) {
+                            final b = state.bookings[index];
+                            final ticketCode =
+                                'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+                            final seats = (b['seats'] as List).join(', ');
+                            final formattedPrice =
+                                double.tryParse(
+                                  b['price'].toString(),
+                                )?.toStringAsFixed(2) ??
+                                b['price'].toString();
 
-                        return GestureDetector(
+                            return AnimationConfiguration.staggeredList(
+                              position: index,
+                              duration: const Duration(milliseconds: 375),
+                              child: SlideAnimation(
+                                verticalOffset: 40.0,
+                                child: FadeInAnimation(
+                                  child: GestureDetector(
                           onTap: () => _showDownloadTicketDialog(context, b),
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 16),
@@ -902,9 +930,14 @@ class PassengerBookingsTab extends ConsumerWidget {
                               ],
                             ),
                           ),
-                        );
-                      },
-                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+              ),
             ),
           ],
         ),

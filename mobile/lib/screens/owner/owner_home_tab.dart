@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/theme/app_theme.dart';
 
 class OwnerHomeTab extends ConsumerStatefulWidget {
   final Function(int navIndex, int subTab)? onNavigate;
@@ -23,10 +24,19 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-          child: Column(
+        child: RefreshIndicator(
+          color: const Color(0xFF2563EB),
+          onRefresh: () async {
+            await ref.read(appStateProvider).loadVehicles();
+            await ref.read(appStateProvider).loadConductors();
+            await ref.read(appStateProvider).loadTrips();
+          },
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // ── HEADER ─────────────────────────────────
@@ -85,8 +95,8 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
-                            builder: (context) => const NotificationsScreen(),
+                          SeatyPageRoute(
+                            page: const NotificationsScreen(),
                           ),
                         );
                       },
@@ -352,6 +362,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
           ),
         ),
       ),
+    ),
     );
   }
 

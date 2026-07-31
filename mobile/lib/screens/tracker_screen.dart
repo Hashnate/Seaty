@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:seaty/main.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 // =====================================================================
 // BOLD GRADIENT HERO HEADING — Reusable across screens
@@ -33,9 +34,9 @@ class BoldGradientHeroHeading extends StatelessWidget {
                 shaderCallback: (bounds) =>
                     const LinearGradient(
                       colors: [
-                        Color(0xFF0A2540), // Seaty Theme Blue
-                        Color(0xFF001220), // Dark Midnight Blue
-                        Color(0xFF000814), // Darkest Navy
+                        Color(0xFF0A2540), // Deep Navy
+                        Color(0xFF1E40AF), // Royal Blue
+                        Color(0xFF2563EB), // Vibrant Electric Blue
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -74,15 +75,15 @@ class BoldGradientHeroHeading extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Container(
-          width: 40,
-          height: 3,
+          width: 44,
+          height: 3.5,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
             gradient: const LinearGradient(
               colors: [Color(0xFF2563EB), Color(0xFF60A5FA)],
             ),
           ),
-        ),
+        ).animate().scaleX(duration: 400.ms, curve: Curves.easeOutCubic),
         if (subtitle.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
@@ -96,7 +97,7 @@ class BoldGradientHeroHeading extends StatelessWidget {
           ),
         ],
       ],
-    );
+    ).animate().fadeIn(duration: 350.ms).slideX(begin: -0.05, end: 0, duration: 350.ms, curve: Curves.easeOutCubic);
   }
 }
 

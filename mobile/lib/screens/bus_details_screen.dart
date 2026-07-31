@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/theme/app_theme.dart';
 
 class BusDetailsScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> trip;
@@ -904,8 +905,8 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (context) => SeatSelectorScreen(trip: widget.trip),
+                      SeatyPageRoute(
+                        page: SeatSelectorScreen(trip: widget.trip),
                       ),
                     );
                   },

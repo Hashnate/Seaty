@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
@@ -412,8 +413,20 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                                       width: 3,
                                     ),
                                     borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                                        blurRadius: 16,
+                                        spreadRadius: 2,
+                                      ),
+                                    ],
                                   ),
-                                ),
+                                ).animate(onPlay: (controller) => controller.repeat(reverse: true)).scale(
+                                      begin: const Offset(0.98, 0.98),
+                                      end: const Offset(1.02, 1.02),
+                                      duration: 1200.ms,
+                                      curve: Curves.easeInOut,
+                                    ),
                               ),
 
                               // Flash & Camera controls

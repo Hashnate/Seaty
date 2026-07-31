@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 
 class ConductorHomeTab extends ConsumerStatefulWidget {
@@ -357,9 +358,8 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                       : () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  ConductorTripDetailsScreen(trip: activeTrip),
+                            SeatyPageRoute(
+                              page: ConductorTripDetailsScreen(trip: activeTrip),
                             ),
                           );
                         },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/widgets/shimmer_loading.dart';
 
 class ConductorTripsTab extends ConsumerStatefulWidget {
   const ConductorTripsTab({super.key});
@@ -210,12 +211,10 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: _isLoading
-                    ? const Padding(
-                        padding: EdgeInsets.all(40),
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF2563EB),
-                          ),
+                    ? Column(
+                        children: List.generate(
+                          5,
+                          (index) => const ManifestSkeleton(),
                         ),
                       )
                     : manifestList.isEmpty

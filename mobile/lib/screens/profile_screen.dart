@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:seaty/main.dart'; // import appStateProvider and global definitions
 import 'package:seaty/screens/tracker_screen.dart'; // import BoldGradientHeroHeading
 
@@ -111,8 +112,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF0A2540).withValues(alpha: 0.04),
-                        blurRadius: 12,
+                        color: const Color(0xFF0A2540).withValues(alpha: 0.08),
+                        blurRadius: 16,
                         offset: const Offset(0, 4),
                       ),
                     ],
@@ -183,7 +184,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                       ),
                     ],
                   ),
-                ),
+                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic),
               ),
               const SizedBox(height: 16),
 
