@@ -47,16 +47,11 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF0A2540), Color(0xFF1E3A8A)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+        color: Colors.white,
         child: SafeArea(
           child: Stack(
             children: [
@@ -71,7 +66,7 @@ class _SplashScreenState extends State<SplashScreen>
                       errorBuilder: (context, error, stackTrace) => const Icon(
                         Icons.directions_bus_rounded,
                         size: 90,
-                        color: Color(0xFF60A5FA),
+                        color: Color(0xFF2563EB),
                       ),
                     )
                         .animate()
@@ -83,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen>
                       style: GoogleFonts.poppins(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFF93C5FD),
+                        color: const Color(0xFF2563EB),
                         letterSpacing: 3.5,
                       ),
                     )
@@ -101,10 +96,10 @@ class _SplashScreenState extends State<SplashScreen>
                   child: SizedBox(
                     width: 32,
                     height: 32,
-                    child: CircularProgressIndicator(
+                    child: const CircularProgressIndicator(
                       strokeWidth: 2.5,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        const Color(0xFF60A5FA).withValues(alpha: 0.8),
+                        Color(0xFF2563EB),
                       ),
                     ),
                   ).animate().fadeIn(delay: 800.ms),

@@ -151,8 +151,8 @@ class PassengerTripsTab extends ConsumerStatefulWidget {
 
 class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     with WidgetsBindingObserver {
-  String _selectedFrom = 'All';
-  String _selectedTo = 'All';
+  String _selectedFrom = '';
+  String _selectedTo = '';
   DateTime? _selectedDate;
 
   late final TextEditingController _fromController;
@@ -359,7 +359,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                 children: [
                   // Background Video Player / Fallback Gradient
                   SizedBox(
-                    height: 230,
+                    height: 230 + MediaQuery.of(context).padding.top,
                     width: double.infinity,
                     child: ClipRRect(
                       borderRadius: const BorderRadius.only(
@@ -431,45 +431,40 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                               letterSpacing: -1,
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Bus Tickets',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                  letterSpacing: -0.5,
+                          if (_selectedFrom.isNotEmpty || _selectedTo.isNotEmpty || _selectedDate != null) ...[
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedFrom = '';
+                                    _selectedTo = '';
+                                    _selectedDate = null;
+                                    _fromController.text = '';
+                                    _toController.text = '';
+                                    _dateController.text = 'All Dates';
+                                  });
+                                  ref.read(tripsProvider.notifier).loadTrips();
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 ),
-                              ),
-                              if (_selectedFrom != 'All' || _selectedTo != 'All' || _selectedDate != null)
-                                TextButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _selectedFrom = 'All';
-                                      _selectedTo = 'All';
-                                      _selectedDate = null;
-                                      _fromController.text = 'All';
-                                      _toController.text = 'All';
-                                      _dateController.text = 'All Dates';
-                                    });
-                                    ref.read(tripsProvider.notifier).loadTrips();
-                                  },
-                                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-                                  child: const Text(
-                                    'Clear all',
-                                    style: TextStyle(
-                                      color: Color(0xFF93C5FD),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
+                                child: const Text(
+                                  'Clear all',
+                                  style: TextStyle(
+                                    color: Color(0xFF93C5FD),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
                                   ),
                                 ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ] else
+                            const SizedBox(height: 32),
                           // Main input card
                           Container(
                             decoration: BoxDecoration(

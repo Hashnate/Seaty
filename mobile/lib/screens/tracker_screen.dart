@@ -115,6 +115,8 @@ class PassengerTrackingTab extends ConsumerStatefulWidget {
 class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   String? _selectedBusId;
   final MapController _mapController = MapController();
+  bool _isDarkModeMap = false;
+  String? _activeTooltip; // ID of marker currently showing popup ('bus', 'origin', 'destination', 'stop_X')
 
   // Sri Lanka center
   static final LatLng _sriLankaCenter = LatLng(7.8731, 80.7718);
@@ -122,25 +124,25 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   // Predefined route coordinates for common Sri Lankan bus routes
   static final Map<String, List<LatLng>> _routeCoordinates = {
     'Colombo-Kandy': [
-      LatLng(6.9271, 79.8612),
-      LatLng(7.0480, 80.1130),
-      LatLng(7.1840, 80.3550),
-      LatLng(7.2520, 80.5090),
-      LatLng(7.2906, 80.6337),
+      LatLng(6.9271, 79.8612), // Colombo
+      LatLng(7.0480, 80.1130), // Nittambuwa
+      LatLng(7.1840, 80.3550), // Kegalle
+      LatLng(7.2520, 80.5090), // Peradeniya
+      LatLng(7.2906, 80.6337), // Kandy
     ],
     'Colombo-Galle': [
-      LatLng(6.9271, 79.8612),
-      LatLng(6.7360, 79.9090),
-      LatLng(6.5850, 80.0270),
-      LatLng(6.4330, 80.0030),
-      LatLng(6.0535, 80.2210),
+      LatLng(6.9271, 79.8612), // Colombo
+      LatLng(6.7360, 79.9090), // Kalutara
+      LatLng(6.5850, 80.0270), // Bentota
+      LatLng(6.4330, 80.0030), // Hikkaduwa
+      LatLng(6.0535, 80.2210), // Galle
     ],
     'Colombo-Ella': [
-      LatLng(6.9271, 79.8612),
-      LatLng(7.2906, 80.6337),
-      LatLng(7.1750, 80.7730),
-      LatLng(6.9810, 80.7500),
-      LatLng(6.8667, 81.0466),
+      LatLng(6.9271, 79.8612), // Colombo
+      LatLng(7.2906, 80.6337), // Kandy
+      LatLng(7.1750, 80.7730), // Nuwara Eliya
+      LatLng(6.9810, 80.7500), // Bandarawela
+      LatLng(6.8667, 81.0466), // Ella
     ],
   };
 
@@ -161,15 +163,41 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     return _routeCoordinates[routeKey] ?? [];
   }
 
+  void _zoomIn() {
+    final currentZoom = _mapController.camera.zoom;
+    _mapController.move(_mapController.camera.center, (currentZoom + 1).clamp(3.0, 19.0));
+  }
+
+  void _zoomOut() {
+    final currentZoom = _mapController.camera.zoom;
+    _mapController.move(_mapController.camera.center, (currentZoom - 1).clamp(3.0, 19.0));
+  }
+
+  void _fitRoute(List<LatLng> points) {
+    if (points.isEmpty) return;
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+
+    final centerLat = (minLat + maxLat) / 2;
+    final centerLng = (minLng + maxLng) / 2;
+    _mapController.move(LatLng(centerLat, centerLng), 9.0);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tripsState = ref.watch(tripsProvider);
     final bookingsState = ref.watch(bookingsProvider);
     final gpsState = ref.watch(gpsTrackingProvider);
 
-    // Filter trips to only those where:
-    // 1. The user has a confirmed booking for that trip.
-    // 2. The current time is within the active tracking window (starts 30m before departure, ends at arrival).
     final now = DateTime.now();
     final trackableTrips = tripsState.trips.where((trip) {
       final hasBooking = bookingsState.bookings.any((booking) =>
@@ -188,18 +216,16 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       final startTime = departureTime.subtract(const Duration(minutes: 30));
       final arrivalTime = (arrivalStr.isNotEmpty)
           ? DateTime.tryParse(arrivalStr)
-          : departureTime.add(const Duration(hours: 4)); // Fallback duration if arrival is empty
+          : departureTime.add(const Duration(hours: 4));
 
       if (arrivalTime == null) return false;
 
       return now.isAfter(startTime) && now.isBefore(arrivalTime);
     }).toList();
 
-    // Verify if the previously selected bus is still trackable
     final hasSelected = trackableTrips.any((t) => t['reg'] == _selectedBusId);
     final String? selectedValue = hasSelected ? _selectedBusId : null;
 
-    // Automatically stop tracking if the bus leaves the active tracking window/eligibility
     if (_selectedBusId != null && !hasSelected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(gpsTrackingProvider.notifier).stopTracking();
@@ -331,7 +357,10 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           );
                         }).toList(),
                         onChanged: (val) {
-                          setState(() => _selectedBusId = val);
+                          setState(() {
+                            _selectedBusId = val;
+                            _activeTooltip = 'bus';
+                          });
                           if (val != null) {
                             ref.read(gpsTrackingProvider.notifier).startTracking(val);
                           } else {
@@ -346,7 +375,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
             ),
             const SizedBox(height: 14),
 
-            // ── OpenStreetMap ──
+            // ── Interactive OpenStreetMap Container ──
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(
@@ -369,160 +398,210 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                   clipBehavior: Clip.antiAlias,
                   child: Stack(
                     children: [
-                      // Flutter Map (OpenStreetMap)
+                      // Flutter Map (Interactive)
                       FlutterMap(
                         mapController: _mapController,
                         options: MapOptions(
                           initialCenter: busPosition ?? _sriLankaCenter,
                           initialZoom: isTracking ? 14.0 : 8.0,
+                          onTap: (tapPosition, point) {
+                            setState(() => _activeTooltip = null);
+                          },
                         ),
                         children: [
-                          // Dark-themed tile layer (CartoDB Dark Matter — free)
+                          // Dynamic Tile Layer (Light vs Dark toggleable)
                           TileLayer(
-                            urlTemplate:
-                                'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+                            urlTemplate: _isDarkModeMap
+                                ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
+                                : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png',
                             subdomains: const ['a', 'b', 'c', 'd'],
                             userAgentPackageName: 'lk.seaty.app',
                             maxZoom: 19,
                           ),
 
-                          // Route polyline
+                          // Route Polyline Layer
                           if (routePoints.isNotEmpty)
                             PolylineLayer(
                               polylines: <Polyline<Object>>[
                                 Polyline(
                                   points: routePoints,
                                   color: const Color(0xFF2563EB),
-                                  strokeWidth: 4.0,
+                                  strokeWidth: 4.5,
                                 ),
                               ],
                             ),
 
-                          // Route endpoint markers (origin + destination)
+                          // Route Endpoint & Intermediate Markers
                           if (routePoints.length >= 2)
                             MarkerLayer(
                               markers: [
-                                // Origin marker
+                                // ── Origin Marker ──
                                 Marker(
                                   point: routePoints.first,
-                                  width: 28,
-                                  height: 28,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 2.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF10B981,
-                                          ).withValues(alpha: 0.4),
-                                          blurRadius: 8,
-                                          spreadRadius: 2,
+                                  width: 32,
+                                  height: 32,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _activeTooltip = _activeTooltip == 'origin' ? null : 'origin';
+                                      });
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2.5,
                                         ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.play_arrow_rounded,
-                                      color: Colors.white,
-                                      size: 14,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                                            blurRadius: 8,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.play_arrow_rounded,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
                                     ),
                                   ),
                                 ),
-                                // Destination marker
+
+                                // ── Intermediate Stop Markers ──
+                                ...List.generate(
+                                  routePoints.length > 2 ? routePoints.length - 2 : 0,
+                                  (idx) {
+                                    final stopIndex = idx + 1;
+                                    final stopPoint = routePoints[stopIndex];
+                                    final stopId = 'stop_$stopIndex';
+                                    return Marker(
+                                      point: stopPoint,
+                                      width: 18,
+                                      height: 18,
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          setState(() {
+                                            _activeTooltip = _activeTooltip == stopId ? null : stopId;
+                                          });
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: const Color(0xFF2563EB),
+                                              width: 3,
+                                            ),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(alpha: 0.15),
+                                                blurRadius: 4,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+
+                                // ── Destination Marker ──
                                 Marker(
                                   point: routePoints.last,
-                                  width: 28,
-                                  height: 28,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFC62828),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 2.5,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFFC62828,
-                                          ).withValues(alpha: 0.4),
-                                          blurRadius: 8,
-                                          spreadRadius: 2,
+                                  width: 32,
+                                  height: 32,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _activeTooltip = _activeTooltip == 'destination' ? null : 'destination';
+                                      });
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFC62828),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2.5,
                                         ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.flag_rounded,
-                                      color: Colors.white,
-                                      size: 14,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFFC62828).withValues(alpha: 0.4),
+                                            blurRadius: 8,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.flag_rounded,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
 
-                          // Live bus marker
+                          // Live Bus Marker + Pulse Effect
                           if (busPosition != null)
                             MarkerLayer(
                               markers: [
-                                // Outer glow ring
                                 Marker(
                                   point: busPosition,
-                                  width: 60,
-                                  height: 60,
+                                  width: 64,
+                                  height: 64,
                                   child: Container(
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: const Color(
-                                        0xFF2563EB,
-                                      ).withValues(alpha: 0.12),
+                                      color: const Color(0xFF2563EB).withValues(alpha: 0.15),
                                       border: Border.all(
-                                        color: const Color(
-                                          0xFF2563EB,
-                                        ).withValues(alpha: 0.25),
-                                        width: 1.5,
+                                        color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                                        width: 2,
                                       ),
                                     ),
-                                  ),
+                                  ).animate(onPlay: (controller) => controller.repeat())
+                                   .scale(begin: const Offset(0.85, 0.85), end: const Offset(1.15, 1.15), duration: 1200.ms, curve: Curves.easeInOut),
                                 ),
-                                // Bus icon marker
                                 Marker(
                                   point: busPosition,
-                                  width: 40,
-                                  height: 40,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      gradient: const LinearGradient(
-                                        colors: [
-                                          Color(0xFF2563EB),
-                                          Color(0xFFFF6D00),
-                                        ],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
-                                      ),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 3,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(
-                                            0xFF2563EB,
-                                          ).withValues(alpha: 0.5),
-                                          blurRadius: 12,
-                                          spreadRadius: 2,
+                                  width: 44,
+                                  height: 44,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _activeTooltip = _activeTooltip == 'bus' ? null : 'bus';
+                                      });
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFF2563EB), Color(0xFF00C853)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
                                         ),
-                                      ],
-                                    ),
-                                    child: const Icon(
-                                      Icons.directions_bus_rounded,
-                                      color: Colors.white,
-                                      size: 18,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 3,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF2563EB).withValues(alpha: 0.5),
+                                            blurRadius: 14,
+                                            spreadRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.directions_bus_rounded,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -531,7 +610,90 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                         ],
                       ),
 
-                      // Status badge — top left
+                      // ── Interactive Callout Popup Bubble ──
+                      if (_activeTooltip != null)
+                        Positioned(
+                          top: 56,
+                          left: 20,
+                          right: 20,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0A2540),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.2),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _activeTooltip == 'bus'
+                                      ? Icons.directions_bus_filled_rounded
+                                      : _activeTooltip == 'origin'
+                                          ? Icons.play_circle_fill_rounded
+                                          : _activeTooltip == 'destination'
+                                              ? Icons.flag_circle_rounded
+                                              : Icons.location_on_rounded,
+                                  color: const Color(0xFF60A5FA),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _activeTooltip == 'bus'
+                                            ? 'Bus ${_selectedBusId ?? "Active"}'
+                                            : _activeTooltip == 'origin'
+                                                ? 'Trip Origin'
+                                                : _activeTooltip == 'destination'
+                                                    ? 'Final Destination'
+                                                    : 'Intermediate Stop',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _activeTooltip == 'bus'
+                                            ? 'Live speed: ${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? "45"} km/h • Tracking Active'
+                                            : _activeTooltip == 'origin'
+                                                ? 'Journey Start Point'
+                                                : _activeTooltip == 'destination'
+                                                    ? 'Final Dropoff Station'
+                                                    : 'Passenger boarding & dropoff station',
+                                        style: const TextStyle(
+                                          color: Color(0xFF94A3B8),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => setState(() => _activeTooltip = null),
+                                  child: const Icon(
+                                    Icons.close_rounded,
+                                    color: Colors.white70,
+                                    size: 18,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ).animate().fadeIn(duration: 200.ms).slideY(begin: -0.2, end: 0, duration: 200.ms),
+                        ),
+
+                      // Status Badge — Top Left
                       Positioned(
                         top: 12,
                         left: 12,
@@ -542,14 +704,12 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           ),
                           decoration: BoxDecoration(
                             color: isTracking
-                                ? const Color(0xFF10B981).withValues(alpha: 0.9)
-                                : const Color(
-                                    0xFF0A2540,
-                                  ).withValues(alpha: 0.8),
+                                ? const Color(0xFF10B981).withValues(alpha: 0.95)
+                                : const Color(0xFF0A2540).withValues(alpha: 0.85),
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
+                                color: Colors.black.withValues(alpha: 0.15),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -562,20 +722,18 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                 width: 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: isTracking
-                                      ? Colors.white
-                                      : const Color(0xFF64748B),
+                                  color: isTracking ? Colors.white : const Color(0xFF64748B),
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                isTracking ? 'LIVE' : 'IDLE',
+                                isTracking ? 'LIVE TRACKING' : 'IDLE',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.2,
+                                  letterSpacing: 1.1,
                                 ),
                               ),
                             ],
@@ -583,38 +741,79 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                         ),
                       ),
 
-                      // Re-center button — top right
-                      if (isTracking && busPosition != null)
-                        Positioned(
-                          top: 12,
-                          right: 12,
-                          child: GestureDetector(
-                            onTap: () {
-                              _mapController.move(busPosition!, 14.0);
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
+                      // ── Floating Interactive Map Control Bar — Top Right ──
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
                               ),
-                              child: const Icon(
-                                Icons.my_location_rounded,
-                                size: 18,
-                                color: Color(0xFF2563EB),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // Recenter on Bus
+                              if (isTracking && busPosition != null) ...[
+                                _buildMapControlButton(
+                                  icon: Icons.my_location_rounded,
+                                  tooltip: 'Center on Bus',
+                                  color: const Color(0xFF2563EB),
+                                  onTap: () {
+                                    _mapController.move(busPosition!, 14.0);
+                                  },
+                                ),
+                                const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              ],
+                              // Fit Route
+                              if (routePoints.isNotEmpty) ...[
+                                _buildMapControlButton(
+                                  icon: Icons.center_focus_strong_rounded,
+                                  tooltip: 'Fit Route',
+                                  color: const Color(0xFF0A2540),
+                                  onTap: () => _fitRoute(routePoints),
+                                ),
+                                const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              ],
+                              // Zoom In
+                              _buildMapControlButton(
+                                icon: Icons.add_rounded,
+                                tooltip: 'Zoom In',
+                                color: const Color(0xFF334155),
+                                onTap: _zoomIn,
                               ),
-                            ),
+                              const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              // Zoom Out
+                              _buildMapControlButton(
+                                icon: Icons.remove_rounded,
+                                tooltip: 'Zoom Out',
+                                color: const Color(0xFF334155),
+                                onTap: _zoomOut,
+                              ),
+                              const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              // Map Theme Toggle
+                              _buildMapControlButton(
+                                icon: _isDarkModeMap ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                                tooltip: _isDarkModeMap ? 'Light Map' : 'Dark Map',
+                                color: _isDarkModeMap ? const Color(0xFFF59E0B) : const Color(0xFF1E293B),
+                                onTap: () {
+                                  setState(() => _isDarkModeMap = !_isDarkModeMap);
+                                },
+                              ),
+                            ],
                           ),
                         ),
+                      ),
 
-                      // ── Floating Bottom Info Card ──
+                      // ── Floating Bottom Info Card + Quick Actions ──
                       if (isTracking && busPosition != null)
                         Positioned(
                           bottom: 14,
@@ -639,25 +838,22 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                 Row(
                                   children: [
                                     Container(
-                                      width: 36,
-                                      height: 36,
+                                      width: 38,
+                                      height: 38,
                                       decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF2563EB,
-                                        ).withValues(alpha: 0.1),
+                                        color: const Color(0xFF2563EB).withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: const Icon(
                                         Icons.directions_bus_filled_rounded,
                                         color: Color(0xFF2563EB),
-                                        size: 18,
+                                        size: 20,
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             _selectedBusId ?? 'Bus',
@@ -677,6 +873,46 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                             ),
                                           ),
                                         ],
+                                      ),
+                                    ),
+                                    // Contact Conductor Quick Action Button
+                                    GestureDetector(
+                                      onTap: () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: [
+                                                const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 18),
+                                                const SizedBox(width: 10),
+                                                Text('Connecting to Conductor of $_selectedBusId...'),
+                                              ],
+                                            ),
+                                            backgroundColor: const Color(0xFF0A2540),
+                                            behavior: SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: const Row(
+                                          children: [
+                                            Icon(Icons.phone_rounded, color: Color(0xFF2563EB), size: 14),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              'Call',
+                                              style: TextStyle(
+                                                color: Color(0xFF2563EB),
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -756,6 +992,29 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapControlButton({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Icon(
+            icon,
+            size: 18,
+            color: color,
+          ),
         ),
       ),
     );
