@@ -18,14 +18,9 @@ class SeatSelectorScreen extends ConsumerStatefulWidget {
   ConsumerState<SeatSelectorScreen> createState() => _SeatSelectorScreenState();
 }
 
-class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
-    with TickerProviderStateMixin {
+class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
   bool _isLoading = true;
   bool _isBookingInProgress = false;
-  late AnimationController _introController;
-  late Animation<double> _perspectiveAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _slideAnimation;
 
   dynamic _wsChannel;
   Timer? _pollingTimer;
@@ -33,28 +28,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
   @override
   void initState() {
     super.initState();
-    _introController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
-    _perspectiveAnimation = Tween<double>(begin: -0.7, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _introController,
-        curve: const Interval(0.0, 0.8, curve: Curves.easeOutCubic),
-      ),
-    );
-    _scaleAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _introController,
-        curve: const Interval(0.0, 0.85, curve: Curves.easeOutCubic),
-      ),
-    );
-    _slideAnimation = Tween<double>(begin: 350.0, end: 0.0).animate(
-      CurvedAnimation(
-        parent: _introController,
-        curve: const Interval(0.0, 1.0, curve: Curves.fastOutSlowIn),
-      ),
-    );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _refreshSeats();
@@ -111,7 +84,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
     try {
       _wsChannel?.close();
     } catch (_) {}
-    _introController.dispose();
     super.dispose();
   }
 
@@ -122,8 +94,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen>
     await bookingsNotifier.loadSeatAvailability(widget.trip['id'].toString(), clearFirst: true);
     if (mounted) {
       setState(() => _isLoading = false);
-      _introController.reset();
-      _introController.forward();
     }
   }
 

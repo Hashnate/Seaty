@@ -93,14 +93,12 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
     final departureStr = booking['departure'];
     bool isBoardingAvailable = true;
     String disabledReason = "";
-    int differenceInMins = 0;
 
     if (departureStr != null) {
       try {
         final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
         final now = DateTime.now();
         final difference = departureTime.difference(now);
-        differenceInMins = difference.inMinutes;
         if (difference.inMinutes > 30) {
           isBoardingAvailable = false;
           disabledReason = "Boarding is only allowed within 30 minutes of the ride. Departure is in ${_formatRemainingTime(difference.inMinutes)} (at $departureStr).";
@@ -213,7 +211,7 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            "Boarding opens 30 minutes before departure. Departure is in ${_formatRemainingTime(differenceInMins)} (at $departureStr).",
+                            disabledReason,
                             style: const TextStyle(
                               color: Color(0xFF991B1B),
                               fontSize: 11,
