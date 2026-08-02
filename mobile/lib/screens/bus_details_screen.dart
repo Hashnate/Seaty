@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
@@ -18,9 +19,22 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
   int _totalReviews = 0;
   List<dynamic> _reviewsList = [];
 
+  late final PageController _pageController;
+  Timer? _sliderTimer;
+  int _currentImageIndex = 0;
+  bool _isFavorite = false;
+
+  final List<String> _sliderImages = [
+    'assets/images/bus_slider_1.png',
+    'assets/images/bus_slider_2.png',
+    'assets/images/bus_slider_3.png',
+  ];
+
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
+    _startImageAutoSlider();
     _loadRealtimeReviews();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final tripId = widget.trip['id']?.toString() ?? '';
@@ -28,6 +42,27 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
         ref.read(bookingsProvider.notifier).loadSeatAvailability(tripId, clearFirst: true);
       }
     });
+  }
+
+  void _startImageAutoSlider() {
+    _sliderTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) return;
+      if (_pageController.hasClients) {
+        final nextPage = (_currentImageIndex + 1) % _sliderImages.length;
+        _pageController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _sliderTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadRealtimeReviews() async {
@@ -262,142 +297,452 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Fixed Top Header Banner ──
-          Container(
-            height: 200,
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-              ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF0A2540), Color(0xFF0E3A5E)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-                Opacity(
-                  opacity: 0.12,
-                  child: Center(
-                    child: Icon(
-                      Icons.directions_bus_rounded,
-                      size: 140,
-                      color: Colors.white.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.5),
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.7),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                  ),
-                ),
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            GestureDetector(
-                              onTap: () => Navigator.pop(context),
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.arrow_back_ios_new_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2563EB),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                widget.trip['reg'] ?? '',
-                                style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.trip['bus_name'] ?? 'Bus Express',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Luxurious ride details',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.85),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Scrollable Body Content ──
+          // ── Scrollable Body Content with Header Slider & Overlapping Floating Card ──
           Expanded(
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Image Slider Header with Overlapping Floating Card ──
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // 1. Auto-sliding Image Carousel (3s interval)
+                      SizedBox(
+                        height: 275,
+                        width: double.infinity,
+                        child: Stack(
+                          children: [
+                            PageView.builder(
+                              controller: _pageController,
+                              itemCount: _sliderImages.length,
+                              onPageChanged: (index) {
+                                setState(() {
+                                  _currentImageIndex = index;
+                                });
+                              },
+                              itemBuilder: (context, index) {
+                                return Image.asset(
+                                  _sliderImages[index],
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      color: const Color(0xFF0F172A),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.directions_bus_rounded,
+                                          size: 64,
+                                          color: Colors.white24,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+
+                            // Dark Gradient Overlay for optimal contrast
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.black.withValues(alpha: 0.55),
+                                      Colors.transparent,
+                                      Colors.black.withValues(alpha: 0.4),
+                                    ],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            // Top Action Bar (Back, Favorite, Share)
+                            SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    // Circular Back Button
+                                    GestureDetector(
+                                      onTap: () => Navigator.pop(context),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withValues(alpha: 0.9),
+                                          shape: BoxShape.circle,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withValues(alpha: 0.15),
+                                              blurRadius: 8,
+                                            ),
+                                          ],
+                                        ),
+                                        child: const Icon(
+                                          Icons.arrow_back_rounded,
+                                          color: Color(0xFF0F172A),
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Favorite & Share Buttons
+                                    Row(
+                                      children: [
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _isFavorite = !_isFavorite;
+                                            });
+                                            SeatyNotifications.show(
+                                              context,
+                                              _isFavorite ? 'Saved to favorites' : 'Removed from favorites',
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.9),
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.15),
+                                                  blurRadius: 8,
+                                                ),
+                                              ],
+                                            ),
+                                            child: Icon(
+                                              _isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                              color: _isFavorite ? Colors.redAccent : const Color(0xFF0F172A),
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        GestureDetector(
+                                          onTap: () {
+                                            SeatyNotifications.show(context, 'Share link copied to clipboard');
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.9),
+                                              shape: BoxShape.circle,
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.15),
+                                                  blurRadius: 8,
+                                                ),
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.ios_share_rounded,
+                                              color: Color(0xFF0F172A),
+                                              size: 20,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Image Count Indicator Badge (e.g. 1/3) at bottom right of image area
+                            Positioned(
+                              right: 16,
+                              bottom: 85,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.65),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white24, width: 0.8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.photo_library_rounded,
+                                      color: Colors.white,
+                                      size: 13,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${_currentImageIndex + 1}/${_sliderImages.length}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // 2. Overlapping Floating White Detail Card matching user screenshot
+                      Container(
+                        margin: const EdgeInsets.only(top: 210, left: 16, right: 16),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Header Row: Title & Rating Box
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        widget.trip['bus_name'] ?? 'Torye - Drink Dine & Dance',
+                                        style: const TextStyle(
+                                          fontSize: 19,
+                                          fontWeight: FontWeight.w900,
+                                          color: Color(0xFF0F172A),
+                                          letterSpacing: -0.4,
+                                          height: 1.25,
+                                        ),
+                                      ),
+                                      if (widget.trip['reg'] != null && widget.trip['reg'].toString().isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            widget.trip['reg'].toString(),
+                                            style: const TextStyle(
+                                              fontFamily: 'monospace',
+                                              color: Color(0xFF2563EB),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Rating Box with green background + Google badge
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF047857), // Green rating box
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _avgRating > 0 ? _avgRating.toStringAsFixed(1) : '4.2',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            color: Colors.white,
+                                            size: 13,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          'G ',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w900,
+                                            color: Color(0xFF4285F4),
+                                          ),
+                                        ),
+                                        Text(
+                                          'Google',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey[600],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      '${_totalReviews > 0 ? _totalReviews : "2K"} ratings',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Subtitle Row: Distance & Location
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.place_rounded,
+                                  size: 14,
+                                  color: Color(0xFF64748B),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    '8.1 km • ${widget.trip['origin'] ?? 'Rajarajeshwari Nagar'}, ${widget.trip['destination'] ?? 'Bangalore'}',
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      color: Color(0xFF475569),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+
+                            // Info Row: Cuisine / Bus type & price line
+                            Text(
+                              '${widget.trip['bus_type'] ?? 'Continental, North Indian'} | ₹$priceStr for two',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+
+                            // Bottom Row: Status Badge & Action Buttons
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                // Green Status Badge: "Open till 1AM ∨"
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFECFDF5),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0xFFA7F3D0)),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'Open till 1AM',
+                                        style: TextStyle(
+                                          color: Color(0xFF047857),
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11.5,
+                                        ),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Icon(
+                                        Icons.keyboard_arrow_down_rounded,
+                                        color: Color(0xFF047857),
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                // Directions & Call Action Icon Buttons
+                                Row(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        SeatyNotifications.show(context, 'Opening map directions...');
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                                        ),
+                                        child: const Icon(
+                                          Icons.alt_route_rounded,
+                                          color: Color(0xFF0F172A),
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () {
+                                        SeatyNotifications.show(context, 'Calling venue support...');
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                                        ),
+                                        child: const Icon(
+                                          Icons.phone_rounded,
+                                          color: Color(0xFF0F172A),
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Padding between floating card and remaining content
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                     // Journey Details Card
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -844,8 +1189,10 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                   ],
                 ),
               ),
-            ),
+            ],
           ),
+        ),
+      ),
 
           // ── Bottom Action Bar ──
           Container(
