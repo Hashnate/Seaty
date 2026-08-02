@@ -101,12 +101,22 @@ void setupPushNotifications() async {
 
     debugPrint('User granted permission: ${settings.authorizationStatus}');
 
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
     try {
       final token = await messaging.getToken();
       debugPrint('FCM Token: $token');
     } catch (e) {
       debugPrint('Error getting FCM token: $e');
     }
+
+    messaging.onTokenRefresh.listen((newToken) {
+      debugPrint('FCM Token refreshed: $newToken');
+    });
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       debugPrint('Got a message whilst in the foreground!');
@@ -121,6 +131,16 @@ void setupPushNotifications() async {
             isWarning: false,
           );
         }
+      }
+    });
+
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('Notification clicked (App opened from background): ${message.data}');
+    });
+
+    messaging.getInitialMessage().then((RemoteMessage? message) {
+      if (message != null) {
+        debugPrint('Notification clicked (App opened from terminated state): ${message.data}');
       }
     });
   } catch (e) {

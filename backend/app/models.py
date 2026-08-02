@@ -37,6 +37,7 @@ class User(Base):
     gender = Column(String, nullable=True)
     role = Column(String, nullable=False, default="passenger")
     company_id = Column(UUID(as_uuid=True), ForeignKey("bus_companies.id", ondelete="SET NULL"), nullable=True)
+    fcm_token = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 

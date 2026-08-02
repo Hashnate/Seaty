@@ -9,3 +9,4 @@ passlib[bcrypt]
 websockets
 python-multipart
 python-dotenv
+firebase-admin
