@@ -47,6 +47,14 @@ def read_root():
         "version": "1.0.0"
     }
 
+from fastapi import Body
+
+@app.post("/api/v1/public/log")
+def public_log_root(payload: dict = Body(...)):
+    msg = payload.get("message", "No message provided")
+    print(f"[ios-native-log] {msg}")
+    return {"ok": True}
+
 import asyncio
 import datetime
 from app.database import SessionLocal
