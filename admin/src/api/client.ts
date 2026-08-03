@@ -255,6 +255,18 @@ export async function broadcastNotification(token: string, title: string, messag
   });
 }
 
+export async function sendDirectNotification(token: string, payload: { phone_number?: string; user_id?: string; title: string; message: string }) {
+  return request('/notifications/send-direct', {
+    method: 'POST',
+    body: payload,
+    token,
+  });
+}
+
+export async function getFcmStatus(token: string) {
+  return request('/notifications/fcm-status', { token });
+}
+
 
 // ==========================================
 // Recurring Trip Schedules (Owner/Admin)

@@ -14,6 +14,7 @@ import MyFleetPage from './pages/MyFleetPage';
 import MyTripsPage from './pages/MyTripsPage';
 import ConductorsPage from './pages/ConductorsPage';
 import PassengersPage from './pages/PassengersPage';
+import NotificationsPage from './pages/NotificationsPage';
 
 import { Loader2 } from 'lucide-react';
 
@@ -152,6 +153,14 @@ export default function App() {
                       element={
                         <RoleProtectedRoute allowed={['admin']}>
                           <SettingsPage />
+                        </RoleProtectedRoute>
+                      } 
+                    />
+                    <Route 
+                      path="/notifications" 
+                      element={
+                        <RoleProtectedRoute allowed={['admin']}>
+                          <NotificationsPage />
                         </RoleProtectedRoute>
                       } 
                     />

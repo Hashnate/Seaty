@@ -457,6 +457,13 @@ class NotificationBroadcast(BaseModel):
     target_role: str = Field(default="passenger", description="passenger, owner, conductor, admin, or all")
 
 
+class NotificationDirectSend(BaseModel):
+    user_id: Optional[UUID] = None
+    phone_number: Optional[str] = None
+    title: str
+    message: str
+
+
 class FCMTokenUpdate(BaseModel):
     fcm_token: str
 

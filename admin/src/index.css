@@ -626,20 +626,21 @@ button, input, select, textarea {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(4px);
+  background: transparent;
+  pointer-events: none;
   z-index: 999;
   display: flex;
   justify-content: flex-end;
-  animation: fadeIn 0.3s ease-out;
 }
 .notification-drawer {
   width: 380px;
   height: 100vh;
   background: var(--bg-card);
-  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.1);
+  box-shadow: -10px 0 40px rgba(0, 0, 0, 0.15);
   display: flex;
   flex-direction: column;
+  pointer-events: auto;
+  border-left: 1px solid var(--border-color);
   animation: slideInRight 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 @keyframes slideInRight {

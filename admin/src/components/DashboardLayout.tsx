@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Key,
   ChevronRight,
+  Bell,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { path: '/map', icon: MapIcon, label: 'Live Fleet Map', badge: 'Live' },
   { path: '/bookings', icon: Users, label: 'Bookings Log' },
   { path: '/passengers', icon: User, label: 'Passengers' },
+  { path: '/notifications', icon: Bell, label: 'Push Notifications' },
   { path: '/settings', icon: SettingsIcon, label: 'Console Settings' },
 ];
 
@@ -109,7 +111,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return ['/', '/fleet', '/trips', '/conductors', '/bookings', '/map'].includes(item.path);
     }
     // Admins can see all views
-    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/conductors', '/map', '/bookings', '/passengers', '/settings'].includes(item.path);
+    return ['/', '/approvals', '/companies', '/routes', '/fleet', '/trips', '/conductors', '/map', '/bookings', '/passengers', '/notifications', '/settings'].includes(item.path);
   });
 
   return (

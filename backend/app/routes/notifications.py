@@ -240,6 +240,37 @@ async def broadcast_notification(
     return {"status": "success", "message": f"Notification broadcasted to {len(users)} users"}
 
 
+@router.post("/send-direct")
+async def send_direct_notification(
+    payload: schemas.NotificationDirectSend,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Send a direct push notification to a specific user by user_id or phone_number."""
+    user = None
+    if payload.user_id:
+        user = db.query(models.User).filter(models.User.id == payload.user_id).first()
+    elif payload.phone_number:
+        target_norm = auth.normalize_phone_digits(payload.phone_number)
+        users = db.query(models.User).all()
+        for u in users:
+            if u.phone_number and auth.normalize_phone_digits(u.phone_number) == target_norm:
+                user = u
+                break
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    await create_and_send_notification(
+        db=db,
+        user_id=user.id,
+        title=payload.title,
+        message=payload.message,
+        noti_type="system"
+    )
+    return {"status": "success", "message": f"Notification sent to {user.full_name}"}
+
+
 @router.post("/fcm-token")
 def update_fcm_token(
     payload: schemas.FCMTokenUpdate,

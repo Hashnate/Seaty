@@ -22,6 +22,30 @@ export default function NotificationDrawer() {
     }
   };
 
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        // Only close if click did not land on the bell container
+        const bellEl = document.querySelector('.notification-bell-container');
+        if (bellEl && bellEl.contains(e.target as Node)) return;
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (token) {
       fetchNotis();
@@ -123,8 +147,8 @@ export default function NotificationDrawer() {
 
       {/* Slide-out Drawer Panel */}
       {isOpen && createPortal(
-        <div className="notification-drawer-backdrop" onClick={() => setIsOpen(false)}>
-          <aside className="notification-drawer" onClick={(e) => e.stopPropagation()}>
+        <div className="notification-drawer-backdrop">
+          <aside className="notification-drawer" ref={drawerRef}>
             <div className="drawer-header">
               <h3>Alerts & Notifications</h3>
               <div className="drawer-actions">
