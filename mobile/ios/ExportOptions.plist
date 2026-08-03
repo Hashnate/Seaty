@@ -23,5 +23,7 @@
         <key>lk.seaty.app</key>
         <string>Seaty App Store Profile</string>
     </dict>
+    <key>aps-environment</key>
+    <string>production</string>
 </dict>
 </plist>
