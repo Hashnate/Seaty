@@ -141,6 +141,7 @@ void setupPushNotifications() async {
         apnsToken = await messaging.getAPNSToken();
         if (apnsToken != null) {
           debugPrint('iOS: APNs token received on attempt ${i + 1}');
+          await messaging.setAPNSToken(apnsToken);
           break;
         }
         await Future.delayed(const Duration(seconds: 2));

@@ -279,7 +279,10 @@ class AuthNotifier extends Notifier<AuthState> {
           String? apnsToken;
           for (int i = 0; i < 5; i++) {
             apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-            if (apnsToken != null) break;
+            if (apnsToken != null) {
+              await FirebaseMessaging.instance.setAPNSToken(apnsToken);
+              break;
+            }
             await Future.delayed(const Duration(seconds: 1));
           }
           if (apnsToken == null) {
