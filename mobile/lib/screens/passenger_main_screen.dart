@@ -1,7 +1,7 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_player/video_player.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
@@ -161,9 +161,17 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   final FocusNode _fromFocusNode = FocusNode();
   final FocusNode _toFocusNode = FocusNode();
 
-  VideoPlayerController? _videoController;
+  late final PageController _heroPageController;
+  Timer? _heroSliderTimer;
+  int _heroImageIndex = 0;
   late final ScrollController _scrollController;
   double _headerOpacity = 0.0;
+
+  final List<String> _heroImages = [
+    'assets/images/bus_slider_1.png',
+    'assets/images/bus_slider_2.png',
+    'assets/images/bus_slider_3.png',
+  ];
 
   @override
   void initState() {
@@ -175,36 +183,22 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     _dateController = TextEditingController(text: 'All Dates');
     _fromFocusNode.addListener(_onFocusChange);
     _toFocusNode.addListener(_onFocusChange);
-    _initVideoBackground();
+    _heroPageController = PageController();
+    _startHeroSliderTimer();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      if (_videoController != null && !_videoController!.value.isPlaying) {
-        _videoController?.play();
+  void _startHeroSliderTimer() {
+    _heroSliderTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) return;
+      if (_heroPageController.hasClients) {
+        final nextPage = (_heroImageIndex + 1) % _heroImages.length;
+        _heroPageController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeInOut,
+        );
       }
-    }
-  }
-
-  void _initVideoBackground() {
-    _videoController =
-        VideoPlayerController.asset(
-            'assets/videos/bg_travel.mp4',
-            videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
-          )
-          ..initialize()
-              .then((_) {
-                if (mounted) {
-                  setState(() {});
-                  _videoController?.setLooping(true);
-                  _videoController?.setVolume(0.0);
-                  _videoController?.play();
-                }
-              })
-              .catchError((e) {
-                debugPrint('Error loading bg video: $e');
-              });
+    });
   }
 
   void _onFocusChange() {
@@ -225,7 +219,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _scrollController.dispose();
-    _videoController?.dispose();
+    _heroSliderTimer?.cancel();
+    _heroPageController.dispose();
     _fromController.dispose();
     _toController.dispose();
     _dateController.dispose();
@@ -242,11 +237,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider);
     final tripsState = ref.watch(tripsProvider);
     final notificationsState = ref.watch(notificationsProvider);
-    final headerContentColor =
-        Color.lerp(Colors.white, Colors.black, _headerOpacity) ?? Colors.white;
 
     final allTrips = tripsState.trips;
     final Set<String> placesSet = {'All'};
@@ -347,580 +339,577 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       return match;
     }).toList();
 
-    return Stack(
+    final double topPadding = MediaQuery.of(context).padding.top;
+    final double heroHeight = 310.0 + topPadding;
+
+    return Column(
       children: [
-        CustomScrollView(
-          controller: _scrollController,
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // ─── Glassmorphic Hero & Search Header ───
-            SliverToBoxAdapter(
-              child: Stack(
-                children: [
-                  // Background Video Player / Fallback Gradient
-                  SizedBox(
-                    height: 230 + MediaQuery.of(context).padding.top,
-                    width: double.infinity,
-                    child: ClipRRect(
-                      borderRadius: const BorderRadius.only(
-                        bottomLeft: Radius.circular(32),
-                        bottomRight: Radius.circular(32),
+        // ─── Fixed Non-Scrollable Auto-Sliding 3-Image Carousel Hero Header ───
+        SizedBox(
+          height: heroHeight,
+          width: double.infinity,
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(32),
+              bottomRight: Radius.circular(32),
+            ),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 1. Full-bleed Auto-sliding 3-Image Carousel Background (3s interval)
+                PageView.builder(
+                  controller: _heroPageController,
+                  itemCount: _heroImages.length,
+                  onPageChanged: (index) {
+                    setState(() {
+                      _heroImageIndex = index;
+                    });
+                  },
+                  itemBuilder: (context, index) {
+                    return Image.asset(
+                      _heroImages[index],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: const Color(0xFF0F172A),
+                        child: const Center(
+                          child: Icon(
+                            Icons.directions_bus_rounded,
+                            color: Colors.white24,
+                            size: 64,
+                          ),
+                        ),
                       ),
-                      child: Stack(
-                        fit: StackFit.expand,
+                    );
+                  },
+                ),
+
+                // Sheer Gradient Overlay for contrast while preserving 100% image visibility
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.black.withValues(alpha: 0.55),
+                        Colors.black.withValues(alpha: 0.15),
+                        Colors.black.withValues(alpha: 0.6),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+
+                // 2. Fixed App Bar (Seaty logo & Bell icon)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          if (_videoController != null &&
-                              _videoController!.value.isInitialized)
-                            FittedBox(
-                              fit: BoxFit.cover,
-                              child: SizedBox(
-                                width: _videoController!.value.size.width,
-                                height: _videoController!.value.size.height,
-                                child: VideoPlayer(_videoController!),
-                              ),
-                            )
-                          else
-                            Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFF0F172A),
-                                    Color(0xFF1E293B),
-                                  ],
+                          Row(
+                            children: [
+                              Image.asset(
+                                'assets/images/app_icon.png',
+                                width: 28,
+                                height: 28,
+                                color: Colors.white,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2563EB),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(
+                                    Icons.directions_bus_rounded,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
                                 ),
                               ),
-                            ),
-                          // Dark overlay to ensure text readability over the video
-                          Container(color: Colors.black.withOpacity(0.4)),
+                              const SizedBox(width: 8),
+                              const Text(
+                                'Seaty',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              IconButton(
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                icon: const Icon(
+                                  Icons.notifications_outlined,
+                                  color: Colors.white,
+                                  size: 24,
+                                ),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    SeatyPageRoute(
+                                      page: const NotificationsScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              if (notificationsState.unreadNotificationsCount > 0)
+                                Positioned(
+                                  right: -2,
+                                  top: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFEF4444),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 14,
+                                      minHeight: 14,
+                                    ),
+                                    child: Text(
+                                      '${notificationsState.unreadNotificationsCount}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
                   ),
-                  // Content
-                  SafeArea(
-                    bottom: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 8,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Spacer for sticky header
-                          const SizedBox(height: 44),
-                          // Greeting + Search prompt
-                          Text(
-                            'Hello, ${auth.userName} 👋',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withOpacity(0.7),
-                            ),
+                ),
+
+                // 3. Welcome text (brought VERY CLOSE to cart) + Search Card
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'Where are you traveling today?',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            letterSpacing: -0.4,
+                            shadows: [
+                              Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0, 1)),
+                            ],
                           ),
-                          const SizedBox(height: 2),
-                          const Text(
-                            'Where are you\ntraveling today?',
-                            style: TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.1,
-                              letterSpacing: -1,
-                            ),
-                          ),
-                          if (_selectedFrom.isNotEmpty || _selectedTo.isNotEmpty || _selectedDate != null) ...[
-                            const SizedBox(height: 12),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedFrom = '';
-                                    _selectedTo = '';
-                                    _selectedDate = null;
-                                    _fromController.text = '';
-                                    _toController.text = '';
-                                    _dateController.text = 'All Dates';
-                                  });
-                                  ref.read(tripsProvider.notifier).loadTrips();
-                                },
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: const Text(
-                                  'Clear all',
-                                  style: TextStyle(
-                                    color: Color(0xFF93C5FD),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12,
+                        ),
+                        const SizedBox(height: 8),
+
+                        // Main Search Input Card ("from to card") - Anchored at bottom of image
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_selectedFrom.isNotEmpty || _selectedTo.isNotEmpty || _selectedDate != null) ...[
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 6),
+                                  child: TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedFrom = '';
+                                        _selectedTo = '';
+                                        _selectedDate = null;
+                                        _fromController.text = '';
+                                        _toController.text = '';
+                                        _dateController.text = 'All Dates';
+                                      });
+                                      ref.read(tripsProvider.notifier).loadTrips();
+                                    },
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      backgroundColor: Colors.black.withValues(alpha: 0.5),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    child: const Text(
+                                      'Clear all filters',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 16),
-                          ] else
-                            const SizedBox(height: 32),
-                          // Main input card
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.05),
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Stack(
-                                  clipBehavior: Clip.none,
-                                  children: [
-                                    Column(
-                                      children: [
-                                        // From input row
-                                        _buildSearchInputRow(
-                                          icon: Icons.directions_bus_filled_outlined,
-                                          hint: 'From',
-                                          controller: _fromController,
-                                          focusNode: _fromFocusNode,
-                                          onChanged: (val) {
-                                            setState(() {
-                                              _selectedFrom = val;
-                                            });
-                                          },
-                                          onTap: () {
-                                            if (_fromController.text == 'All') {
-                                              _fromController.clear();
-                                              setState(() {
-                                                _selectedFrom = '';
-                                              });
-                                            }
-                                          },
-                                        ),
-                                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                                        // To input row
-                                        _buildSearchInputRow(
-                                          icon: Icons.directions_bus_filled_outlined,
-                                          hint: 'To',
-                                          controller: _toController,
-                                          focusNode: _toFocusNode,
-                                          onChanged: (val) {
-                                            setState(() {
-                                              _selectedTo = val;
-                                            });
-                                          },
-                                          onTap: () {
-                                            if (_toController.text == 'All') {
-                                              _toController.clear();
-                                              setState(() {
-                                                _selectedTo = '';
-                                              });
-                                            }
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                    // Circular swap button centered vertically on the divider line
-                                    Positioned(
-                                      right: 16,
-                                      top: 27, // Centered vertically perfectly on the divider
-                                      child: GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            final temp = _selectedFrom;
-                                            _selectedFrom = _selectedTo;
-                                            _selectedTo = temp;
-                                            _fromController.text = _selectedFrom;
-                                            _toController.text = _selectedTo;
-                                          });
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.all(7),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.08),
-                                                blurRadius: 4,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ],
-                                          ),
-                                          child: const Icon(
-                                            Icons.swap_vert_rounded,
-                                            color: Color(0xFF2563EB),
-                                            size: 18,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (_fromFocusNode.hasFocus)
-                                  _buildSuggestionsList(
-                                    query: _selectedFrom,
-                                    places: allPlaces,
-                                    onSelected: (val) {
-                                      setState(() {
-                                        _selectedFrom = val;
-                                        _fromController.text = val;
-                                        _fromFocusNode.unfocus();
-                                      });
-                                    },
-                                  ),
-                                if (_toFocusNode.hasFocus)
-                                  _buildSuggestionsList(
-                                    query: _selectedTo,
-                                    places: allPlaces,
-                                    onSelected: (val) {
-                                      setState(() {
-                                        _selectedTo = val;
-                                        _toController.text = val;
-                                        _toFocusNode.unfocus();
-                                      });
-                                    },
-                                  ),
-                                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                            ],
 
-                                // Date row
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Row(
+                            // Glassmorphic / Clean White Search Card
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.96),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.white, width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.18),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // From & To Inputs + Swap Button
+                                  Stack(
+                                    clipBehavior: Clip.none,
                                     children: [
-                                      const Icon(
-                                        Icons.calendar_month_outlined,
-                                        color: Color(0xFF64748B),
-                                        size: 22,
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () async {
-                                            final DateTime? picked = await showDatePicker(
-                                              context: context,
-                                              initialDate: _selectedDate ?? DateTime.now(),
-                                              firstDate: DateTime.now().subtract(const Duration(days: 305)),
-                                              lastDate: DateTime.now().add(const Duration(days: 365)),
-                                            );
-                                            if (picked != null) {
-                                              final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                      Column(
+                                        children: [
+                                          _buildSearchInputRow(
+                                            icon: Icons.directions_bus_filled_outlined,
+                                            hint: 'From',
+                                            controller: _fromController,
+                                            focusNode: _fromFocusNode,
+                                            onChanged: (val) {
                                               setState(() {
-                                                _selectedDate = picked;
-                                                _dateController.text = dateStr;
+                                                _selectedFrom = val;
                                               });
-                                              ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                            }
+                                            },
+                                            onTap: () {
+                                              if (_fromController.text == 'All') {
+                                                _fromController.clear();
+                                                setState(() {
+                                                  _selectedFrom = '';
+                                                });
+                                              }
+                                            },
+                                          ),
+                                          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                          _buildSearchInputRow(
+                                            icon: Icons.directions_bus_filled_outlined,
+                                            hint: 'To',
+                                            controller: _toController,
+                                            focusNode: _toFocusNode,
+                                            onChanged: (val) {
+                                              setState(() {
+                                                _selectedTo = val;
+                                              });
+                                            },
+                                            onTap: () {
+                                              if (_toController.text == 'All') {
+                                                _toController.clear();
+                                                setState(() {
+                                                  _selectedTo = '';
+                                                });
+                                              }
+                                            },
+                                          ),
+                                        ],
+                                      ),
+                                      Positioned(
+                                        right: 16,
+                                        top: 27,
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              final temp = _selectedFrom;
+                                              _selectedFrom = _selectedTo;
+                                              _selectedTo = temp;
+                                              _fromController.text = _selectedFrom;
+                                              _toController.text = _selectedTo;
+                                            });
                                           },
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              const Text(
-                                                'Date of journey',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Color(0xFF64748B),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(7),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withValues(alpha: 0.1),
+                                                  blurRadius: 4,
+                                                  offset: const Offset(0, 2),
                                                 ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                _formatDateOfJourney(_selectedDate),
-                                                style: const TextStyle(
-                                                  color: Color(0xFF0F172A),
-                                                  fontSize: 14,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
+                                            child: const Icon(
+                                              Icons.swap_vert_rounded,
+                                              color: Color(0xFF2563EB),
+                                              size: 18,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _buildDateQuickPill('Today', () {
-                                            final now = DateTime.now();
-                                            final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-                                            setState(() {
-                                              _selectedDate = now;
-                                              _dateController.text = dateStr;
-                                            });
-                                            ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                          }),
-                                          const SizedBox(width: 8),
-                                          _buildDateQuickPill('Tomorrow', () {
-                                            final tomorrow = DateTime.now().add(const Duration(days: 1));
-                                            final dateStr = "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
-                                            setState(() {
-                                              _selectedDate = tomorrow;
-                                              _dateController.text = dateStr;
-                                            });
-                                            ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                          }),
-                                        ],
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
-                            ),
-                          ),
+                                  if (_fromFocusNode.hasFocus)
+                                    _buildSuggestionsList(
+                                      query: _selectedFrom,
+                                      places: allPlaces,
+                                      onSelected: (val) {
+                                        setState(() {
+                                          _selectedFrom = val;
+                                          _fromController.text = val;
+                                          _fromFocusNode.unfocus();
+                                        });
+                                      },
+                                    ),
+                                  if (_toFocusNode.hasFocus)
+                                    _buildSuggestionsList(
+                                      query: _selectedTo,
+                                      places: allPlaces,
+                                      onSelected: (val) {
+                                        setState(() {
+                                          _selectedTo = val;
+                                          _toController.text = val;
+                                          _toFocusNode.unfocus();
+                                        });
+                                      },
+                                    ),
+                                  const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
-                          // Search button
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                _fromFocusNode.unfocus();
-                                _toFocusNode.unfocus();
-                                final dateStr = _selectedDate != null
-                                    ? "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}"
-                                    : null;
-                                ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Searching buses from $_selectedFrom to $_selectedTo...'),
-                                    duration: const Duration(seconds: 1),
-                                  ),
-                                );
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFFEF4444),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(26),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.search_rounded, size: 20),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    'Search buses',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.2,
+                                  // Date Row
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_month_outlined,
+                                          color: Color(0xFF64748B),
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: () async {
+                                              final DateTime? picked = await showDatePicker(
+                                                context: context,
+                                                initialDate: _selectedDate ?? DateTime.now(),
+                                                firstDate: DateTime.now().subtract(const Duration(days: 305)),
+                                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                                              );
+                                              if (picked != null) {
+                                                final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                                setState(() {
+                                                  _selectedDate = picked;
+                                                  _dateController.text = dateStr;
+                                                });
+                                                ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                              }
+                                            },
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text(
+                                                  'Date of journey',
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Color(0xFF64748B),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  _formatDateOfJourney(_selectedDate),
+                                                  style: const TextStyle(
+                                                    color: Color(0xFF0F172A),
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            _buildDateQuickPill('Today', () {
+                                              final now = DateTime.now();
+                                              final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+                                              setState(() {
+                                                _selectedDate = now;
+                                                _dateController.text = dateStr;
+                                              });
+                                              ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                            }),
+                                            const SizedBox(width: 6),
+                                            _buildDateQuickPill('Tomorrow', () {
+                                              final tomorrow = DateTime.now().add(const Duration(days: 1));
+                                              final dateStr = "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
+                                              setState(() {
+                                                _selectedDate = tomorrow;
+                                                _dateController.text = dateStr;
+                                              });
+                                              ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                            }),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
 
-
-            // ─── Ride Results Title ───
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '${filteredTrips.length} Rides Found',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ─── Floating Neumorphic Trip Cards ───
-            if (filteredTrips.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.02),
-                              blurRadius: 20,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.search_off_rounded,
-                          size: 40,
-                          color: Color(0xFFCBD5E1),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'No rides found',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Try adjusting your search criteria',
-                        style: TextStyle(color: Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  bottom: 120,
-                ),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    return _buildModernTripCard(context, filteredTrips[index]);
-                  }, childCount: filteredTrips.length),
-                ),
-              ),
-          ],
-        ),
-        // Sticky Header with content-color scroll transition
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            color: Colors.transparent,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        Image.asset(
-                          'assets/images/app_icon.png',
-                          width: 28,
-                          height: 28,
-                          color: headerContentColor,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF2563EB),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  Icons.directions_bus_rounded,
-                                  color: headerContentColor,
-                                  size: 16,
-                                ),
-                              ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Seaty',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
-                            color: headerContentColor,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              icon: Icon(
-                                Icons.notifications_outlined,
-                                color: headerContentColor,
-                                size: 24,
-                              ),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  SeatyPageRoute(
-                                    page: const NotificationsScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                            if (notificationsState.unreadNotificationsCount > 0)
-                              Positioned(
-                                right: -2,
-                                top: -2,
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFFEF4444),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 14,
-                                    minHeight: 14,
-                                  ),
-                                  child: Text(
-                                    '${notificationsState.unreadNotificationsCount}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
+                            // Red Search Buses Button inside slider container
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 48,
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  _fromFocusNode.unfocus();
+                                  _toFocusNode.unfocus();
+                                  final dateStr = _selectedDate != null
+                                      ? "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}"
+                                      : null;
+                                  ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Searching buses from $_selectedFrom to $_selectedTo...'),
+                                      duration: const Duration(seconds: 1),
                                     ),
-                                    textAlign: TextAlign.center,
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEF4444),
+                                  foregroundColor: Colors.white,
+                                  elevation: 4,
+                                  shadowColor: Colors.black45,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(24),
                                   ),
                                 ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.search_rounded, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Search buses',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                            ),
                           ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // ─── Scrollable Rides Section Only ───
+        Expanded(
+          child: CustomScrollView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+                  child: Text(
+                    '${filteredTrips.length} Rides Found',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
+                    ),
+                  ),
                 ),
               ),
-            ),
+
+              if (filteredTrips.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.02),
+                                blurRadius: 20,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.search_off_rounded,
+                            size: 40,
+                            color: Color(0xFFCBD5E1),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'No rides found',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Try adjusting your search criteria',
+                          style: TextStyle(color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    bottom: 100,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      return _buildModernTripCard(context, filteredTrips[index]);
+                    }, childCount: filteredTrips.length),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -1052,285 +1041,409 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     final int bookedCount = (trip['booked_seats'] as List?)?.length ?? 0;
     final int seatsLeft = (totalSeats - bookedCount).clamp(0, totalSeats);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0A2540).withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    // Cycle through generated carousel images for cards
+    final String busImage = (trip['id'].hashCode % 3 == 0)
+        ? 'assets/images/bus_slider_1.png'
+        : ((trip['id'].hashCode % 3 == 1)
+            ? 'assets/images/bus_slider_2.png'
+            : 'assets/images/bus_slider_3.png');
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          SeatyPageRoute(
+            page: BusDetailsScreen(trip: trip),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 12.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Header Row (Bus Info & Price Pill) ──
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0A2540).withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── 1. Top Image Banner Header (Matching Reference Prompt) ──
+            SizedBox(
+              height: 140,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    busImage,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: const Color(0xFF0F172A),
+                      child: const Icon(Icons.directions_bus_rounded, color: Colors.white24, size: 48),
+                    ),
+                  ),
+                  // Dark Gradient Overlay for contrast
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.black.withValues(alpha: 0.5),
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.7),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                    ),
+                  ),
+                  // Overlay Badges: Reg Pill top-left, Rating Box top-right
+                  Positioned(
+                    top: 10,
+                    left: 12,
+                    right: 12,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        // Reg Pill
                         Container(
-                          padding: const EdgeInsets.all(5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF0A2540,
-                            ).withValues(alpha: 0.06),
-                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.black.withValues(alpha: 0.6),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.white24, width: 0.8),
                           ),
-                          child: const Icon(
-                            Icons.directions_bus_rounded,
-                            color: Color(0xFF0A2540),
-                            size: 16,
+                          child: Text(
+                            trip['reg'] ?? 'LUX-BUS',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontFamily: 'monospace',
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        // Green Rating Box (4.2 ★)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF047857), // Green rating box
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Text(
+                                '4.2',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              SizedBox(width: 3),
+                              Icon(
+                                Icons.star_rounded,
+                                color: Colors.white,
+                                size: 12,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Bottom Row inside Image Banner: Title & Price Pill
+                  Positioned(
+                    bottom: 10,
+                    left: 12,
+                    right: 12,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            trip['bus_name'] ?? 'Soyaru Sampath Express',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.3,
+                              shadows: [
+                                Shadow(blurRadius: 4, color: Colors.black54, offset: Offset(0, 1)),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2563EB),
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.2),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Text(
+                            'Rs. $priceStr',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── 2. Card Content Body ──
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Route Line (Origin -> Destination)
+                  Row(
+                    children: [
+                      Text(
+                        trip['origin'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Icon(
+                        Icons.east_rounded,
+                        color: Color(0xFF2563EB),
+                        size: 15,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          trip['destination'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0F172A),
+                            letterSpacing: -0.3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Distance & Location Subtitle (e.g., 8.1 km • Rajarajeshwari Nagar, Bangalore)
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.place_rounded,
+                        size: 13,
+                        color: Color(0xFF64748B),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          '8.1 km • ${trip['origin'] ?? 'Location'}, ${trip['destination'] ?? 'City'}',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Cuisines / Amenities & Status Pill Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Status Badge: "Open till 1AM ∨"
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              trip['bus_name'],
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF0A2540),
-                                letterSpacing: -0.3,
+                              'Open till 1AM',
+                              style: TextStyle(
+                                color: Color(0xFF047857),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 10.5,
                               ),
                             ),
+                            SizedBox(width: 3),
+                            Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: Color(0xFF047857),
+                              size: 14,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Departure Time Tag & Amenities Icons
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (trip['amenities'] != null && (trip['amenities'] as List).isNotEmpty) ...[
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: (trip['amenities'] as List).take(3).map<Widget>((ame) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 4.0),
+                                  child: _getAmenityIcon(ame.toString()),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.schedule_rounded,
+                                  size: 12,
+                                  color: Color(0xFF2563EB),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  trip['departure'] ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF1E40AF),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // ── 3. Bottom Action Row ──
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFF8FAFC),
+                border: Border(
+                  top: BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Seat Availability Pill
+                  Builder(
+                    builder: (context) {
+                      final isLowSeats = seatsLeft <= 10;
+                      final Color seatsColor = isLowSeats ? const Color(0xFFEF4444) : const Color(0xFF10B981);
+                      final Color seatsBgColor = seatsColor.withValues(alpha: 0.1);
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: seatsBgColor,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.event_seat_rounded,
+                              size: 12,
+                              color: seatsColor,
+                            ),
+                            const SizedBox(width: 4),
                             Text(
-                              trip['reg'],
+                              '$seatsLeft seats left',
                               style: TextStyle(
-                                fontSize: 9.5,
-                                color: const Color(
-                                  0xFF0A2540,
-                                ).withValues(alpha: 0.5),
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w500,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: seatsColor,
                               ),
                             ),
                           ],
                         ),
+                      );
+                    },
+                  ),
+
+                  // Dark Book Seats Button
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Book Seats',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          color: Colors.white,
+                          size: 13,
+                        ),
                       ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 3.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB),
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                      child: Text(
-                        'Rs. $priceStr',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // ── Route Row (Large Bold Dark Blue Text with Arrow) ──
-                Row(
-                  children: [
-                    Text(
-                      trip['origin'],
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0A2540),
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Icon(
-                      Icons.east_rounded,
-                      color: Color(0xFF2563EB),
-                      size: 15,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        trip['destination'],
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0A2540),
-                          letterSpacing: -0.4,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-
-                // ── Ice-Blue Tags and Amenities Icon Row ──
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Highlighted Time/Date Tag
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2563EB).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF2563EB).withValues(alpha: 0.4),
-                          width: 1.2,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.schedule_rounded,
-                            size: 13,
-                            color: Color(0xFF2563EB),
-                          ),
-                          const SizedBox(width: 4.5),
-                          Text(
-                            trip['departure'],
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w900,
-                              color: Color(0xFF1E40AF),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Amenities Icon Only Wrap (monochromatic gray)
-                    if (trip['amenities'] != null &&
-                        (trip['amenities'] as List).isNotEmpty)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: (trip['amenities'] as List).map<Widget>((
-                          ame,
-                        ) {
-                          return Padding(
-                            padding: const EdgeInsets.only(left: 6.0),
-                            child: Tooltip(
-                              message: ame.toString(),
-                              child: _getAmenityIcon(ame.toString()),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // ── Divider & Action Button Block ──
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(16),
-              ),
-              border: Border(
-                top: BorderSide(
-                  color: const Color(0xFFE2E8F0).withValues(alpha: 0.6),
-                ),
+                  ),
+                ],
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Builder(
-                  builder: (context) {
-                    final isLowSeats = seatsLeft <= 10;
-                    final Color seatsColor = isLowSeats ? const Color(0xFFEF4444) : const Color(0xFF10B981);
-                    final Color seatsBgColor = seatsColor.withValues(alpha: 0.08);
-
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: seatsBgColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: seatsColor.withValues(alpha: 0.2), width: 1.0),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.event_seat_rounded,
-                            size: 13,
-                            color: seatsColor,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '$seatsLeft seats left',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: seatsColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      SeatyPageRoute(
-                        page: BusDetailsScreen(trip: trip),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0A2540),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 8,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Row(
-                    children: [
-                      Text(
-                        'Book Seats',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(width: 4),
-                      Icon(Icons.arrow_forward_rounded, size: 14),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

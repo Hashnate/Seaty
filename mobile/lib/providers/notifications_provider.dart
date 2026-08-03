@@ -176,28 +176,13 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
   void startNotificationsListener() {
     stopNotificationsListener();
     final auth = ref.read(authProvider);
-    if (auth.token.isEmpty) return;
+    if (auth.token.isEmpty || auth.token.startsWith('simulated')) return;
 
     state = state.copyWith(isNotiListenerConnected: true);
     final settings = ref.read(settingsProvider);
 
     try {
-      String currentWsBase = settings.wsBaseUrl;
-      if (settings.apiBaseUrl.contains('localhost') ||
-          settings.apiBaseUrl.contains('127.0.0.1') ||
-          settings.apiBaseUrl.contains('10.0.2.2') ||
-          settings.apiBaseUrl.contains('192.168.')) {
-        try {
-          final uri = Uri.parse(settings.apiBaseUrl);
-          final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-          currentWsBase = '$scheme://${uri.host}:${uri.port}/api/v1/ws';
-        } catch (_) {}
-      }
-
-      final cleanWsBase = currentWsBase.endsWith('/ws')
-          ? currentWsBase.substring(0, currentWsBase.length - 3)
-          : currentWsBase;
-      final wsUrl = '$cleanWsBase/notifications/ws?token=${auth.token}';
+      final wsUrl = buildWebSocketUrl(settings.apiBaseUrl, 'notifications/ws?token=${auth.token}');
       _notificationsChannel = WebSocketChannel.connect(Uri.parse(wsUrl));
 
       _notificationsChannel!.stream.listen(
@@ -221,7 +206,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
           }
         },
         onError: (err) {
-          debugPrint('Notification WS error: $err');
+          debugPrint('Notification WS connection notice: $err');
           state = state.copyWith(isNotiListenerConnected: false);
         },
         onDone: () {
@@ -230,7 +215,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
         cancelOnError: true,
       );
     } catch (e) {
-      debugPrint('Notification WS connection failed: $e');
+      debugPrint('Notification WS connection notice: $e');
       state = state.copyWith(isNotiListenerConnected: false);
     }
   }
