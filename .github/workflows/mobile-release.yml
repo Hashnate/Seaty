@@ -155,15 +155,7 @@ jobs:
 
       - name: Build and export signed IPA
         run: |
-          # Archive unsigned, then sign at export time from ExportOptions.plist.
-          flutter build ipa --release --build-number=${{ env.BUILD_NUMBER }} --dart-define=FLUTTER_BUILD_NUMBER=${{ env.BUILD_NUMBER }} --no-codesign
-
-          xcodebuild -exportArchive \
-            -archivePath build/ios/archive/Runner.xcarchive \
-            -exportPath build/ios/ipa \
-            -exportOptionsPlist ios/ExportOptions.plist \
-            -allowProvisioningUpdates
-
+          flutter build ipa --release --build-number=${{ env.BUILD_NUMBER }} --dart-define=FLUTTER_BUILD_NUMBER=${{ env.BUILD_NUMBER }} --export-options-plist=ios/ExportOptions.plist
           mv build/ios/ipa/*.ipa build/ios/ipa/app.ipa
 
       - name: Upload to TestFlight
