@@ -285,3 +285,11 @@ def fcm_status(
             for u in users
         ],
     }
+
+
+@router.post("/public/log")
+def public_log(payload: dict = Body(...)):
+    """Public logging endpoint for native iOS and client diagnostics."""
+    msg = payload.get("message", "No message provided")
+    print(f"[client-log] {msg}")
+    return {"ok": True}
