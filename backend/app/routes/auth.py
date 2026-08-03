@@ -286,3 +286,19 @@ def change_password(
     db.commit()
     return {"message": "Password changed successfully."}
 
+
+@router.api_route("/fcm-token", methods=["POST", "PUT"])
+@router.api_route("/me/fcm-token", methods=["POST", "PUT"])
+def update_fcm_token_auth_alias(
+    payload: schemas.FCMTokenUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Compatibility alias endpoint for FCM device token registration under /auth."""
+    old_token = current_user.fcm_token
+    current_user.fcm_token = payload.fcm_token
+    db.commit()
+    print(f"FCM token updated via auth endpoint alias for user {current_user.id} ({current_user.full_name}): "
+          f"had_previous={'yes' if old_token else 'no'}, new_token={payload.fcm_token[:20]}...")
+    return {"status": "success", "message": "FCM token updated successfully"}
+
