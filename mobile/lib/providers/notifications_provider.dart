@@ -68,18 +68,19 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
 
     for (int attempt = 0; attempt < 5; attempt++) {
       try {
-        // On iOS, wait for APNs token before requesting FCM token
+        // On iOS, poll briefly for APNs token readiness before requesting FCM token
         if (!kIsWeb && Platform.isIOS) {
           String? apnsToken;
-          for (int i = 0; i < 10; i++) {
+          for (int i = 0; i < 5; i++) {
             apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-            if (apnsToken != null) break;
-            await Future.delayed(const Duration(seconds: 2));
+            if (apnsToken != null) {
+              debugPrint('iOS APNs token ready on attempt ${i + 1}');
+              break;
+            }
+            await Future.delayed(const Duration(seconds: 1));
           }
           if (apnsToken == null) {
-            debugPrint('FCM registration: APNs token not available on iOS, attempt ${attempt + 1}');
-            await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
-            continue;
+            debugPrint('FCM registration notice: APNs token still null on attempt ${attempt + 1}, attempting getToken fallback');
           }
         }
 
