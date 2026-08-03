@@ -231,40 +231,23 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     _dynamicRole = widget.initialRole ?? 'passenger';
   }
 
-  void _generateAndSendOtp(BuildContext context, String name, String phone) {
-    final random = DateTime.now().millisecondsSinceEpoch % 1000000;
-    _generatedOtp = random.toString().padLeft(6, '0');
-    _otpController.text = _generatedOtp; // Auto-complete verification code
-
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.sms_rounded, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text(
-                        'SMS: Seaty Verification Code',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text('Your OTP code is: $_generatedOtp'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            duration: const Duration(seconds: 10),
-            backgroundColor: const Color(0xFF0A2540),
-          ),
-        );
+  Future<void> _generateAndSendOtp(BuildContext context, String name, String phone) async {
+    _otpController.clear();
+    SeatyNotifications.show(context, 'Sending SMS verification code...');
+    final result = await ref.read(authProvider.notifier).sendOtp(phone);
+    if (mounted) {
+      if (result['success'] == true) {
+        final devOtp = result['otp_code'];
+        if (devOtp != null && devOtp.toString().isNotEmpty) {
+          _otpController.text = devOtp.toString();
+          SeatyNotifications.show(context, 'Dev Mode: Auto-filled OTP code (${devOtp.toString()})');
+        } else {
+          SeatyNotifications.show(context, 'SMS sent! Please check your mobile phone for OTP.');
+        }
+      } else {
+        SeatyNotifications.show(context, result['message'] ?? 'Failed to send SMS OTP. Please try again.', isError: true);
       }
-    });
+    }
   }
 
   @override
@@ -398,7 +381,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 if (exists) {
                   _isNewUser = false;
                   _currentUserName = name;
-                  _generateAndSendOtp(context, name, phone);
+                  await _generateAndSendOtp(context, name, phone);
                   setState(() => _authState = PhoneAuthState.verifyOtp);
                 } else {
                   FocusScope.of(context).unfocus();
@@ -569,10 +552,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 );
 
                 _dynamicRole = 'passenger';
-                await ref.read(authProvider.notifier).registerPhoneDB(name, phone, 'passenger');
                 _isNewUser = true;
                 _currentUserName = name;
-                _generateAndSendOtp(context, name, phone);
+                await _generateAndSendOtp(context, name, phone);
                 setState(() => _authState = PhoneAuthState.verifyOtp);
               },
               style: ElevatedButton.styleFrom(
@@ -683,22 +665,38 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 final otp = _otpController.text.trim();
-                if (otp != _generatedOtp) {
+                final phone = _phoneController.text.trim();
+
+                if (otp.length < 6) {
                   SeatyNotifications.show(
                     context,
-                    'Invalid verification code. Please check the SMS.',
+                    'Please enter the full 6-digit verification code.',
                     isError: true,
                   );
                   return;
                 }
 
-                final phone = _phoneController.text.trim();
-                final name = _currentUserName.isNotEmpty
-                    ? _currentUserName
-                    : 'User';
-                ref.read(authProvider.notifier).login(name, _dynamicRole, phone);
+                SeatyNotifications.show(context, 'Verifying OTP code...');
+                final verifyResult = await ref.read(authProvider.notifier).verifyOtp(phone, otp);
+
+                if (verifyResult['success'] != true) {
+                  if (context.mounted) {
+                    SeatyNotifications.show(
+                      context,
+                      verifyResult['message'] ?? 'Invalid verification code. Please check your SMS.',
+                      isError: true,
+                    );
+                  }
+                  return;
+                }
+
+                final name = _currentUserName.isNotEmpty ? _currentUserName : 'User';
+                if (_isNewUser) {
+                  await ref.read(authProvider.notifier).registerPhoneDB(name, phone, _dynamicRole, otpCode: otp);
+                }
+                await ref.read(authProvider.notifier).login(name, _dynamicRole, phone);
                 _otpController.clear();
               },
               style: ElevatedButton.styleFrom(
@@ -722,7 +720,6 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                     ? _currentUserName
                     : 'User';
                 _generateAndSendOtp(context, name, phone);
-                SeatyNotifications.show(context, 'A new OTP has been sent.');
               },
               child: const Text(
                 'Resend Code',

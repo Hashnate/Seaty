@@ -414,6 +414,25 @@ class PhoneRegisterRequest(BaseModel):
     phone_number: str
     full_name: str
     role: str
+    otp_code: Optional[str] = None
+
+class SendOTPRequest(BaseModel):
+    phone_number: str
+    purpose: Optional[str] = "auth"
+
+class SendOTPResponse(BaseModel):
+    success: bool
+    message: str
+    phone_number: str
+    otp_code: Optional[str] = None
+
+class VerifyOTPRequest(BaseModel):
+    phone_number: str
+    otp_code: str
+
+class VerifyOTPResponse(BaseModel):
+    success: bool
+    message: str
 
 
 # ==========================================

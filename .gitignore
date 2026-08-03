@@ -1,0 +1,36 @@
+# Environment files & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+
+# Flutter / Mobile
+.dart_tool/
+.fvm/
+.idea/
+build/
+*.apk
+*.aab
+
+# Node / JS
+node_modules/
+dist/
+.next/
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/

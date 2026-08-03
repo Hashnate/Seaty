@@ -143,7 +143,60 @@ class AuthNotifier extends Notifier<AuthState> {
     };
   }
 
-  Future<bool> registerPhoneDB(String name, String phone, String role) async {
+  Future<Map<String, dynamic>> sendOtp(String phone) async {
+    final settings = ref.read(settingsProvider);
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${settings.apiBaseUrl}/auth/otp/send'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'phone_number': cleanPhone}),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'success': data['success'] == true,
+          'otp_code': data['otp_code'],
+          'message': data['message'],
+        };
+      }
+    } catch (e) {
+      debugPrint('Send OTP API error: $e');
+    }
+    return {'success': false, 'otp_code': null, 'message': 'Network error sending OTP'};
+  }
+
+  Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode) async {
+    final settings = ref.read(settingsProvider);
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${settings.apiBaseUrl}/auth/otp/verify'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({
+              'phone_number': cleanPhone,
+              'otp_code': otpCode,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      final data = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'OTP Verified'};
+      } else {
+        return {'success': false, 'message': data['detail'] ?? 'Invalid OTP code'};
+      }
+    } catch (e) {
+      debugPrint('Verify OTP API error: $e');
+      return {'success': false, 'message': 'Network error verifying OTP'};
+    }
+  }
+
+  Future<bool> registerPhoneDB(String name, String phone, String role, {String? otpCode}) async {
     final settings = ref.read(settingsProvider);
     final assignedRole = role.isNotEmpty ? role : 'passenger';
     try {
@@ -155,9 +208,10 @@ class AuthNotifier extends Notifier<AuthState> {
               'phone_number': phone,
               'full_name': name,
               'role': assignedRole,
+              if (otpCode != null) 'otp_code': otpCode,
             }),
           )
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(seconds: 5));
 
       return response.statusCode == 201;
     } catch (e) {

@@ -94,6 +94,19 @@ def create_booking(
 
     notify_seat_change(str(booking_in.trip_id), "SEAT_HELD", booking_in.selected_seats)
 
+    # Dispatch Booking Confirmation SMS via Notify.lk Gateway
+    if current_user.phone_number:
+        try:
+            from app.services.sms_service import send_sms
+            route_info = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
+            orig = route_info.origin if route_info else "Origin"
+            dest = route_info.destination if route_info else "Destination"
+            seats_str = ", ".join(booking_in.selected_seats)
+            sms_text = f"Seaty Booking Confirmed! Seats: {seats_str} ({orig} to {dest}). Booking ID: #{str(db_booking.id)[:8]}"
+            send_sms(current_user.phone_number, sms_text)
+        except Exception as e:
+            pass
+
     # Preload details for response
     db_booking.trip = trip
     db_booking.passenger = current_user

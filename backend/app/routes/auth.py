@@ -5,6 +5,7 @@ import uuid
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -54,11 +55,84 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def get_current_user_profile(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
+import random
+import time
+from app.services.sms_service import send_sms
+
+# In-memory OTP store: normalized_phone -> {"code": str, "expires_at": float, "verified": bool}
+otp_store = {}
+
 def normalize_phone_digits(raw: str) -> str:
     if not raw:
         return ""
     digits = "".join(c for c in raw if c.isdigit())
     return digits[-9:] if len(digits) >= 9 else digits
+
+@router.post("/otp/send", response_model=schemas.SendOTPResponse)
+def send_otp(payload: schemas.SendOTPRequest):
+    target_norm = normalize_phone_digits(payload.phone_number)
+    if not target_norm:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid mobile number provided."
+        )
+
+    is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
+    # In dev environment, set code to 123456; in production, generate random 6-digit code
+    otp_code = "123456" if is_dev else str(random.randint(100000, 999999))
+    expires_at = time.time() + 300  # Valid for 5 minutes
+
+    otp_store[target_norm] = {
+        "code": otp_code,
+        "expires_at": expires_at,
+        "verified": False
+    }
+
+    message = f"Your Seaty verification code is {otp_code}. Valid for 5 minutes."
+    send_sms(payload.phone_number, message)
+
+    res = {
+        "success": True,
+        "message": f"Verification code sent via SMS to {payload.phone_number}" + (" (Dev Mode Code: 123456)" if is_dev else ""),
+        "phone_number": payload.phone_number,
+    }
+    if is_dev:
+        res["otp_code"] = otp_code
+    return res
+
+@router.post("/otp/verify", response_model=schemas.VerifyOTPResponse)
+def verify_otp(payload: schemas.VerifyOTPRequest):
+    target_norm = normalize_phone_digits(payload.phone_number)
+    is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
+
+    # In dev environment, auto-approve if code is '123456' or 'AUTO' or matches generated code
+    if is_dev:
+        if payload.otp_code.strip() in ["123456", "AUTO"] or (target_norm in otp_store and otp_store[target_norm]["code"] == payload.otp_code.strip()):
+            if target_norm in otp_store:
+                otp_store[target_norm]["verified"] = True
+            return {
+                "success": True,
+                "message": "OTP verification successful (Development Auto-Approved)."
+            }
+
+    entry = otp_store.get(target_norm)
+    if not entry or time.time() > entry["expires_at"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP code has expired or was not requested. Please request a new code."
+        )
+
+    if entry["code"] != payload.otp_code.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification code. Please check your SMS and try again."
+        )
+
+    entry["verified"] = True
+    return {
+        "success": True,
+        "message": "OTP verification successful."
+    }
 
 @router.post("/phone/check", response_model=schemas.PhoneCheckResponse)
 def check_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
@@ -91,6 +165,22 @@ def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(
     email = f"{payload.phone_number}@seaty.lk"
     target_norm = normalize_phone_digits(payload.phone_number)
     
+    # OTP Validation check if OTP code provided
+    if payload.otp_code:
+        entry = otp_store.get(target_norm)
+        if not entry or time.time() > entry["expires_at"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OTP code has expired or was not requested."
+            )
+        if entry["code"] != payload.otp_code.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OTP verification code."
+            )
+        # Clear used OTP
+        otp_store.pop(target_norm, None)
+
     users = db.query(models.User).all()
     for u in users:
         if u.phone_number and normalize_phone_digits(u.phone_number) == target_norm and u.role == payload.role:

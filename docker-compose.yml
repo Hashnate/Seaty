@@ -19,6 +19,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: seaty-backend
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:seaty_secure_password_987@db:5432/seaty
       SECRET_KEY: SUPER_SECRET_KEY_SEATY_1234567890_CHANGEME_IN_PRODUCTION
