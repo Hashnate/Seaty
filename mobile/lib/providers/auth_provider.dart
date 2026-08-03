@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -272,6 +274,21 @@ class AuthNotifier extends Notifier<AuthState> {
 
     for (int attempt = 0; attempt < 5; attempt++) {
       try {
+        // On iOS, wait for APNs token before requesting FCM token
+        if (!kIsWeb && Platform.isIOS) {
+          String? apnsToken;
+          for (int i = 0; i < 10; i++) {
+            apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+            if (apnsToken != null) break;
+            await Future.delayed(const Duration(seconds: 2));
+          }
+          if (apnsToken == null) {
+            debugPrint('syncFcmToken: APNs token not available on iOS, attempt ${attempt + 1}');
+            await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
+            continue;
+          }
+        }
+
         final fcmToken = await FirebaseMessaging.instance.getToken();
         if (fcmToken != null && fcmToken.isNotEmpty) {
           final res = await http.post(
@@ -282,13 +299,15 @@ class AuthNotifier extends Notifier<AuthState> {
             },
             body: json.encode({'fcm_token': fcmToken}),
           );
-          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: $fcmToken');
-          break;
+          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: ${fcmToken.substring(0, 20)}...');
+          if (res.statusCode == 200) break;
+        } else {
+          debugPrint('FCM token is null/empty on syncFcmToken attempt ${attempt + 1}');
         }
       } catch (e) {
         debugPrint('FCM token sync attempt ${attempt + 1} failed: $e');
-        await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
       }
+      await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
     }
   }
 

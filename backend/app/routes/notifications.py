@@ -47,12 +47,22 @@ manager = NotificationManager()
 def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
     """Sends native FCM push notification via firebase_admin SDK."""
     if not fcm_token:
+        print("FCM Push skipped: no FCM token provided")
         return
     try:
+        import os
         import firebase_admin
-        from firebase_admin import messaging
+        from firebase_admin import messaging, credentials
+
         if not firebase_admin._apps:
-            firebase_admin.initialize_app()
+            cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+            if cred_path and os.path.exists(cred_path):
+                cred = credentials.Certificate(cred_path)
+                firebase_admin.initialize_app(cred)
+                print(f"Firebase Admin SDK initialized with credentials from {cred_path}")
+            else:
+                print(f"WARNING: Firebase credentials not found at {cred_path}. FCM push will fail.")
+                return
         
         msg = messaging.Message(
             notification=messaging.Notification(
@@ -62,7 +72,8 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
             data={k: str(v) for k, v in (data or {}).items()},
             token=fcm_token,
         )
-        messaging.send(msg)
+        response = messaging.send(msg)
+        print(f"FCM Push sent successfully: {response}")
     except Exception as e:
         print(f"FCM Push notification error: {e}")
 
@@ -236,8 +247,41 @@ def update_fcm_token(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Update current user's FCM device token for native push notifications."""
+    old_token = current_user.fcm_token
     current_user.fcm_token = payload.fcm_token
     db.commit()
+    print(f"FCM token updated for user {current_user.id} ({current_user.full_name}): "
+          f"had_previous={'yes' if old_token else 'no'}, new_token={payload.fcm_token[:20]}...")
     return {"status": "success", "message": "FCM token updated successfully"}
 
 
+@router.get("/fcm-status")
+def fcm_status(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Diagnostic: Check FCM configuration and token status across all users."""
+    import os
+    cred_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "NOT SET")
+    cred_exists = os.path.exists(cred_path) if cred_path != "NOT SET" else False
+
+    users = db.query(models.User).all()
+    users_with_tokens = [u for u in users if u.fcm_token]
+    users_without_tokens = [u for u in users if not u.fcm_token]
+
+    return {
+        "firebase_credentials_env": cred_path,
+        "firebase_credentials_file_exists": cred_exists,
+        "total_users": len(users),
+        "users_with_fcm_token": len(users_with_tokens),
+        "users_without_fcm_token": len(users_without_tokens),
+        "users_detail": [
+            {
+                "id": str(u.id),
+                "name": u.full_name,
+                "role": u.role,
+                "has_fcm_token": bool(u.fcm_token),
+            }
+            for u in users
+        ],
+    }

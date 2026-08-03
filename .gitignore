@@ -5,6 +5,7 @@
 *.pem
 *.key
 *.crt
+firebase-service-account.json
 
 # Python
 __pycache__/

@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -64,21 +66,42 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
     if (auth.token.isEmpty || auth.token.startsWith('simulated')) return;
     final settings = ref.read(settingsProvider);
 
-    try {
-      final fcmToken = await FirebaseMessaging.instance.getToken();
-      if (fcmToken != null && fcmToken.isNotEmpty) {
-        await http.post(
-          Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ${auth.token}',
-          },
-          body: json.encode({'fcm_token': fcmToken}),
-        );
-        debugPrint('FCM token registered with backend successfully.');
+    for (int attempt = 0; attempt < 5; attempt++) {
+      try {
+        // On iOS, wait for APNs token before requesting FCM token
+        if (!kIsWeb && Platform.isIOS) {
+          String? apnsToken;
+          for (int i = 0; i < 10; i++) {
+            apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+            if (apnsToken != null) break;
+            await Future.delayed(const Duration(seconds: 2));
+          }
+          if (apnsToken == null) {
+            debugPrint('FCM registration: APNs token not available on iOS, attempt ${attempt + 1}');
+            await Future.delayed(Duration(seconds: 3 * (attempt + 1)));
+            continue;
+          }
+        }
+
+        final fcmToken = await FirebaseMessaging.instance.getToken();
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          final response = await http.post(
+            Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${auth.token}',
+            },
+            body: json.encode({'fcm_token': fcmToken}),
+          );
+          debugPrint('FCM token registered with backend [${response.statusCode}]: ${fcmToken.substring(0, 20)}...');
+          if (response.statusCode == 200) break;
+        } else {
+          debugPrint('FCM token is null/empty on attempt ${attempt + 1}');
+        }
+      } catch (e) {
+        debugPrint('Error registering FCM token (attempt ${attempt + 1}): $e');
       }
-    } catch (e) {
-      debugPrint('Error registering FCM token with backend: $e');
+      await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
     }
   }
 

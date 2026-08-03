@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -74,6 +76,29 @@ String buildWebSocketUrl(String baseUrl, String subPath) {
   }
 }
 
+/// Syncs a given FCM token to the backend if user is authenticated.
+/// Called from onTokenRefresh and from setupPushNotifications.
+Future<void> _syncFcmTokenToBackend(String token) async {
+  try {
+    final prefs = globalPrefs;
+    final authToken = prefs.getString('token') ?? '';
+    if (authToken.isEmpty || authToken.startsWith('simulated')) return;
+
+    final apiBaseUrl = prefs.getString('apiBaseUrl') ?? 'https://api.seaty.hashnate.com/api/v1';
+    final res = await http.post(
+      Uri.parse('$apiBaseUrl/notifications/fcm-token'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $authToken',
+      },
+      body: json.encode({'fcm_token': token}),
+    );
+    debugPrint('FCM token synced from onTokenRefresh [${res.statusCode}]: ${token.substring(0, 20)}...');
+  } catch (e) {
+    debugPrint('Error syncing FCM token from onTokenRefresh: $e');
+  }
+}
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
@@ -107,15 +132,39 @@ void setupPushNotifications() async {
       sound: true,
     );
 
+    // On iOS, wait for APNs token before requesting FCM token.
+    // FCM token generation requires a valid APNs token on iOS.
+    if (!kIsWeb && Platform.isIOS) {
+      debugPrint('iOS: Waiting for APNs token before requesting FCM token...');
+      String? apnsToken;
+      for (int i = 0; i < 10; i++) {
+        apnsToken = await messaging.getAPNSToken();
+        if (apnsToken != null) {
+          debugPrint('iOS: APNs token received on attempt ${i + 1}');
+          break;
+        }
+        await Future.delayed(const Duration(seconds: 2));
+        debugPrint('iOS: APNs token not ready yet, retry ${i + 1}/10...');
+      }
+      if (apnsToken == null) {
+        debugPrint('iOS: WARNING - APNs token not available after 10 retries. FCM token may be null.');
+      }
+    }
+
     try {
       final token = await messaging.getToken();
       debugPrint('FCM Token: $token');
+      if (token != null && token.isNotEmpty) {
+        _syncFcmTokenToBackend(token);
+      }
     } catch (e) {
       debugPrint('Error getting FCM token: $e');
     }
 
+    // When token refreshes (e.g. app reinstall, new device), sync to backend
     messaging.onTokenRefresh.listen((newToken) {
       debugPrint('FCM Token refreshed: $newToken');
+      _syncFcmTokenToBackend(newToken);
     });
 
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -162,4 +211,5 @@ Future<void> initFirebaseMessaging() async {
     debugPrint('Firebase initialization notice: $e');
   }
 }
+
 
