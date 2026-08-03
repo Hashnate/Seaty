@@ -75,7 +75,6 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
             apnsToken = await FirebaseMessaging.instance.getAPNSToken();
             if (apnsToken != null) {
               debugPrint('iOS APNs token ready on attempt ${i + 1}');
-              await FirebaseMessaging.instance.setAPNSToken(apnsToken);
               break;
             }
             await Future.delayed(const Duration(seconds: 1));
