@@ -28,8 +28,8 @@ export 'package:seaty/screens/notifications_screen.dart';
 // =====================================================================
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initFirebaseMessaging();
   globalPrefs = await SharedPreferences.getInstance();
+  await initFirebaseMessaging();
   runApp(const ProviderScope(child: SeatyApp()));
 }
 

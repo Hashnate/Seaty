@@ -80,7 +80,7 @@ String buildWebSocketUrl(String baseUrl, String subPath) {
 /// Called from onTokenRefresh and from setupPushNotifications.
 Future<void> _syncFcmTokenToBackend(String token) async {
   try {
-    final prefs = globalPrefs;
+    final prefs = await SharedPreferences.getInstance();
     final authToken = prefs.getString('token') ?? '';
     if (authToken.isEmpty || authToken.startsWith('simulated')) return;
 
