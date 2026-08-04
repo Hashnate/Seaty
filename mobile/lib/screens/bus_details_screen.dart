@@ -519,12 +519,12 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        widget.trip['bus_name'] ?? 'Torye - Drink Dine & Dance',
+                                        widget.trip['bus_name'] ?? 'Express Superline',
                                         style: const TextStyle(
                                           fontSize: 19,
                                           fontWeight: FontWeight.w900,
                                           color: Color(0xFF0F172A),
-                                          letterSpacing: -0.4,
+                                          letterSpacing: 0.15,
                                           height: 1.25,
                                         ),
                                       ),
@@ -551,7 +551,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                // Rating Box with green background + Google badge
+                                // Rating Box with green background
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
@@ -565,7 +565,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            _avgRating > 0 ? _avgRating.toStringAsFixed(1) : '4.2',
+                                            _avgRating > 0 ? _avgRating.toStringAsFixed(1) : '5.0',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w900,
@@ -582,30 +582,8 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                       ),
                                     ),
                                     const SizedBox(height: 3),
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text(
-                                          'G ',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w900,
-                                            color: Color(0xFF4285F4),
-                                          ),
-                                        ),
-                                        Text(
-                                          'Google',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.grey[600],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 1),
                                     Text(
-                                      '${_totalReviews > 0 ? _totalReviews : "2K"} ratings',
+                                      '${_totalReviews > 0 ? _totalReviews : 1} review${_totalReviews == 1 ? '' : 's'}',
                                       style: TextStyle(
                                         fontSize: 10,
                                         color: Colors.grey[600],
@@ -618,18 +596,18 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                             ),
                             const SizedBox(height: 10),
 
-                            // Subtitle Row: Distance & Location
+                            // Subtitle Row: Route & Terminal
                             Row(
                               children: [
                                 const Icon(
                                   Icons.place_rounded,
                                   size: 14,
-                                  color: Color(0xFF64748B),
+                                  color: Color(0xFF2563EB),
                                 ),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    '8.1 km • ${widget.trip['origin'] ?? 'Rajarajeshwari Nagar'}, ${widget.trip['destination'] ?? 'Bangalore'}',
+                                    '${widget.trip['origin'] ?? 'Origin'} to ${widget.trip['destination'] ?? 'Destination'}',
                                     style: const TextStyle(
                                       fontSize: 12.5,
                                       color: Color(0xFF475569),
@@ -642,9 +620,9 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                             ),
                             const SizedBox(height: 6),
 
-                            // Info Row: Cuisine / Bus type & price line
+                            // Info Row: Bus Class & Fare
                             Text(
-                              '${widget.trip['bus_type'] ?? 'Continental, North Indian'} | ₹$priceStr for two',
+                              '${widget.trip['bus_type'] ?? 'Express Service'} | Rs. $priceStr per seat',
                               style: const TextStyle(
                                 fontSize: 12.5,
                                 color: Color(0xFF64748B),
@@ -657,7 +635,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Green Status Badge: "Open till 1AM ∨"
+                                // Scheduled Status Badge
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
@@ -665,22 +643,16 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: const Color(0xFFA7F3D0)),
                                   ),
-                                  child: const Row(
+                                  child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Text(
-                                        'Open till 1AM',
-                                        style: TextStyle(
+                                        (widget.trip['status']?.toString().toUpperCase() ?? 'SCHEDULED'),
+                                        style: const TextStyle(
                                           color: Color(0xFF047857),
                                           fontWeight: FontWeight.w800,
-                                          fontSize: 11.5,
+                                          fontSize: 11,
                                         ),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Icon(
-                                        Icons.keyboard_arrow_down_rounded,
-                                        color: Color(0xFF047857),
-                                        size: 16,
                                       ),
                                     ],
                                   ),

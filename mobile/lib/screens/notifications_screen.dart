@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/screens/tracker_screen.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -257,240 +260,292 @@ class NotificationsScreen extends ConsumerWidget {
     final unreadCount = notificationsState.unreadNotificationsCount;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC), // Modern off-white background
-      appBar: AppBar(
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: Color(0xFF0A2540),
-            letterSpacing: -0.5,
-          ),
-        ),
-        centerTitle: false,
-        actions: [
-          if (unreadCount > 0)
+      backgroundColor: const Color(0xFFF8FAFC),
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Bold Gradient Hero Heading matching other main screens ──
             Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: TextButton.icon(
-                onPressed: () {
-                  notificationsNotifier.markAllNotificationsAsRead();
-                  SeatyNotifications.show(
-                    context,
-                    'All notifications marked as read',
-                  );
-                },
-                icon: const Icon(
-                  Icons.done_all_rounded,
-                  size: 18,
-                  color: Color(0xFF0A2540),
-                ),
-                label: const Text(
-                  'Mark all read',
-                  style: TextStyle(
-                    color: Color(0xFF0A2540),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-      body: list.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              padding: const EdgeInsets.only(left: 20, right: 20, top: 20),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    height: 100,
-                    width: 100,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0A2540).withOpacity(0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.notifications_none_rounded,
-                      size: 48,
-                      color: Color(0xFF0A2540),
+                  const Expanded(
+                    child: BoldGradientHeroHeading(
+                      title: 'Notifications',
+                      subtitle: 'Real-time booking, trip, and platform alerts.',
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'All caught up!',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF0A2540),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'No notifications yet. Enjoy your day!',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: const Color(0xFF0A2540).withOpacity(0.6),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: () async {
-                await notificationsNotifier.fetchNotifications();
-              },
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                itemCount: list.length,
-                itemBuilder: (context, index) {
-                  final noti = list[index];
-                  final String notiId = noti['id']?.toString() ?? '';
-                  final String title = noti['title'] ?? 'Alert';
-                  final String message = noti['message'] ?? '';
-                  final String type = noti['type'] ?? 'system';
-                  final bool isRead =
-                      noti['is_read'] == true || noti['is_read'] == 1;
-                  final String timeAgo = _formatTimeAgo(noti['created_at']);
-
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: isRead
-                          ? Colors.white
-                          : const Color(
-                              0xFFF1F5F9,
-                            ), // Subtle greyish-blue for unread
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.03),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                  if (unreadCount > 0)
+                    GestureDetector(
+                      onTap: () {
+                        notificationsNotifier.markAllNotificationsAsRead();
+                        SeatyNotifications.show(
+                          context,
+                          'All notifications marked as read',
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                      ],
-                      border: Border.all(
-                        color: isRead
-                            ? Colors.black.withOpacity(0.05)
-                            : const Color(0xFF0A2540).withOpacity(0.1),
-                        width: 1,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.done_all_rounded,
+                              size: 14,
+                              color: Color(0xFF2563EB),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Mark read',
+                              style: TextStyle(
+                                color: Color(0xFF2563EB),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(16),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () {
-                          if (!isRead && notiId.isNotEmpty) {
-                            notificationsNotifier.markNotificationAsRead(notiId);
-                          }
-                          _handleNotificationTap(context, bookingsState, noti);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: _getColorForType(
-                                    type,
-                                  ).withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  _getIconForType(type),
-                                  color: _getColorForType(type),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            title,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: isRead
-                                                  ? FontWeight.bold
-                                                  : FontWeight.w800,
-                                              color: const Color(0xFF0A2540),
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          timeAgo,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: const Color(
-                                              0xFF0A2540,
-                                            ).withOpacity(0.5),
-                                            fontWeight: FontWeight.w600,
-                                          ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── Unread Badge Pill Count ──
+            if (unreadCount > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$unreadCount unread notification${unreadCount == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      color: Color(0xFF2563EB),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            if (unreadCount > 0) const SizedBox(height: 12),
+
+            // ── Notification List Body ──
+            Expanded(
+              child: list.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            height: 88,
+                            width: 88,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0A2540).withValues(alpha: 0.05),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.notifications_none_rounded,
+                              size: 42,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ).animate().scale(duration: 450.ms, curve: Curves.easeOutBack),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'All caught up!',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'No notifications yet. Enjoy your day!',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : RefreshIndicator(
+                      color: const Color(0xFF2563EB),
+                      onRefresh: () async {
+                        await notificationsNotifier.fetchNotifications();
+                      },
+                      child: AnimationLimiter(
+                        child: ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          padding: const EdgeInsets.only(
+                            left: 20,
+                            right: 20,
+                            bottom: 110,
+                          ),
+                          itemCount: list.length,
+                          itemBuilder: (context, index) {
+                            final noti = list[index];
+                            final String notiId = noti['id']?.toString() ?? '';
+                            final String title = noti['title'] ?? 'Alert';
+                            final String message = noti['message'] ?? '';
+                            final String type = noti['type'] ?? 'system';
+                            final bool isRead =
+                                noti['is_read'] == true || noti['is_read'] == 1;
+                            final String timeAgo = _formatTimeAgo(noti['created_at']);
+
+                            return AnimationConfiguration.staggeredList(
+                              position: index,
+                              duration: const Duration(milliseconds: 350),
+                              child: SlideAnimation(
+                                verticalOffset: 30.0,
+                                child: FadeInAnimation(
+                                  child: Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isRead
+                                            ? const Color(0xFFE2E8F0)
+                                            : const Color(0xFFBFDBFE),
+                                        width: isRead ? 1.0 : 1.5,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.03),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      message,
-                                      style: TextStyle(
-                                        fontSize: 13.5,
-                                        color: const Color(
-                                          0xFF0A2540,
-                                        ).withOpacity(0.7),
-                                        height: 1.4,
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: () {
+                                            if (!isRead && notiId.isNotEmpty) {
+                                              notificationsNotifier.markNotificationAsRead(notiId);
+                                            }
+                                            _handleNotificationTap(context, bookingsState, noti);
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(16.0),
+                                            child: Row(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                // Icon Badge
+                                                Container(
+                                                  padding: const EdgeInsets.all(10),
+                                                  decoration: BoxDecoration(
+                                                    color: _getColorForType(type).withValues(alpha: 0.1),
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: Icon(
+                                                    _getIconForType(type),
+                                                    color: _getColorForType(type),
+                                                    size: 20,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 14),
+                                                // Body Text Column
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Row(
+                                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                        children: [
+                                                          Expanded(
+                                                            child: Text(
+                                                              title,
+                                                              style: TextStyle(
+                                                                fontSize: 14.5,
+                                                                fontWeight: isRead
+                                                                    ? FontWeight.w700
+                                                                    : FontWeight.w900,
+                                                                color: const Color(0xFF0F172A),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 8),
+                                                          Text(
+                                                            timeAgo,
+                                                            style: const TextStyle(
+                                                              fontSize: 11.5,
+                                                              color: Color(0xFF94A3B8),
+                                                              fontWeight: FontWeight.w500,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        message,
+                                                        style: const TextStyle(
+                                                          fontSize: 13,
+                                                          color: Color(0xFF475569),
+                                                          height: 1.4,
+                                                        ),
+                                                      ),
+                                                      if (!isRead) ...[
+                                                        const SizedBox(height: 8),
+                                                        Row(
+                                                          children: [
+                                                            Container(
+                                                              width: 6,
+                                                              height: 6,
+                                                              decoration: const BoxDecoration(
+                                                                color: Color(0xFF2563EB),
+                                                                shape: BoxShape.circle,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(width: 6),
+                                                            const Text(
+                                                              'Tap to view details',
+                                                              style: TextStyle(
+                                                                fontSize: 11,
+                                                                color: Color(0xFF2563EB),
+                                                                fontWeight: FontWeight.bold,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    if (!isRead)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 8.0,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 8,
-                                              height: 8,
-                                              decoration: const BoxDecoration(
-                                                color: Color(0xFF2563EB),
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            const Text(
-                                              'Tap to mark as read',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Color(0xFF2563EB),
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                  ],
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
+                            );
+                          },
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

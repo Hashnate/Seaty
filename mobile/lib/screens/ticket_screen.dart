@@ -9,612 +9,706 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 
-// Sub-Tab 3: Passenger Bookings Tickets List
-class PassengerBookingsTab extends ConsumerWidget {
-  const PassengerBookingsTab({super.key});
+String _formatTicketDate(String? dep) {
+  if (dep == null || dep.isEmpty) return 'Jul 28, 2026';
+  try {
+    final parts = dep.trim().split(' ');
+    final dateParts = parts[0].split('-');
+    if (dateParts.length == 3) {
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ];
+      final m = int.parse(dateParts[1]);
+      final d = int.parse(dateParts[2]);
+      final y = dateParts[0];
+      return '${months[m - 1]} $d, $y';
+    }
+  } catch (e) {
+    // fallback
+  }
+  return dep.split(' ')[0];
+}
 
-  void _showDownloadTicketDialog(BuildContext context, Map<String, dynamic> b) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+String _formatTicketTime(String? dep) {
+  if (dep == null || dep.isEmpty) return '10:30 AM';
+  try {
+    final parts = dep.trim().split(' ');
+    if (parts.length > 1) {
+      final timeParts = parts[1].split(':');
+      int h = int.parse(timeParts[0]);
+      int m = int.parse(timeParts[1]);
+      String period = h >= 12 ? 'PM' : 'AM';
+      if (h == 0) {
+        h = 12;
+      } else if (h > 12) {
+        h -= 12;
+      }
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')} $period';
+    }
+  } catch (e) {
+    // fallback
+  }
+  return '10:30 AM';
+}
+
+Future<void> _generateAndSavePDF(
+  BuildContext context,
+  Map<String, dynamic> b, {
+  bool share = false,
+}) async {
+  try {
+    final pdf = pw.Document(
+      theme: pw.ThemeData.withFont(
+        base: pw.Font.helvetica(),
+        bold: pw.Font.helveticaBold(),
+      ),
+    );
+
+    final rawTicketId = b['id'].toString().replaceAll('-', '').toUpperCase();
+    final ticketCode = 'TQ${rawTicketId.substring(0, 10)}';
+    final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
+    final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
+    final numPassengers = (b['seats'] as List?)?.length ?? 1;
+    final formattedPrice =
+        double.tryParse(b['price'].toString())?.toStringAsFixed(1) ??
+        b['price'].toString();
+    final origin = (b['origin'] ?? 'Colombo Fort').toString();
+    final destination = (b['destination'] ?? 'Galle').toString();
+    final busName = (b['bus_name'] ?? 'Luxury Express').toString();
+    final regNumber = (b['reg'] ?? 'WP-ND-8942').toString();
+    final depTimeStr = (b['departure'] ?? '2026-07-27 23:00').toString();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Ready to Board',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0A2540),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Ticket Code: TKT-${b['id'].toString().substring(0, 8).toUpperCase()}',
-                style: const TextStyle(color: Colors.black54, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: 140,
-                height: 140,
-                child: QrImageView(
-                  data: b['id'].toString(),
-                  version: QrVersions.auto,
-                  size: 140.0,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Show this barcode to the driver/conductor during verification.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.black54,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          actionsPadding: const EdgeInsets.only(
-            bottom: 16,
-            left: 16,
-            right: 16,
-          ),
-          actions: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _generateAndSavePDF(context, b, share: false);
-                        },
-                        icon: const Icon(
-                          Icons.download_rounded,
-                          size: 16,
-                          color: Colors.white,
+              // 1. Top Header Row (Logo + eTICKET + Customer Care)
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Row(
+                    children: [
+                      pw.Container(
+                        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: const pw.BoxDecoration(
+                          color: PdfColors.red700,
+                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
                         ),
-                        label: const Text(
-                          'Save PDF',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                        child: pw.Text(
+                          'seaty',
+                          style: pw.TextStyle(
+                            color: PdfColors.white,
+                            fontSize: 18,
+                            fontWeight: pw.FontWeight.bold,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _generateAndSavePDF(context, b, share: true);
-                        },
-                        icon: const Icon(
-                          Icons.share_rounded,
-                          size: 16,
-                          color: Colors.white,
+                      pw.SizedBox(width: 14),
+                      pw.Text(
+                        'eTICKET',
+                        style: pw.TextStyle(
+                          fontSize: 22,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey800,
                         ),
-                        label: const Text(
-                          'Share Ticket',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text(
+                        'Need help with your trip?',
+                        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        'Boarding Point Ph. No: 0775555555 | Seaty Care: 0112345678',
+                        style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 16),
+              pw.Divider(thickness: 1, color: PdfColors.grey300),
+              pw.SizedBox(height: 16),
+
+              // 2. Main Trip Summary & QR Code Section
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        '$origin -> $destination',
+                        style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.grey900,
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0A2540),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        depTimeStr,
+                        style: pw.TextStyle(
+                          fontSize: 12,
+                          color: PdfColors.grey800,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 12),
+                      pw.Text(
+                        'Ticket no: $ticketCode',
+                        style: pw.TextStyle(
+                          fontSize: 11,
+                          fontWeight: pw.FontWeight.bold,
+                          color: PdfColors.black,
+                        ),
+                      ),
+                      pw.SizedBox(height: 2),
+                      pw.Text(
+                        'PNR no: $pnrCode / $origin TO $destination',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          color: PdfColors.grey700,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // QR Code Container
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(6),
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(color: PdfColors.grey400, width: 1),
+                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+                        ),
+                        child: pw.BarcodeWidget(
+                          barcode: pw.Barcode.qrCode(),
+                          data: b['id'].toString(),
+                          width: 110,
+                          height: 110,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Container(
+                        width: 140,
+                        child: pw.Text(
+                          'Please show the QR code at the time of boarding for contactless check-in',
+                          textAlign: pw.TextAlign.center,
+                          style: pw.TextStyle(
+                            fontSize: 7.5,
+                            color: PdfColors.grey700,
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 16),
+              pw.Divider(thickness: 1, color: PdfColors.grey300),
+              pw.SizedBox(height: 12),
+
+              // Guidelines Banner
+              pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.yellow100,
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF64748B),
-                      side: const BorderSide(color: Color(0xFFE2E8F0)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                    child: const Text('Close', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                child: pw.Text(
+                  'Please Note: It is mandatory to follow the travel guidelines of your source and destination state of travel. View Guidelines: https://seaty.lk/travel-guidelines',
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.amber900,
                   ),
                 ),
-              ],
-            ),
-          ],
+              ),
+              pw.SizedBox(height: 16),
+
+              // 3. 4-Column Details Table
+              pw.Table(
+                border: pw.TableBorder(
+                  horizontalInside: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
+                ),
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(2.5),
+                  1: const pw.FlexColumnWidth(2.0),
+                  2: const pw.FlexColumnWidth(2.0),
+                  3: const pw.FlexColumnWidth(2.5),
+                },
+                children: [
+                  // Row 1: Bus Info, Times & Passenger Count
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(busName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text('Luxury Superline ($regNumber)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('22:45', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text('Reporting time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('23:00', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text('Departure time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('$numPassengers', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text('Number of Passengers', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Row 2: Boarding Point Details
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Text('Boarding point details', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text(origin, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text('Location', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('Near Clock Tower', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text('Landmark', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('$origin Bus Terminal Stand #4', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                            pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Row 3: Dropping Point Details
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Text('Dropping point details', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('05:15', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text('Dropping point time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('Next Day', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text('Dropping point Date', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                        child: pw.Column(
+                          crossAxisAlignment: pw.CrossAxisAlignment.start,
+                          children: [
+                            pw.Text('$destination Main Central Terminal', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                            pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 16),
+
+              // Passenger & Seat Breakdown Table
+              pw.Table(
+                columnWidths: {
+                  0: const pw.FlexColumnWidth(3),
+                  1: const pw.FlexColumnWidth(2),
+                },
+                children: [
+                  pw.TableRow(
+                    children: [
+                      pw.Text('Passenger Details (Name, Gender)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Seat Number', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
+                  pw.TableRow(
+                    children: [
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 4),
+                        child: pw.Text('Primary Passenger (Adult)', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold)),
+                      ),
+                      pw.Padding(
+                        padding: const pw.EdgeInsets.only(top: 4),
+                        child: pw.Text(seatsList, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.red900)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 20),
+              pw.Divider(thickness: 1, color: PdfColors.grey300),
+              pw.SizedBox(height: 12),
+
+              // Total Fare Box
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'NOTE : This operator accepts mTicket, you need not carry a print out',
+                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Row(
+                        children: [
+                          pw.Text('Total Fare : ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Rs. $formattedPrice', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                        ],
+                      ),
+                      pw.Text('(Rs. 0 inclusive of GST and service charge, if any)', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+                    ],
+                  ),
+                ],
+              ),
+
+              pw.SizedBox(height: 24),
+              pw.Divider(thickness: 1, color: PdfColors.grey400),
+              pw.SizedBox(height: 10),
+
+              // Footer Guarantee
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    'Note: Your booking is covered under Seaty FlexiTicket. You can change your travel date for free up to 8 hours before departure.',
+                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                  ),
+                ],
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    final pdfBytes = await pdf.save();
+
+    // 1. Always save directly to user's Documents directory using standard dart:io
+    final directory = await getApplicationDocumentsDirectory();
+    final filePath = '${directory.path}/$ticketCode.pdf';
+    final file = File(filePath);
+    await file.writeAsBytes(pdfBytes);
+
+    // 2. Safely trigger native share / layout preview if plugin bindings are loaded
+    if (share) {
+      try {
+        await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
+      } catch (shareErr) {
+        debugPrint('Native share warning: $shareErr');
+      }
+    } else {
+      try {
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdfBytes,
+          name: ticketCode,
+        );
+      } catch (layoutErr) {
+        debugPrint('Native layout warning: $layoutErr');
+      }
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ticket PDF saved to Documents! ($ticketCode.pdf)'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to process PDF: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+    }
+  }
+}
+
+// Sub-Tab 3: Passenger Bookings Tickets List
+class PassengerBookingsTab extends ConsumerStatefulWidget {
+  const PassengerBookingsTab({super.key});
+
+  @override
+  ConsumerState<PassengerBookingsTab> createState() => _PassengerBookingsTabState();
+}
+
+class _PassengerBookingsTabState extends ConsumerState<PassengerBookingsTab> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  String _selectedFilter = 'All';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _openFilterBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Filter Tickets',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                      if (_selectedFilter != 'All')
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedFilter = 'All';
+                            });
+                            setModalState(() {});
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Reset'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Ticket Status',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    children: ['All', 'Upcoming', 'Completed'].map((filter) {
+                      final isSelected = _selectedFilter == filter;
+                      return ChoiceChip(
+                        label: Text(filter),
+                        selected: isSelected,
+                        selectedColor: const Color(0xFF2563EB),
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : const Color(0xFF475569),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _selectedFilter = filter;
+                            });
+                            setModalState(() {});
+                            Navigator.pop(context);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _generateAndSavePDF(
-    BuildContext context,
-    Map<String, dynamic> b, {
-    bool share = false,
-  }) async {
-    try {
-      final pdf = pw.Document(
-        theme: pw.ThemeData.withFont(
-          base: pw.Font.helvetica(),
-          bold: pw.Font.helveticaBold(),
-        ),
-      );
-
-      final rawTicketId = b['id'].toString().replaceAll('-', '').toUpperCase();
-      final ticketCode = 'TQ${rawTicketId.substring(0, 10)}';
-      final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
-      final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
-      final numPassengers = (b['seats'] as List?)?.length ?? 1;
-      final formattedPrice =
-          double.tryParse(b['price'].toString())?.toStringAsFixed(1) ??
-          b['price'].toString();
-      final origin = (b['origin'] ?? 'Colombo Fort').toString();
-      final destination = (b['destination'] ?? 'Galle').toString();
-      final busName = (b['bus_name'] ?? 'Luxury Express').toString();
-      final regNumber = (b['reg'] ?? 'WP-ND-8942').toString();
-      final depTimeStr = (b['departure'] ?? '2026-07-27 23:00').toString();
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(32),
-          build: (pw.Context context) {
-            return pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                // 1. Top Header Row (Logo + eTICKET + Customer Care)
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Row(
-                      children: [
-                        pw.Container(
-                          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: const pw.BoxDecoration(
-                            color: PdfColors.red700,
-                            borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
-                          ),
-                          child: pw.Text(
-                            'seaty',
-                            style: pw.TextStyle(
-                              color: PdfColors.white,
-                              fontSize: 18,
-                              fontWeight: pw.FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        pw.SizedBox(width: 14),
-                        pw.Text(
-                          'eTICKET',
-                          style: pw.TextStyle(
-                            fontSize: 22,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.grey800,
-                          ),
-                        ),
-                      ],
-                    ),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Text(
-                          'Need help with your trip?',
-                          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          'Boarding Point Ph. No: 0775555555 | Seaty Care: 0112345678',
-                          style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                pw.SizedBox(height: 16),
-                pw.Divider(thickness: 1, color: PdfColors.grey300),
-                pw.SizedBox(height: 16),
-
-                // 2. Main Trip Summary & QR Code Section
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          '$origin -> $destination',
-                          style: pw.TextStyle(
-                            fontSize: 18,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.grey900,
-                          ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Text(
-                          depTimeStr,
-                          style: pw.TextStyle(
-                            fontSize: 12,
-                            color: PdfColors.grey800,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        pw.SizedBox(height: 12),
-                        pw.Text(
-                          'Ticket no: $ticketCode',
-                          style: pw.TextStyle(
-                            fontSize: 11,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.black,
-                          ),
-                        ),
-                        pw.SizedBox(height: 2),
-                        pw.Text(
-                          'PNR no: $pnrCode / $origin TO $destination',
-                          style: pw.TextStyle(
-                            fontSize: 9,
-                            color: PdfColors.grey700,
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // QR Code Container
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.center,
-                      children: [
-                        pw.Container(
-                          padding: const pw.EdgeInsets.all(6),
-                          decoration: pw.BoxDecoration(
-                            border: pw.Border.all(color: PdfColors.grey400, width: 1),
-                            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
-                          ),
-                          child: pw.BarcodeWidget(
-                            barcode: pw.Barcode.qrCode(),
-                            data: b['id'].toString(),
-                            width: 110,
-                            height: 110,
-                          ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Container(
-                          width: 140,
-                          child: pw.Text(
-                            'Please show the QR code at the time of boarding for contactless check-in',
-                            textAlign: pw.TextAlign.center,
-                            style: pw.TextStyle(
-                              fontSize: 7.5,
-                              color: PdfColors.grey700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                pw.SizedBox(height: 16),
-                pw.Divider(thickness: 1, color: PdfColors.grey300),
-                pw.SizedBox(height: 12),
-
-                // Guidelines Banner
-                pw.Container(
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: const pw.BoxDecoration(
-                    color: PdfColors.yellow100,
-                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
-                  ),
-                  child: pw.Text(
-                    'Please Note: It is mandatory to follow the travel guidelines of your source and destination state of travel. View Guidelines: https://seaty.lk/travel-guidelines',
-                    style: pw.TextStyle(
-                      fontSize: 8,
-                      fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.amber900,
-                    ),
-                  ),
-                ),
-                pw.SizedBox(height: 16),
-
-                // 3. 4-Column Details Table
-                pw.Table(
-                  border: pw.TableBorder(
-                    horizontalInside: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-                  ),
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(2.5),
-                    1: const pw.FlexColumnWidth(2.0),
-                    2: const pw.FlexColumnWidth(2.0),
-                    3: const pw.FlexColumnWidth(2.5),
-                  },
-                  children: [
-                    // Row 1: Bus Info, Times & Passenger Count
-                    pw.TableRow(
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(busName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                              pw.Text('Luxury Superline ($regNumber)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('22:45', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                              pw.Text('Reporting time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('23:00', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                              pw.Text('Departure time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('$numPassengers', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                              pw.Text('Number of Passengers', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Row 2: Boarding Point Details
-                    pw.TableRow(
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Text('Boarding point details', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text(origin, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                              pw.Text('Location', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('Near Clock Tower', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                              pw.Text('Landmark', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('$origin Bus Terminal Stand #4', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-                              pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Row 3: Dropping Point Details
-                    pw.TableRow(
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Text('Dropping point details', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('05:15', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                              pw.Text('Dropping point time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('Next Day', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                              pw.Text('Dropping point Date', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.symmetric(vertical: 8),
-                          child: pw.Column(
-                            crossAxisAlignment: pw.CrossAxisAlignment.start,
-                            children: [
-                              pw.Text('$destination Main Central Terminal', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
-                              pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                pw.SizedBox(height: 16),
-
-                // Passenger & Seat Breakdown Table
-                pw.Table(
-                  columnWidths: {
-                    0: const pw.FlexColumnWidth(3),
-                    1: const pw.FlexColumnWidth(2),
-                  },
-                  children: [
-                    pw.TableRow(
-                      children: [
-                        pw.Text('Passenger Details (Name, Gender)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
-                        pw.Text('Seat Number', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
-                      ],
-                    ),
-                    pw.TableRow(
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.only(top: 4),
-                          child: pw.Text('Primary Passenger (Adult)', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold)),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.only(top: 4),
-                          child: pw.Text(seatsList, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.red900)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-
-                pw.SizedBox(height: 20),
-                pw.Divider(thickness: 1, color: PdfColors.grey300),
-                pw.SizedBox(height: 12),
-
-                // Total Fare Box
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text(
-                      'NOTE : This operator accepts mTicket, you need not carry a print out',
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
-                    ),
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.end,
-                      children: [
-                        pw.Row(
-                          children: [
-                            pw.Text('Total Fare : ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                            pw.Text('Rs. $formattedPrice', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
-                          ],
-                        ),
-                        pw.Text('(Rs. 0 inclusive of GST and service charge, if any)', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
-                      ],
-                    ),
-                  ],
-                ),
-
-                pw.SizedBox(height: 24),
-                pw.Divider(thickness: 1, color: PdfColors.grey400),
-                pw.SizedBox(height: 10),
-
-                // Footer Guarantee
-                pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Text(
-                      'Note: Your booking is covered under Seaty FlexiTicket. You can change your travel date for free up to 8 hours before departure.',
-                      style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
-      );
-
-      final pdfBytes = await pdf.save();
-
-      // 1. Always save directly to user's Documents directory using standard dart:io
-      final directory = await getApplicationDocumentsDirectory();
-      final filePath = '${directory.path}/$ticketCode.pdf';
-      final file = File(filePath);
-      await file.writeAsBytes(pdfBytes);
-
-      // 2. Safely trigger native share / layout preview if plugin bindings are loaded
-      if (share) {
-        try {
-          await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
-        } catch (shareErr) {
-          debugPrint('Native share warning: $shareErr');
-        }
-      } else {
-        try {
-          await Printing.layoutPdf(
-            onLayout: (PdfPageFormat format) async => pdfBytes,
-            name: ticketCode,
-          );
-        } catch (layoutErr) {
-          debugPrint('Native layout warning: $layoutErr');
-        }
-      }
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Ticket PDF saved to Documents! ($ticketCode.pdf)'),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+  Widget _buildFilterChip(String label) {
+    final isSelected = _selectedFilter == label;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedFilter = label;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF2563EB) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0),
           ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to process PDF: $e'),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : const Color(0xFF64748B),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
           ),
-        );
-      }
-    }
+        ),
+      ),
+    );
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final bookingsState = ref.watch(bookingsProvider);
+
+    // Filter bookings list dynamically
+    final filteredBookings = bookingsState.bookings.where((b) {
+      final origin = (b['origin'] ?? '').toString().toLowerCase();
+      final destination = (b['destination'] ?? '').toString().toLowerCase();
+      final busName = (b['bus_name'] ?? '').toString().toLowerCase();
+      final id = (b['id'] ?? '').toString().toLowerCase();
+      final seats = ((b['seats'] as List?)?.join(', ') ?? '').toLowerCase();
+
+      final q = _searchQuery.trim().toLowerCase();
+      final matchesSearch = q.isEmpty ||
+          origin.contains(q) ||
+          destination.contains(q) ||
+          busName.contains(q) ||
+          id.contains(q) ||
+          seats.contains(q);
+
+      if (!matchesSearch) return false;
+
+      if (_selectedFilter == 'Completed') {
+        return false; // All current test bookings are active
+      }
+
+      return true;
+    }).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -624,37 +718,141 @@ class PassengerBookingsTab extends ConsumerWidget {
           children: [
             // ── Bold Gradient Hero Heading ──
             const Padding(
-              padding: EdgeInsets.only(left: 20, right: 20, top: 20),
+              padding: EdgeInsets.only(left: 20, right: 20, top: 16),
               child: BoldGradientHeroHeading(
                 title: 'My Tickets',
                 subtitle: 'Present these digital tickets during boarding.',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // ── Ticket Count Badge ──
-            if (bookingsState.bookings.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2563EB).withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${bookingsState.bookings.length} active ticket${bookingsState.bookings.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      color: Color(0xFF2563EB),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+            // ── Interactive Search & Filter Row ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  // Search Input Field
+                  Expanded(
+                    child: Container(
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (val) {
+                          setState(() {
+                            _searchQuery = val;
+                          });
+                        },
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Search city, bus, seat or ticket #...',
+                          hintStyle: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search_rounded,
+                            size: 20,
+                            color: Color(0xFF64748B),
+                          ),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 18,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {
+                                      _searchQuery = '';
+                                    });
+                                  },
+                                )
+                              : null,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(width: 10),
+
+                  // Filter Tune Button
+                  InkWell(
+                    onTap: () => _openFilterBottomSheet(context),
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      height: 44,
+                      width: 44,
+                      decoration: BoxDecoration(
+                        color: _selectedFilter != 'All'
+                            ? const Color(0xFF2563EB)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _selectedFilter != 'All'
+                              ? const Color(0xFF2563EB)
+                              : const Color(0xFFE2E8F0),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.tune_rounded,
+                        size: 20,
+                        color: _selectedFilter != 'All' ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                ],
               ),
+            ),
+            const SizedBox(height: 10),
+
+            // ── Quick Filter Chips Row ──
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  _buildFilterChip('All'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('Upcoming'),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('Completed'),
+                  const Spacer(),
+                  Text(
+                    '${filteredBookings.length} ticket${filteredBookings.length == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      color: Color(0xFF64748B),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 12),
 
             // ── Ticket List ──
@@ -664,11 +862,11 @@ class PassengerBookingsTab extends ConsumerWidget {
                 onRefresh: () async {
                   await ref.read(bookingsProvider.notifier).loadBookings();
                 },
-                child: bookingsState.bookings.isEmpty
+                child: filteredBookings.isEmpty
                     ? ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          const SizedBox(height: 100),
+                          const SizedBox(height: 80),
                           Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -681,23 +879,27 @@ class PassengerBookingsTab extends ConsumerWidget {
                                   ),
                                   child: const Icon(
                                     Icons.confirmation_num_outlined,
-                                    size: 56,
+                                    size: 48,
                                     color: Color(0xFF94A3B8),
                                   ),
                                 ).animate().scale(duration: 500.ms, curve: Curves.easeOutBack),
                                 const SizedBox(height: 16),
-                                const Text(
-                                  'No tickets booked yet',
-                                  style: TextStyle(
+                                Text(
+                                  _searchQuery.isNotEmpty
+                                      ? 'No matching tickets found'
+                                      : 'No tickets available',
+                                  style: const TextStyle(
                                     color: Color(0xFF0F172A),
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                const Text(
-                                  'Book a trip to see your tickets here.',
-                                  style: TextStyle(
+                                Text(
+                                  _searchQuery.isNotEmpty
+                                      ? 'Try searching with a different term'
+                                      : 'Book a trip to see your tickets here.',
+                                  style: const TextStyle(
                                     color: Color(0xFF64748B),
                                     fontSize: 12,
                                   ),
@@ -717,219 +919,28 @@ class PassengerBookingsTab extends ConsumerWidget {
                             right: 20,
                             bottom: 110,
                           ),
-                          itemCount: bookingsState.bookings.length,
+                          itemCount: filteredBookings.length,
                           itemBuilder: (context, index) {
-                            final b = bookingsState.bookings[index];
-                            final ticketCode =
-                                'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
-                            final seats = (b['seats'] as List).join(', ');
-                            final formattedPrice =
-                                double.tryParse(
-                                  b['price'].toString(),
-                                )?.toStringAsFixed(2) ??
-                                b['price'].toString();
-
+                            final b = filteredBookings[index];
                             return AnimationConfiguration.staggeredList(
                               position: index,
                               duration: const Duration(milliseconds: 375),
                               child: SlideAnimation(
                                 verticalOffset: 40.0,
                                 child: FadeInAnimation(
-                                  child: GestureDetector(
-                          onTap: () => _showDownloadTicketDialog(context, b),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: const Color(0xFFE2E8F0),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                    0xFF0A2540,
-                                  ).withValues(alpha: 0.04),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              children: [
-                                // ── Top Section: Route + QR ──
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Route & Trip Info
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              '${b['origin']}  ->  ${b['destination']}',
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 15,
-                                                color: Color(0xFF0A2540),
-                                                letterSpacing: -0.3,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            const SizedBox(height: 6),
-                                            Text(
-                                              '${b['departure']}',
-                                              style: const TextStyle(
-                                                color: Color(0xFF64748B),
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 10),
-                                            Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.event_seat_rounded,
-                                                  size: 13,
-                                                  color: Color(0xFF2563EB),
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Expanded(
-                                                  child: Text(
-                                                    'Seats: $seats',
-                                                    style: const TextStyle(
-                                                      color: Color(0xFF334155),
-                                                      fontSize: 12,
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Fare: Rs. $formattedPrice',
-                                              style: const TextStyle(
-                                                color: Color(0xFF0A2540),
-                                                fontWeight: FontWeight.w900,
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
+                                  child: _BoardingPassTicketCard(
+                                    booking: b,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        SeatyPageRoute(
+                                          page: TicketDetailsScreen(booking: b),
                                         ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      // QR Code
-                                      Column(
-                                        children: [
-                                          Container(
-                                            width: 80,
-                                            height: 80,
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius: BorderRadius.circular(10),
-                                              border: Border.all(
-                                                color: const Color(0xFFE2E8F0),
-                                              ),
-                                            ),
-                                            child: QrImageView(
-                                              data: b['id'].toString(),
-                                              version: QrVersions.auto,
-                                              size: 72.0,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          const Text(
-                                            'Scan to verify',
-                                            style: TextStyle(
-                                              fontSize: 8,
-                                              color: Color(0xFF94A3B8),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // ── Dashed Divider ──
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                                  child: Row(
-                                    children: List.generate(
-                                      40,
-                                      (i) => Expanded(
-                                        child: Container(
-                                          height: 1,
-                                          color: i.isEven
-                                              ? const Color(0xFFCBD5E1)
-                                              : Colors.transparent,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                // ── Bottom Section: Bus Name, Ticket Code, Reg ──
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          const Icon(
-                                            Icons.directions_bus_filled_rounded,
-                                            size: 14,
-                                            color: Color(0xFF2563EB),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            '${b['bus_name']}',
-                                            style: const TextStyle(
-                                              color: Color(0xFF334155),
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            ticketCode,
-                                            style: const TextStyle(
-                                              fontFamily: 'monospace',
-                                              color: Color(0xFF94A3B8),
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            '${b['reg']}',
-                                            style: const TextStyle(
-                                              fontFamily: 'monospace',
-                                              color: Color(0xFF94A3B8),
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                                      );
+                                    },
+                                    onShare: () {
+                                      _generateAndSavePDF(context, b, share: true);
+                                    },
                                   ),
                                 ),
                               ),
@@ -938,6 +949,800 @@ class PassengerBookingsTab extends ConsumerWidget {
                         ),
                       ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Perforated Notched Ticket Divider ──
+class TicketPerforationDivider extends StatelessWidget {
+  const TicketPerforationDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // Left Semi-Circle Notch
+        Container(
+          width: 14,
+          height: 24,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.only(
+              topRight: Radius.circular(12),
+              bottomRight: Radius.circular(12),
+            ),
+          ),
+        ),
+        // Center Dashed Perforation Line
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final boxWidth = constraints.constrainWidth();
+              const dashWidth = 5.0;
+              const dashSpace = 4.0;
+              final dashCount = (boxWidth / (dashWidth + dashSpace)).floor();
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(dashCount, (_) {
+                  return const SizedBox(
+                    width: dashWidth,
+                    height: 1.5,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: Color(0xFFCBD5E1)),
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+        ),
+        // Right Semi-Circle Notch
+        Container(
+          width: 14,
+          height: 24,
+          decoration: const BoxDecoration(
+            color: Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(12),
+              bottomLeft: Radius.circular(12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Ticket Card Widget Matching User Reference Design ──
+class _BoardingPassTicketCard extends StatelessWidget {
+  final Map<String, dynamic> booking;
+  final VoidCallback onTap;
+  final VoidCallback onShare;
+
+  const _BoardingPassTicketCard({
+    required this.booking,
+    required this.onTap,
+    required this.onShare,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final b = booking;
+    final rawTicketId = b['id'].toString().replaceAll('-', '').toUpperCase();
+    final ticketCode = rawTicketId.length >= 8 ? rawTicketId.substring(0, 8) : rawTicketId;
+    final seats = (b['seats'] as List?)?.join(', ') ?? '1';
+    final numSeats = (b['seats'] as List?)?.length ?? 1;
+    final formattedPrice =
+        double.tryParse(b['price'].toString())?.toStringAsFixed(0) ??
+        b['price'].toString();
+    final origin = (b['origin'] ?? 'Trincomalee').toString();
+    final destination = (b['destination'] ?? 'Colombo').toString();
+    final busName = (b['bus_name'] ?? 'Soyaru Sampath Superline').toString();
+    final depTime = _formatTicketTime(b['departure']?.toString());
+    final depDate = _formatTicketDate(b['departure']?.toString());
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── 1. Top Header Row: Bus Name & Price ──
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            busName,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0F172A),
+                              letterSpacing: -0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            'Ticket #$ticketCode • Seat $seats',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            const Text(
+                              'Rs. ',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                            Text(
+                              formattedPrice,
+                              style: const TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$numSeats seat${numSeats > 1 ? "s" : ""}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── 2. Middle Route & Duration Graphic Line Row ──
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Departure Info (Left)
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            depTime,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            origin,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Center Connecting Line & Date/Duration Subtitle
+                    Expanded(
+                      flex: 4,
+                      child: Column(
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                height: 2,
+                                color: const Color(0xFF93C5FD),
+                              ),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF2563EB),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF2563EB),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            depDate,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Destination Info (Right)
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text(
+                            '05:00',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            destination,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF64748B),
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── 3. Bottom Action / Feature Badges Row ──
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.event_seat_rounded,
+                          size: 15,
+                          color: Color(0xFF64748B),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Seat $seats',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF475569),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: onShare,
+                          icon: const Icon(Icons.share_outlined, size: 18, color: Color(0xFF64748B)),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: onTap,
+                          icon: const Icon(Icons.qr_code_rounded, size: 14, color: Colors.white),
+                          label: const Text(
+                            'Ticket',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =====================================================================
+// SEPARATE FULL TICKET DETAILS SCREEN
+// =====================================================================
+class TicketDetailsScreen extends StatelessWidget {
+  final Map<String, dynamic> booking;
+
+  const TicketDetailsScreen({super.key, required this.booking});
+
+  @override
+  Widget build(BuildContext context) {
+    final b = booking;
+    final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+    final seats = (b['seats'] as List?)?.join(', ') ?? '';
+    final formattedPrice =
+        double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
+        b['price'].toString();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Ticket #$ticketCode',
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
+          ),
+        ),
+        centerTitle: false,
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFECFDF5),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFA7F3D0)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 14),
+                SizedBox(width: 4),
+                Text(
+                  'CONFIRMED',
+                  style: TextStyle(
+                    color: Color(0xFF059669),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            // ── Main Digital Ticket Card ──
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0A2540).withValues(alpha: 0.06),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Header Bar inside Card
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0F172A),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.directions_bus_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              b['bus_name'] ?? 'Luxury Bus Service',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          b['reg'] ?? '',
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            color: Color(0xFF94A3B8),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Route & Times Block
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Route Terminals
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'FROM',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  b['origin'] ?? 'Origin',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Icon(
+                              Icons.east_rounded,
+                              color: Color(0xFF2563EB),
+                              size: 22,
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text(
+                                  'TO',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  b['destination'] ?? 'Destination',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 20),
+                        const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                        const SizedBox(height: 20),
+
+                        // Departure & Seat Info Grid
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'DEPARTURE TIME',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  b['departure'] ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text(
+                                  'SEAT NUMBER(S)',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  seats,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'TOTAL FARE PAID',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rs. $formattedPrice',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text(
+                                  'BOOKING REF',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  ticketCode,
+                                  style: const TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF64748B),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Dashed Cut Line
+                        Row(
+                          children: List.generate(
+                            30,
+                            (i) => Expanded(
+                              child: Container(
+                                height: 1.5,
+                                color: i.isEven
+                                    ? const Color(0xFFCBD5E1)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // QR Code Section
+                        Center(
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.05),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: QrImageView(
+                                  data: b['id'].toString(),
+                                  version: QrVersions.auto,
+                                  size: 160.0,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Present this QR code to the conductor upon boarding',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Download & Share Action Buttons ──
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      _generateAndSavePDF(context, b, share: false);
+                    },
+                    icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
+                    label: const Text(
+                      'Download PDF',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      _generateAndSavePDF(context, b, share: true);
+                    },
+                    icon: const Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                    label: const Text(
+                      'Share Ticket',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F172A),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

@@ -98,6 +98,7 @@ class TripsNotifier extends Notifier<TripsState> {
                 double.tryParse(tripMap['price_per_seat'].toString()) ?? 1600.0,
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
+            'rating': (vehicle['average_rating'] as num?)?.toDouble() ?? (vehicle['rating'] as num?)?.toDouble() ?? 4.8,
             'total_seats': vehicle['total_seats'] ?? 40,
             'seat_layout': vehicle['seat_layout'],
             'amenities': List<String>.from(vehicle['amenities'] ?? []),

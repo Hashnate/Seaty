@@ -9,6 +9,7 @@ import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
 import 'package:seaty/screens/bus_details_screen.dart';
+import 'package:seaty/screens/notifications_screen.dart';
 import 'package:seaty/widgets/shimmer_loading.dart';
 
 // =====================================================================
@@ -30,6 +31,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
     const PassengerTrackingTab(),
     const PassengerBookingsTab(),
     const ProfileEditScreen(),
+    const NotificationsScreen(),
   ];
 
   @override
@@ -45,8 +47,8 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
 
   Widget _buildTelegramBottomNavBar(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(left: 32, right: 32, bottom: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      margin: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       height: 64,
       decoration: BoxDecoration(
         color: const Color(0xFF0F172A), // Premium Dark Slate
@@ -60,7 +62,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
         ],
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, 'Home'),
@@ -81,6 +83,12 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
             Icons.person_outline_rounded,
             Icons.person_rounded,
             'Profile',
+          ),
+          _buildNavItem(
+            4,
+            Icons.notifications_none_rounded,
+            Icons.notifications_rounded,
+            'Alerts',
           ),
         ],
       ),
@@ -452,53 +460,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                       letterSpacing: 0.5,
                                     ),
                                   ),
-                                ],
-                              ),
-                              Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  IconButton(
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    icon: const Icon(
-                                      Icons.notifications_outlined,
-                                      color: Colors.white,
-                                      size: 24,
-                                    ),
-                                    onPressed: () {
-                                      Navigator.push(
-                                        context,
-                                        SeatyPageRoute(
-                                          page: const NotificationsScreen(),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                  if (notificationsState.unreadNotificationsCount > 0)
-                                    Positioned(
-                                      right: -2,
-                                      top: -2,
-                                      child: Container(
-                                        padding: const EdgeInsets.all(4),
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFFEF4444),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        constraints: const BoxConstraints(
-                                          minWidth: 14,
-                                          minHeight: 14,
-                                        ),
-                                        child: Text(
-                                          '${notificationsState.unreadNotificationsCount}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 8,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center,
-                                        ),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ],
@@ -1263,12 +1224,12 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     Text(
                       depTime.isNotEmpty ? depTime : '07:00',
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF1E293B),
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       trip['origin'] ?? 'Origin',
                       style: const TextStyle(
@@ -1286,7 +1247,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Column(
                       children: [
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 10),
                         Row(
                           children: [
                             Container(
@@ -1313,7 +1274,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             ),
                           ],
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 4),
                         Text(
                           durationLabel,
                           style: const TextStyle(
@@ -1334,12 +1295,12 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     Text(
                       arrTime.isNotEmpty ? arrTime : '11:30',
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: Color(0xFF1E293B),
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 3),
                     Text(
                       trip['destination'] ?? 'Destination',
                       style: const TextStyle(
@@ -1355,13 +1316,41 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
 
             const SizedBox(height: 22),
 
-            // ── Row 3: Minimal Amenities Inline Row ──
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              children: amenities.take(4).map((ame) {
-                return _buildMinimalAmenityChip(ame);
-              }).toList(),
+            // ── Row 3: Minimal Amenities Inline Row & Bottom-Right Rating ──
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: amenities.take(4).map((ame) {
+                      return _buildMinimalAmenityChip(ame);
+                    }).toList(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFFFB800), // Gold star
+                      size: 16,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      ((trip['rating'] ?? trip['average_rating']) as num?)?.toStringAsFixed(1) ?? '4.8',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
