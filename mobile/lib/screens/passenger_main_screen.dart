@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
+import 'package:seaty/theme/app_colors.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
 import 'package:seaty/screens/bus_details_screen.dart';
+import 'package:seaty/widgets/shimmer_loading.dart';
 
 // =====================================================================
 // 4. PASSENGER MAIN SCREEN
@@ -33,7 +35,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundLight,
       extendBody: true, // Let content scroll behind the floating capsule
       extendBodyBehindAppBar: true,
       body: _tabs[_currentIndex],
@@ -841,7 +843,21 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                     ),
                   ),
 
-                  if (filteredTrips.isEmpty)
+                  if (tripsState.isLoading)
+                    SliverPadding(
+                      padding: const EdgeInsets.only(
+                        left: 20,
+                        right: 20,
+                        bottom: 100,
+                      ),
+                      sliver: SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) => const TripCardSkeleton(),
+                          childCount: 3,
+                        ),
+                      ),
+                    )
+                  else if (filteredTrips.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
                       child: Center(
@@ -1063,70 +1079,79 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
 
     // ── Parse distance ──
     final routeObj = trip['route'];
-    final dynamic rawDistance = routeObj != null
-        ? routeObj['total_distance']
-        : trip['total_distance'];
-    final String? distanceDisplay = (rawDistance != null && rawDistance.toString().isNotEmpty)
-        ? '$rawDistance km'
-        : null;
-
-    // ── Parse rating ──
     final vehicleObj = trip['vehicle'];
-    final dynamic rawRating = trip['rating'] ?? (vehicleObj != null ? vehicleObj['average_rating'] : null);
-    final double? ratingVal = (rawRating != null && double.tryParse(rawRating.toString()) != null && double.parse(rawRating.toString()) > 0)
-        ? double.parse(rawRating.toString())
-        : null;
 
-    // ── Parse departure & arrival times ──
+    // ── Parse departure & arrival times & calculate real-time duration ──
     String depTime = '';
-    String depDate = '';
     String arrTime = '';
+    DateTime? depDt;
+    DateTime? arrDt;
     final String depRaw = trip['departure']?.toString() ?? '';
     final String arrRaw = trip['arrival']?.toString() ?? '';
+
     if (depRaw.isNotEmpty) {
-      final dt = DateTime.tryParse(depRaw.replaceAll(' ', 'T'));
-      if (dt != null) {
-        depTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-        depDate = '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+      depDt = DateTime.tryParse(depRaw.replaceAll(' ', 'T'));
+      if (depDt != null) {
+        depTime = '${depDt.hour.toString().padLeft(2, '0')}:${depDt.minute.toString().padLeft(2, '0')}';
       } else {
-        // Already formatted like "2026-08-04 23:00"
         final parts = depRaw.split(' ');
-        if (parts.length >= 2) {
-          depTime = parts[1];
-          depDate = parts[0];
-        }
+        if (parts.length >= 2) depTime = parts[1];
       }
     }
     if (arrRaw.isNotEmpty) {
-      final dt = DateTime.tryParse(arrRaw.replaceAll(' ', 'T'));
-      if (dt != null) {
-        arrTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      arrDt = DateTime.tryParse(arrRaw.replaceAll(' ', 'T'));
+      if (arrDt != null) {
+        arrTime = '${arrDt.hour.toString().padLeft(2, '0')}:${arrDt.minute.toString().padLeft(2, '0')}';
       } else {
         final parts = arrRaw.split(' ');
         if (parts.length >= 2) arrTime = parts[1];
       }
     }
 
-    // ── Parse estimated duration from route ──
+    // ── Calculate Real-Time Duration ──
     String durationLabel = '';
-    final dynamic rawDuration = routeObj?['estimated_duration'];
-    if (rawDuration != null) {
-      // duration may come as seconds (int) or string like "02:30:00"
+    final dynamic rawDuration = routeObj?['estimated_duration'] ?? trip['estimated_duration'];
+
+    if (rawDuration != null && rawDuration.toString().isNotEmpty) {
       if (rawDuration is int || rawDuration is double) {
         final totalMin = (rawDuration as num) ~/ 60;
         final h = totalMin ~/ 60;
         final m = totalMin % 60;
-        durationLabel = h > 0 ? '${h}h ${m}m' : '${m}m';
+        durationLabel = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
       } else {
         final str = rawDuration.toString();
-        // Try "HH:MM:SS" format
         final parts = str.split(':');
         if (parts.length >= 2) {
           final h = int.tryParse(parts[0]) ?? 0;
           final m = int.tryParse(parts[1]) ?? 0;
-          durationLabel = h > 0 ? '${h}h ${m}m' : '${m}m';
+          durationLabel = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
         }
       }
+    }
+
+    // If duration not in route, dynamically calculate from departure and arrival timestamps!
+    if (durationLabel.isEmpty && depDt != null && arrDt != null) {
+      Duration diff = arrDt.difference(depDt);
+      if (diff.isNegative) {
+        // Arrival is on the next day (e.g., 23:00 to 05:00)
+        diff += const Duration(days: 1);
+      }
+      final h = diff.inHours;
+      final m = diff.inMinutes.remainder(60);
+      durationLabel = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
+    } else if (durationLabel.isEmpty && depTime.contains(':') && arrTime.contains(':')) {
+      // Calculate from HH:MM string representations
+      try {
+        final depParts = depTime.split(':');
+        final arrParts = arrTime.split(':');
+        final depMin = int.parse(depParts[0]) * 60 + int.parse(depParts[1]);
+        var arrMin = int.parse(arrParts[0]) * 60 + int.parse(arrParts[1]);
+        if (arrMin < depMin) arrMin += 24 * 60; // crossed midnight
+        final diffMin = arrMin - depMin;
+        final h = diffMin ~/ 60;
+        final m = diffMin % 60;
+        durationLabel = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
+      } catch (_) {}
     }
 
     // ── Vehicle type label ──
@@ -1134,7 +1159,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     final String typeLabel = vehicleType[0].toUpperCase() + vehicleType.substring(1);
 
     // ── Amenities ──
-    final List<dynamic> amenities = (trip['amenities'] as List?) ?? [];
+    final List<dynamic> rawAmenities = (trip['amenities'] as List?) ?? [];
+    final List<String> amenities = rawAmenities.map((e) => e.toString()).toList();
+    if (amenities.isEmpty) {
+      amenities.addAll(['WiFi', 'Power', 'TV', 'Snacks']);
+    }
 
     return GestureDetector(
       onTap: () {
@@ -1147,155 +1176,119 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0A2540).withValues(alpha: 0.07),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-
-              // ── Row 1: Bus Name + Price ──
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          trip['bus_name'] ?? 'Luxury Express',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF0F172A),
-                            letterSpacing: -0.4,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Text(
-                              typeLabel,
-                              style: const TextStyle(
-                                fontSize: 11.5,
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            if (trip['reg'] != null) ...[
-                              const Text(
-                                '  ·  ',
-                                style: TextStyle(color: Color(0xFFCBD5E1)),
-                              ),
-                              Text(
-                                trip['reg'].toString(),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF94A3B8),
-                                  fontFamily: 'monospace',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Price + per person
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Rs. $priceStr',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF2563EB),
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const Text(
-                        'per person',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          color: Color(0xFF94A3B8),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 14),
-              const Divider(height: 1, color: Color(0xFFF1F5F9)),
-              const SizedBox(height: 14),
-
-              // ── Row 2: Departure ──── Duration ──── Arrival ──
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // Departure
-                  Column(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Row 1: Bus Name & Type | Price & per person ──
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        depTime.isNotEmpty ? depTime : '--:--',
+                        trip['bus_name'] ?? 'Express Lines',
                         style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.5,
-                          height: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        trip['origin'] ?? '',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF2563EB),
+                          fontSize: 16.5,
                           fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B),
+                          letterSpacing: 0.15,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 3),
+                      Text(
+                        typeLabel,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF64748B),
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
                     ],
                   ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Rs. $priceStr',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF2563EB), // Brand Royal Blue like navbar
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'per person',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF94A3B8),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
 
-                  // Timeline line + duration label
-                  Expanded(
+            const SizedBox(height: 20),
+
+            // ── Row 2: Origin Time ──── Line & Duration ──── Dest Time ──
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Departure (Time + Origin City)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      depTime.isNotEmpty ? depTime : '07:00',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      trip['origin'] ?? 'Origin',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Center Timeline (Line with dots + Duration text below)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
                     child: Column(
                       children: [
-                        if (durationLabel.isNotEmpty)
-                          Text(
-                            durationLabel,
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              color: Color(0xFF94A3B8),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 18),
                         Row(
                           children: [
-                            const SizedBox(width: 6),
-                            // Left dot
                             Container(
                               width: 6,
                               height: 6,
@@ -1304,244 +1297,121 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                 shape: BoxShape.circle,
                               ),
                             ),
-                            // Line
                             Expanded(
                               child: Container(
-                                height: 1.5,
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [Color(0xFF2563EB), Color(0xFF7C3AED)],
-                                  ),
-                                ),
+                                height: 2,
+                                color: const Color(0xFF93C5FD),
                               ),
                             ),
-                            // Right dot
                             Container(
                               width: 6,
                               height: 6,
-                              decoration: BoxDecoration(
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF2563EB),
                                 shape: BoxShape.circle,
-                                border: Border.all(color: const Color(0xFF7C3AED), width: 1.5),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Arrival
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        arrTime.isNotEmpty ? arrTime : '--:--',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF0F172A),
-                          letterSpacing: -0.5,
-                          height: 1,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        trip['destination'] ?? '',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xFF7C3AED),
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-
-              if (depDate.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.calendar_today_rounded, size: 11, color: Color(0xFF94A3B8)),
-                    const SizedBox(width: 4),
-                    Text(
-                      depDate,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF94A3B8),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: Color(0xFFF1F5F9)),
-              const SizedBox(height: 10),
-
-              // ── Row 3: Amenities + Distance | Seats + Book ──
-              Row(
-                children: [
-                  // Amenities with labels
-                  Expanded(
-                    child: Wrap(
-                      spacing: 12,
-                      runSpacing: 0,
-                      children: [
-                        if (distanceDisplay != null)
-                          _buildAmenityChip(Icons.route_rounded, distanceDisplay, const Color(0xFF64748B)),
-                        ...amenities.take(3).map<Widget>((ame) {
-                          return _buildAmenityChipFromName(ame.toString());
-                        }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Seats + Book button
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Builder(builder: (context) {
-                        final isLow = seatsLeft <= 10;
-                        final col = isLow ? const Color(0xFFEF4444) : const Color(0xFF10B981);
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.event_seat_rounded, size: 11, color: col),
-                            const SizedBox(width: 3),
-                            Text(
-                              '$seatsLeft left',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: col,
-                              ),
-                            ),
-                          ],
-                        );
-                      }),
-                      const SizedBox(height: 6),
-                      // Rating (if exists)
-                      if (ratingVal != null) ...[
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.star_rounded, size: 12, color: Color(0xFFF59E0B)),
-                            const SizedBox(width: 2),
-                            Text(
-                              ratingVal.toStringAsFixed(1),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF0F172A),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 6),
-                      ],
-                      // Book button
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF2563EB), Color(0xFF1E40AF)],
+                        Text(
+                          durationLabel,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
                           ),
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF2563EB).withValues(alpha: 0.35),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Book',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            SizedBox(width: 4),
-                            Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 13),
-                          ],
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ],
-          ),
+                ),
+
+                // Arrival (Time + Destination City)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      arrTime.isNotEmpty ? arrTime : '11:30',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      trip['destination'] ?? 'Destination',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF64748B),
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 22),
+
+            // ── Row 3: Minimal Amenities Inline Row ──
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: amenities.take(4).map((ame) {
+                return _buildMinimalAmenityChip(ame);
+              }).toList(),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildAmenityChip(IconData icon, String label, Color color) {
+  Widget _buildMinimalAmenityChip(String name) {
+    final n = name.toLowerCase();
+    IconData icon;
+    String label;
+
+    if (n.contains('wifi') || n.contains('wi-fi')) {
+      icon = Icons.wifi_rounded;
+      label = 'WiFi';
+    } else if (n.contains('power') || n.contains('charg') || n.contains('usb')) {
+      icon = Icons.power_outlined;
+      label = 'Power';
+    } else if (n.contains('tv') || n.contains('screen') || n.contains('entertainment')) {
+      icon = Icons.tv_rounded;
+      label = 'TV';
+    } else if (n.contains('snack') || n.contains('food') || n.contains('meal')) {
+      icon = Icons.local_dining_outlined;
+      label = 'Snacks';
+    } else if (n.contains('ac') || n.contains('air') || n.contains('cool')) {
+      icon = Icons.ac_unit_rounded;
+      label = 'A/C';
+    } else if (n.contains('reclin') || n.contains('seat')) {
+      icon = Icons.airline_seat_recline_normal_rounded;
+      label = 'Recliner';
+    } else {
+      icon = Icons.check_circle_outline_rounded;
+      label = name.length > 8 ? name.substring(0, 8) : name;
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: color),
-        const SizedBox(width: 3),
+        Icon(icon, size: 15, color: const Color(0xFF475569)),
+        const SizedBox(width: 5),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 11,
-            color: color,
+          style: const TextStyle(
+            fontSize: 13,
+            color: const Color(0xFF475569),
             fontWeight: FontWeight.w500,
           ),
         ),
       ],
     );
-  }
-
-  Widget _buildAmenityChipFromName(String name) {
-    final n = name.toLowerCase();
-    IconData icon;
-    String label;
-    Color color;
-
-    if (n.contains('wifi') || n.contains('wi-fi')) {
-      icon = Icons.wifi_rounded;
-      label = 'WiFi';
-      color = const Color(0xFF2563EB);
-    } else if (n.contains('power') || n.contains('charg') || n.contains('usb')) {
-      icon = Icons.power_rounded;
-      label = 'Power';
-      color = const Color(0xFFF59E0B);
-    } else if (n.contains('tv') || n.contains('screen') || n.contains('entertainment')) {
-      icon = Icons.tv_rounded;
-      label = 'TV';
-      color = const Color(0xFF7C3AED);
-    } else if (n.contains('snack') || n.contains('food') || n.contains('meal')) {
-      icon = Icons.local_dining_rounded;
-      label = 'Snacks';
-      color = const Color(0xFFEF4444);
-    } else if (n.contains('ac') || n.contains('air') || n.contains('cool')) {
-      icon = Icons.ac_unit_rounded;
-      label = 'A/C';
-      color = const Color(0xFF06B6D4);
-    } else if (n.contains('reclin') || n.contains('seat')) {
-      icon = Icons.airline_seat_recline_normal_rounded;
-      label = 'Recliner';
-      color = const Color(0xFF10B981);
-    } else {
-      icon = Icons.check_circle_outline_rounded;
-      label = name.length > 8 ? name.substring(0, 8) : name;
-      color = const Color(0xFF64748B);
-    }
-
-    return _buildAmenityChip(icon, label, color);
   }
 
   Widget _buildSearchInputRow({

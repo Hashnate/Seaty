@@ -781,7 +781,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                                 Text(
                                   bookingsState.selectedSeats.join(', '),
                                   style: const TextStyle(
-                                    color: Color(0xFFFF8A50),
+                                    color: Colors.white70,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -793,7 +793,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: Color(0xFFFF8A50),
+                              color: Colors.white,
                             ),
                           ),
                         ],

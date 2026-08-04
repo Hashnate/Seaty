@@ -10,12 +10,14 @@ class TripsState {
   final String selectedFrom;
   final String selectedTo;
   final DateTime? selectedDate;
+  final bool isLoading;
 
   TripsState({
     required this.trips,
     required this.selectedFrom,
     required this.selectedTo,
     this.selectedDate,
+    this.isLoading = false,
   });
 
   TripsState copyWith({
@@ -23,12 +25,14 @@ class TripsState {
     String? selectedFrom,
     String? selectedTo,
     DateTime? selectedDate,
+    bool? isLoading,
   }) {
     return TripsState(
       trips: trips ?? this.trips,
       selectedFrom: selectedFrom ?? this.selectedFrom,
       selectedTo: selectedTo ?? this.selectedTo,
       selectedDate: selectedDate ?? this.selectedDate,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
@@ -36,35 +40,14 @@ class TripsState {
 class TripsNotifier extends Notifier<TripsState> {
   @override
   TripsState build() {
-    // Initial local fallback trips
-    final initialTrips = [
-      {
-        'id': 't1',
-        'origin': 'Colombo Fort',
-        'destination': 'Galle Multi-modal',
-        'departure': '2026-07-13 14:00',
-        'price': 1600.0,
-        'bus_name': 'Colombo Express VIP',
-        'reg': 'WP-ND-8942',
-      },
-      {
-        'id': 't2',
-        'origin': 'Colombo Fort',
-        'destination': 'Kandy Goods Shed',
-        'departure': '2026-07-13 16:30',
-        'price': 1800.0,
-        'bus_name': 'Kandy Intercity Deluxe',
-        'reg': 'CP-NB-7721',
-      },
-    ];
-
-    // Read initial data in the background
+    // Read initial data in the background without showing hardcoded mock cards
     Future.microtask(() => loadTrips());
 
     return TripsState(
-      trips: initialTrips,
+      trips: [],
       selectedFrom: '',
       selectedTo: '',
+      isLoading: true,
     );
   }
 
@@ -77,6 +60,7 @@ class TripsNotifier extends Notifier<TripsState> {
   }
 
   Future<void> loadTrips({String? date}) async {
+    state = state.copyWith(isLoading: true);
     final settings = ref.read(settingsProvider);
     final auth = ref.read(authProvider);
 
@@ -122,10 +106,13 @@ class TripsNotifier extends Notifier<TripsState> {
             'arrival': tripMap['arrival_time']?.toString().replaceAll('T', ' ').substring(0, 16) ?? '',
           });
         }
-        state = state.copyWith(trips: loadedTrips);
+        state = state.copyWith(trips: loadedTrips, isLoading: false);
+      } else {
+        state = state.copyWith(isLoading: false);
       }
     } catch (e) {
       debugPrint('Error loading trips: $e');
+      state = state.copyWith(isLoading: false);
     }
   }
 

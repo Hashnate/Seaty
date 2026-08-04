@@ -1101,85 +1101,140 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                         children: _reviewsList.map((item) {
                           final name = (item['passenger_name'] ?? 'Passenger').toString();
                           final initial = name.isNotEmpty ? name[0].toUpperCase() : 'P';
-                          final rating = (item['rating'] as num?)?.toInt() ?? 5;
+                          final double ratingVal = (item['rating'] as num?)?.toDouble() ?? 5.0;
                           final comment = (item['comment'] ?? '').toString();
 
+                          String dateStr = 'Recent';
+                          final rawDate = item['created_at'] ?? item['date'];
+                          if (rawDate != null && rawDate.toString().isNotEmpty) {
+                            try {
+                              final dt = DateTime.parse(rawDate.toString().replaceAll(' ', 'T'));
+                              final months = [
+                                'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+                              ];
+                              dateStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+                            } catch (_) {
+                              dateStr = rawDate.toString().split(' ')[0];
+                            }
+                          }
+
                           return Container(
-                            padding: const EdgeInsets.all(12),
-                            margin: const EdgeInsets.only(bottom: 8),
+                            margin: const EdgeInsets.only(bottom: 12),
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                              border: Border.all(color: const Color(0xFFF1F5F9)),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: IntrinsicHeight(
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
                                   children: [
-                                    Row(
-                                      children: [
-                                        CircleAvatar(
-                                          radius: 14,
-                                          backgroundColor: const Color(
-                                            0xFF2563EB,
-                                          ).withValues(alpha: 0.15),
-                                          child: Text(
-                                            initial,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFF2563EB),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          name,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w800,
-                                            color: Color(0xFF0A2540),
-                                          ),
-                                        ),
-                                      ],
+                                    // Blue Left Accent Bar (avoiding purple, using brand blue)
+                                    Container(
+                                      width: 4,
+                                      color: const Color(0xFF2563EB),
                                     ),
-                                    const Text(
-                                      'Verified Passenger',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: Color(0xFF10B981),
-                                        fontWeight: FontWeight.w600,
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            // Top Row: Avatar + Name + Date | Gold Star + Rating
+                                            Row(
+                                              crossAxisAlignment: CrossAxisAlignment.center,
+                                              children: [
+                                                // User Avatar Circle
+                                                CircleAvatar(
+                                                  radius: 20,
+                                                  backgroundColor: const Color(0xFFE0F2FE),
+                                                  child: Text(
+                                                    initial,
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      fontWeight: FontWeight.w800,
+                                                      color: Color(0xFF0284C7),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                // Name & Date
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        name,
+                                                        style: const TextStyle(
+                                                          fontSize: 14,
+                                                          fontWeight: FontWeight.w700,
+                                                          color: Color(0xFF1E293B),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        dateStr,
+                                                        style: const TextStyle(
+                                                          fontSize: 11,
+                                                          color: Color(0xFF94A3B8),
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                // Rating (Gold Star + Score)
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.star_rounded,
+                                                      color: Color(0xFFFFB800), // Rich Golden Yellow
+                                                      size: 18,
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      ratingVal.toStringAsFixed(1),
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: Color(0xFF1E293B),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+
+                                            if (comment.isNotEmpty) ...[
+                                              const SizedBox(height: 12),
+                                              Text(
+                                                comment,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color: Color(0xFF475569),
+                                                  fontWeight: FontWeight.w400,
+                                                  height: 1.4,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: List.generate(5, (starIdx) {
-                                    return Icon(
-                                      Icons.star_rounded,
-                                      color: starIdx < rating
-                                          ? const Color(0xFF2563EB)
-                                          : const Color(0xFFCBD5E1),
-                                      size: 14,
-                                    );
-                                  }),
-                                ),
-                                if (comment.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    comment,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF334155),
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ],
+                              ),
                             ),
                           );
                         }).toList(),
