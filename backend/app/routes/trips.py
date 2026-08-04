@@ -217,6 +217,12 @@ def list_trips(
     filtered_trips = []
     for trip in trips:
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+        if trip.vehicle:
+            v_reviews = db.query(models.Review).filter(models.Review.vehicle_id == trip.vehicle.id).all()
+            if v_reviews:
+                trip.vehicle.average_rating = round(sum(r.rating for r in v_reviews) / len(v_reviews), 1)
+            else:
+                trip.vehicle.average_rating = None
         trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
         trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
         
@@ -290,6 +296,12 @@ def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Trip not found")
         
     trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+    if trip.vehicle:
+        v_reviews = db.query(models.Review).filter(models.Review.vehicle_id == trip.vehicle.id).all()
+        if v_reviews:
+            trip.vehicle.average_rating = round(sum(r.rating for r in v_reviews) / len(v_reviews), 1)
+        else:
+            trip.vehicle.average_rating = None
     trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
     trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
     

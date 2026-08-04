@@ -123,6 +123,7 @@ class VehicleResponse(BaseModel):
     amenities: List[str]
     is_verified: bool
     document_urls: List[str]
+    average_rating: Optional[float] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
