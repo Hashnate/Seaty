@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/screens/splash_screen.dart';
@@ -27,7 +28,8 @@ export 'package:seaty/screens/notifications_screen.dart';
 // APP ENTRYPOINT
 // =====================================================================
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   globalPrefs = await SharedPreferences.getInstance();
   await initFirebaseMessaging();
   runApp(const ProviderScope(child: SeatyApp()));
