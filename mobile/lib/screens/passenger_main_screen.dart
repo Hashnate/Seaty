@@ -1043,10 +1043,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   }
 
   Widget _buildModernTripCard(BuildContext context, Map<String, dynamic> trip) {
-    // ── Parse price ──
-    final String priceStr =
-        double.tryParse(trip['price'].toString())?.toStringAsFixed(0) ??
-        trip['price'].toString();
+    final double rawPriceVal = double.tryParse(trip['price'].toString()) ?? 0.0;
+    final String priceStr = rawPriceVal.toStringAsFixed(0).replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]},',
+        );
 
     // ── Parse seats ──
     final int totalSeats = trip['total_seats'] as int? ?? 40;
@@ -1138,7 +1139,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     final List<dynamic> rawAmenities = (trip['amenities'] as List?) ?? [];
     final List<String> amenities = rawAmenities.map((e) => e.toString()).toList();
     if (amenities.isEmpty) {
-      amenities.addAll(['WiFi', 'Power', 'TV', 'Snacks']);
+      amenities.addAll(['AC', 'WiFi', 'Charging Ports', 'Reclining Seats', 'Luggage Space']);
     }
 
     return GestureDetector(
@@ -1340,8 +1341,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                   child: Wrap(
                     spacing: 16,
                     runSpacing: 8,
-                    children: amenities.take(4).map((ame) {
-                      return _buildMinimalAmenityChip(ame);
+                    children: amenities.map((ame) {
+                      return _buildMinimalAmenityIcon(ame);
                     }).toList(),
                   ),
                 ),
@@ -1373,48 +1374,37 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     );
   }
 
-  Widget _buildMinimalAmenityChip(String name) {
+  Widget _buildMinimalAmenityIcon(String name) {
     final n = name.toLowerCase();
     IconData icon;
-    String label;
 
-    if (n.contains('wifi') || n.contains('wi-fi')) {
+    if (n.contains('luggage') || n.contains('baggage') || n.contains('bag') || n.contains('suitcases') || n.contains('space')) {
+      icon = Icons.luggage_outlined;
+    } else if (n.contains('wifi') || n.contains('wi-fi')) {
       icon = Icons.wifi_rounded;
-      label = 'WiFi';
-    } else if (n.contains('power') || n.contains('charg') || n.contains('usb')) {
+    } else if (n.contains('power') || n.contains('charg') || n.contains('plug') || n.contains('outlet')) {
       icon = Icons.power_outlined;
-      label = 'Power';
     } else if (n.contains('tv') || n.contains('screen') || n.contains('entertainment')) {
       icon = Icons.tv_rounded;
-      label = 'TV';
     } else if (n.contains('snack') || n.contains('food') || n.contains('meal')) {
       icon = Icons.local_dining_outlined;
-      label = 'Snacks';
-    } else if (n.contains('ac') || n.contains('air') || n.contains('cool')) {
-      icon = Icons.ac_unit_rounded;
-      label = 'A/C';
     } else if (n.contains('reclin') || n.contains('seat')) {
       icon = Icons.airline_seat_recline_normal_rounded;
-      label = 'Recliner';
+    } else if (n.contains('restroom') || n.contains('toilet') || n.contains('wc')) {
+      icon = Icons.wc_rounded;
+    } else if (n.contains('a/c') || n.contains('air') || n.contains('cool') || n.contains('snowflake') || n == 'ac' || n.startsWith('ac ') || n.endsWith(' ac') || n.contains(' ac ')) {
+      icon = Icons.ac_unit_rounded;
     } else {
       icon = Icons.check_circle_outline_rounded;
-      label = name.length > 8 ? name.substring(0, 8) : name;
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 15, color: const Color(0xFF475569)),
-        const SizedBox(width: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            color: const Color(0xFF475569),
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+    return Tooltip(
+      message: name,
+      child: Icon(
+        icon,
+        size: 16,
+        color: const Color(0xFF475569),
+      ),
     );
   }
 

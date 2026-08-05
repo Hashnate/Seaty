@@ -531,9 +531,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E3A8A).withValues(alpha: 0.2),
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.2),
                             border: Border.all(
-                              color: const Color(0xFF1E3A8A),
+                              color: const Color(0xFF2563EB),
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(16),
@@ -542,7 +542,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                             children: [
                               Icon(
                                 Icons.face_rounded,
-                                color: Color(0xFF60A5FA),
+                                color: Color(0xFF2563EB),
                                 size: 36,
                               ),
                               SizedBox(height: 8),
@@ -569,9 +569,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE11D48).withValues(alpha: 0.2),
+                            color: const Color(0xFFEC4899).withValues(alpha: 0.2),
                             border: Border.all(
-                              color: const Color(0xFFE11D48),
+                              color: const Color(0xFFEC4899),
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(16),
@@ -580,7 +580,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                             children: [
                               Icon(
                                 Icons.face_3_rounded,
-                                color: Color(0xFFF472B6),
+                                color: Color(0xFFEC4899),
                                 size: 36,
                               ),
                               SizedBox(height: 8),
@@ -657,9 +657,8 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _buildLegendItem(const Color(0xFFFFFFFF), 'Available', border: const Color(0xFFCBD5E1)),
-                      _buildLegendItem(const Color(0xFF2563EB), 'Selected'),
-                      _buildLegendItem(const Color(0xFF1E3A8A), 'Male'),
-                      _buildLegendItem(const Color(0xFFE11D48), 'Female'),
+                      _buildLegendItem(const Color(0xFF2563EB), 'Male'),
+                      _buildLegendItem(const Color(0xFFEC4899), 'Female'),
                       _buildLegendItem(const Color(0xFFD97706), 'Held'),
                     ],
                   ),
@@ -789,7 +788,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                             ],
                           ),
                           Text(
-                            'Rs. ${(widget.trip['price'] * bookingsState.selectedSeats.length).toStringAsFixed(0)}',
+                            'Rs. ${((widget.trip['price'] as num) * bookingsState.selectedSeats.length).toDouble().toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
                             style: const TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
@@ -1016,7 +1015,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                     if (isSelected) {
                       ref.read(bookingsProvider.notifier).deselectSeat(seatLabel);
                     } else {
-                      if (bookingsState.selectedSeats.length >= 6) {
+                      if (state.selectedSeats.length >= 6) {
                         SeatyNotifications.show(
                           context,
                           'Maximum 6 seats allowed per booking session.',

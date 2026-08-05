@@ -241,34 +241,165 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
     );
   }
 
-  void _showImageLightbox(String imageUrl) {
+  void _showImageLightbox(List<String> images, int initialIndex) {
+    if (images.isEmpty) return;
+
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          alignment: Alignment.topRight,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: Colors.black87,
-                  padding: const EdgeInsets.all(32),
-                  child: const Icon(Icons.broken_image_rounded, color: Colors.white54, size: 64),
-                ),
+      builder: (context) {
+        int currentIndex = initialIndex.clamp(0, images.length - 1);
+        final pageController = PageController(initialPage: currentIndex);
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 24),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 1. PageView for swiping between images
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: MediaQuery.of(context).size.height * 0.7,
+                      child: PageView.builder(
+                        controller: pageController,
+                        itemCount: images.length,
+                        onPageChanged: (index) {
+                          setDialogState(() {
+                            currentIndex = index;
+                          });
+                        },
+                        itemBuilder: (context, index) {
+                          return Image.network(
+                            images[index],
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              color: Colors.black87,
+                              padding: const EdgeInsets.all(32),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.broken_image_rounded, color: Colors.white54, size: 64),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'Image unavailable',
+                                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // 2. Previous Button (Left Arrow)
+                  if (currentIndex > 0)
+                    Positioned(
+                      left: 8,
+                      child: GestureDetector(
+                        onTap: () {
+                          pageController.previousPage(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 1),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_left_rounded,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // 3. Next Button (Right Arrow)
+                  if (currentIndex < images.length - 1)
+                    Positioned(
+                      right: 8,
+                      child: GestureDetector(
+                        onTap: () {
+                          pageController.nextPage(
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.65),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 1),
+                          ),
+                          child: const Icon(
+                            Icons.chevron_right_rounded,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // 4. Close Button (Top Right X)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.65),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24, width: 1),
+                        ),
+                        child: const Icon(
+                          Icons.close_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // 5. Image Counter Badge (Bottom Center)
+                  if (images.length > 1)
+                    Positioned(
+                      bottom: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white24, width: 0.8),
+                        ),
+                        child: Text(
+                          '${currentIndex + 1} / ${images.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -470,7 +601,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
         n.contains('baggage') ||
         n.contains('bag') ||
         n.contains('space')) {
-      iconData = Icons.work_rounded;
+      iconData = Icons.luggage_rounded;
     } else if (n.contains('ac') ||
         n.contains('air') ||
         n.contains('cool') ||
@@ -484,9 +615,11 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final bookingsState = ref.watch(bookingsProvider);
-    final String priceStr =
-        double.tryParse(widget.trip['price'].toString())?.toStringAsFixed(2) ??
-        widget.trip['price'].toString();
+    final double rawPriceVal = double.tryParse(widget.trip['price'].toString()) ?? 0.0;
+    final String priceStr = rawPriceVal.toStringAsFixed(2).replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (Match m) => '${m[1]},',
+        );
     final int totalSeats = widget.trip['total_seats'] as int? ?? 40;
     final List<dynamic> tripBookedSeats = (widget.trip['booked_seats'] as List?) ?? [];
     final int bookedCount = bookingsState.bookedSeats.isNotEmpty 
@@ -678,38 +811,6 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                               ),
                             ),
 
-                            // Image Count Indicator Badge (e.g. 1/3) at bottom right of image area
-                            Positioned(
-                              right: 16,
-                              bottom: 85,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.65),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.white24, width: 0.8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.photo_library_rounded,
-                                      color: Colors.white,
-                                      size: 13,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${_currentImageIndex + 1}/${_sliderImages.length}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -1196,10 +1297,11 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                       builder: (context) {
                         final settings = ref.watch(settingsProvider);
                         final rawGallery = widget.trip['gallery_image_urls'] as List? ?? [];
-                        final galleryList = rawGallery
+                        final base = settings.apiBaseUrl.replaceAll('/api/v1', '');
+                        final List<String> fullGalleryUrls = rawGallery
                             .map((e) => e.toString().trim())
                             .where((e) => e.isNotEmpty)
-                            .take(5)
+                            .map((imgPath) => imgPath.startsWith('http') ? imgPath : '$base$imgPath')
                             .toList();
 
                         return Column(
@@ -1217,9 +1319,9 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                     letterSpacing: -0.3,
                                   ),
                                 ),
-                                if (galleryList.isNotEmpty)
+                                if (fullGalleryUrls.isNotEmpty)
                                   Text(
-                                    '${galleryList.length} photo${galleryList.length == 1 ? '' : 's'}',
+                                    '${fullGalleryUrls.length} photo${fullGalleryUrls.length == 1 ? '' : 's'}',
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
@@ -1229,7 +1331,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                               ],
                             ),
                             const SizedBox(height: 10),
-                            if (galleryList.isEmpty)
+                            if (fullGalleryUrls.isEmpty)
                               Container(
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(14),
@@ -1254,14 +1356,12 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                 height: 110,
                                 child: ListView.builder(
                                   scrollDirection: Axis.horizontal,
-                                  itemCount: galleryList.length,
+                                  itemCount: fullGalleryUrls.length,
                                   itemBuilder: (context, idx) {
-                                    final imgPath = galleryList[idx];
-                                    final base = settings.apiBaseUrl.replaceAll('/api/v1', '');
-                                    final fullUrl = imgPath.startsWith('http') ? imgPath : '$base$imgPath';
+                                    final fullUrl = fullGalleryUrls[idx];
 
                                     return GestureDetector(
-                                      onTap: () => _showImageLightbox(fullUrl),
+                                      onTap: () => _showImageLightbox(fullGalleryUrls, idx),
                                       child: Container(
                                         margin: const EdgeInsets.only(right: 10),
                                         width: 140,

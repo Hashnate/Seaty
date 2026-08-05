@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 // =====================================================================
-// CUSTOM ANIMATED 3D SEAT WIDGET
+// CUSTOM SEAT WIDGET
 // =====================================================================
 class Animated3DSeat extends StatefulWidget {
   final String label;
@@ -43,11 +43,11 @@ class _Animated3DSeatState extends State<Animated3DSeat>
     );
     _scale = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 1.15),
+        tween: Tween<double>(begin: 1.0, end: 1.12),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.15, end: 1.0),
+        tween: Tween<double>(begin: 1.12, end: 1.0),
         weight: 50,
       ),
     ]).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
@@ -79,85 +79,51 @@ class _Animated3DSeatState extends State<Animated3DSeat>
   Widget build(BuildContext context) {
     Color borderColor;
     Color cushionFillColor;
-    Color armrestFillColor;
-    Color bottomBarColor;
-    Color bottomSegmentFillColor;
     Color textColor;
     IconData? genderIcon;
 
     if (widget.isBooked) {
       final String g = widget.gender.toLowerCase();
       if (g == 'male') {
-        borderColor = const Color(0xFF0F2C59);
-        cushionFillColor = const Color(0xFF0F2C59).withValues(alpha: 0.15);
-        armrestFillColor = const Color(0xFF0F2C59).withValues(alpha: 0.25);
-        bottomBarColor = const Color(0xFF0F2C59);
-        bottomSegmentFillColor = const Color(0xFF0F2C59).withValues(alpha: 0.25);
-        textColor = const Color(0xFF0F2C59);
-        genderIcon = Icons.man_rounded;
+        borderColor = const Color(0xFF2563EB); // Male Blue
+        cushionFillColor = const Color(0xFF2563EB);
+        textColor = Colors.white;
       } else if (g == 'female') {
-        borderColor = const Color(0xFFF472B6);
-        cushionFillColor = const Color(0xFFF472B6).withValues(alpha: 0.15);
-        armrestFillColor = const Color(0xFFF472B6).withValues(alpha: 0.25);
-        bottomBarColor = const Color(0xFFF472B6);
-        bottomSegmentFillColor = const Color(0xFFF472B6).withValues(alpha: 0.25);
-        textColor = const Color(0xFFF472B6);
-        genderIcon = Icons.woman_rounded;
+        borderColor = const Color(0xFFEC4899); // Female Pink
+        cushionFillColor = const Color(0xFFEC4899);
+        textColor = Colors.white;
       } else {
-        borderColor = const Color(0xFF64748B);
-        cushionFillColor = const Color(0xFFE2E8F0);
-        armrestFillColor = const Color(0xFFE2E8F0);
-        bottomBarColor = const Color(0xFF64748B);
-        bottomSegmentFillColor = const Color(0xFFCBD5E1);
-        textColor = const Color(0xFF64748B);
+        borderColor = const Color(0xFF475569);
+        cushionFillColor = const Color(0xFF475569);
+        textColor = Colors.white;
       }
     } else if (widget.isHeld) {
       borderColor = const Color(0xFFD97706); // Amber
-      cushionFillColor = Colors.white;
-      armrestFillColor = const Color(0xFFFDE68A);
-      bottomBarColor = const Color(0xFFD97706);
-      bottomSegmentFillColor = const Color(0xFFFDE68A);
-      textColor = const Color(0xFFB45309);
+      cushionFillColor = const Color(0xFFD97706);
+      textColor = Colors.white;
     } else if (widget.isSelected) {
       final String g = widget.gender.toLowerCase();
-      if (g == 'male') {
-        borderColor = const Color(0xFF2563EB); // Blue
-        cushionFillColor = Colors.white;
-        armrestFillColor = const Color(0xFFBFDBFE);
-        bottomBarColor = const Color(0xFF2563EB);
-        bottomSegmentFillColor = const Color(0xFFBFDBFE);
-        textColor = const Color(0xFF1D4ED8);
-        genderIcon = Icons.man_rounded;
-      } else if (g == 'female') {
-        borderColor = const Color(0xFFE11D48); // Pink
-        cushionFillColor = Colors.white;
-        armrestFillColor = const Color(0xFFFECDD3);
-        bottomBarColor = const Color(0xFFE11D48);
-        bottomSegmentFillColor = const Color(0xFFFECDD3);
-        textColor = const Color(0xFFBE123C);
+      if (g == 'female') {
+        borderColor = const Color(0xFFEC4899); // Female Pink
+        cushionFillColor = const Color(0xFFEC4899);
+        textColor = Colors.white;
         genderIcon = Icons.woman_rounded;
       } else {
-        // Purple theme from the user's mockup image
-        borderColor = const Color(0xFF8B5CF6); // Violet/Purple
-        cushionFillColor = Colors.white;
-        armrestFillColor = const Color(0xFFDDD6FE); // Light purple fill
-        bottomBarColor = const Color(0xFF8B5CF6);
-        bottomSegmentFillColor = const Color(0xFFDDD6FE);
-        textColor = const Color(0xFF6D28D9);
+        borderColor = const Color(0xFF2563EB); // Male Blue
+        cushionFillColor = const Color(0xFF2563EB);
+        textColor = Colors.white;
+        genderIcon = Icons.man_rounded;
       }
     } else {
-      // Available
-      borderColor = const Color(0xFF71717A); // Slate/zinc border
+      // Available seat
+      borderColor = const Color(0xFF64748B); // Slate border
       cushionFillColor = Colors.white;
-      armrestFillColor = Colors.white;
-      bottomBarColor = const Color(0xFF71717A);
-      bottomSegmentFillColor = Colors.white;
-      textColor = const Color(0xFF18181B);
+      textColor = const Color(0xFF0F172A);
     }
 
-    final double armrestWidth = (widget.width * 0.12).clamp(4.0, 8.0);
-    final double gap = 1.0;
-    final double topOffset = widget.height * 0.15;
+    // Strip non-numeric letters (e.g. S1 -> 1, 1A -> 1, Seat 1 -> 1)
+    final String cleanLabel = widget.label.replaceAll(RegExp(r'[^0-9]'), '');
+    final String displayLabel = cleanLabel.isNotEmpty ? cleanLabel : widget.label;
 
     return GestureDetector(
       onTap: (widget.isBooked || widget.isHeld) ? null : widget.onTap,
@@ -172,130 +138,51 @@ class _Animated3DSeatState extends State<Animated3DSeat>
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // Left Armrest
-                  Positioned(
-                    left: 0,
-                    top: topOffset,
-                    bottom: 0,
-                    width: armrestWidth,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: armrestFillColor,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(4),
-                          bottomLeft: Radius.circular(4),
-                        ),
-                        border: Border.all(
-                          color: borderColor,
-                          width: widget.isSelected ? 1.5 : 1.2,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Center Cushion / Backrest
-                  Positioned(
-                    left: armrestWidth + gap,
-                    right: armrestWidth + gap,
-                    top: 0,
-                    bottom: 0,
+                  // Full Seat Square
+                  Positioned.fill(
                     child: Container(
                       decoration: BoxDecoration(
                         color: cushionFillColor,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(6),
-                          topRight: Radius.circular(6),
-                          bottomLeft: Radius.circular(4),
-                          bottomRight: Radius.circular(4),
-                        ),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: borderColor,
-                          width: widget.isSelected ? 1.5 : 1.2,
+                          width: widget.isSelected ? 1.8 : 1.3,
                         ),
                       ),
-                      child: Stack(
-                        children: [
-                          // Bottom Line and Fill Segment
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            height: widget.height * 0.18,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: bottomSegmentFillColor,
-                                borderRadius: const BorderRadius.only(
-                                  bottomLeft: Radius.circular(3),
-                                  bottomRight: Radius.circular(3),
-                                ),
-                                border: Border(
-                                  top: BorderSide(
-                                    color: bottomBarColor,
-                                    width: widget.isSelected ? 1.5 : 1.2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Seat Label (adjusted to avoid overlapping the bottom bar)
-                          Center(
-                            child: Padding(
-                              padding: EdgeInsets.only(bottom: widget.height * 0.12),
-                              child: Text(
-                                widget.label,
-                                style: TextStyle(
-                                  fontSize: (widget.height * 0.28).clamp(9.0, 13.0),
-                                  fontWeight: FontWeight.w800,
-                                  color: textColor,
-                                  letterSpacing: -0.3,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Right Armrest
-                  Positioned(
-                    right: 0,
-                    top: topOffset,
-                    bottom: 0,
-                    width: armrestWidth,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: armrestFillColor,
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(4),
-                          bottomRight: Radius.circular(4),
-                        ),
-                        border: Border.all(
-                          color: borderColor,
-                          width: widget.isSelected ? 1.5 : 1.2,
+                      alignment: Alignment.center,
+                      child: Text(
+                        displayLabel,
+                        style: TextStyle(
+                          fontSize: (widget.height * 0.38).clamp(11.0, 16.0),
+                          fontWeight: FontWeight.w800,
+                          color: textColor,
+                          letterSpacing: -0.3,
                         ),
                       ),
                     ),
                   ),
-                  // Gender Badge Icon
-                  if (genderIcon != null)
+                  // Gender Badge Icon (Shown ONLY for selected seats)
+                  if (widget.isSelected && genderIcon != null)
                     Positioned(
                       top: -4,
                       right: -4,
                       child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          color: borderColor,
+                        padding: const EdgeInsets.all(2.5),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
                           shape: BoxShape.circle,
-                          boxShadow: const [
+                          boxShadow: [
                             BoxShadow(
-                              color: Colors.black12,
-                              blurRadius: 2,
+                              color: Colors.black26,
+                              blurRadius: 3,
+                              offset: Offset(0, 1),
                             )
                           ],
                         ),
                         child: Icon(
                           genderIcon,
-                          size: 10,
-                          color: Colors.white,
+                          size: 11,
+                          color: borderColor,
                         ),
                       ),
                     ),
