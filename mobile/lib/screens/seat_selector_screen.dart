@@ -1016,6 +1016,14 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                     if (isSelected) {
                       ref.read(bookingsProvider.notifier).deselectSeat(seatLabel);
                     } else {
+                      if (bookingsState.selectedSeats.length >= 6) {
+                        SeatyNotifications.show(
+                          context,
+                          'Maximum 6 seats allowed per booking session.',
+                          isWarning: true,
+                        );
+                        return;
+                      }
                       _showGenderSelectionDialog(context, seatLabel);
                     }
                   },

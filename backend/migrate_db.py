@@ -74,6 +74,32 @@ try:
         cur.execute("UPDATE vehicles SET seat_layout = %s WHERE id = %s", (json.dumps(layout), v_id))
     print("Vehicle seat layout migration to numeric labels completed!")
 
+    # 5. Add new vehicle columns (contact_phone, main_image_url, gallery_image_urls)
+    print("Adding vehicle columns (contact_phone, main_image_url, gallery_image_urls)...")
+    for col_def in [
+        "contact_phone TEXT",
+        "main_image_url TEXT",
+        "gallery_image_urls TEXT[] DEFAULT '{}'"
+    ]:
+        col_name = col_def.split()[0]
+        try:
+            cur.execute(f"ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS {col_def}")
+        except Exception as e:
+            print(f"Error adding {col_name} to vehicles: {e}")
+
+    # 6. Create user_favourites table
+    print("Creating user_favourites table if not exists...")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_favourites (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            schedule_id UUID REFERENCES trip_schedules(id) ON DELETE CASCADE,
+            vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT unique_user_favourite UNIQUE (user_id, vehicle_id, schedule_id)
+        );
+    """)
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

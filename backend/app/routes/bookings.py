@@ -37,6 +37,12 @@ def create_booking(
     Checks seat availability against both confirmed bookings AND active holds.
     Booking starts as 'pending' until payment is completed.
     """
+    if not booking_in.selected_seats or len(booking_in.selected_seats) > 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You can book a maximum of 6 seats per booking session."
+        )
+
     # Verify trip exists
     trip = db.query(models.Trip).filter(models.Trip.id == booking_in.trip_id).first()
     if not trip:
@@ -93,19 +99,6 @@ def create_booking(
     db.refresh(db_booking)
 
     notify_seat_change(str(booking_in.trip_id), "SEAT_HELD", booking_in.selected_seats)
-
-    # Dispatch Booking Confirmation SMS via Notify.lk Gateway
-    if current_user.phone_number:
-        try:
-            from app.services.sms_service import send_sms
-            route_info = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
-            orig = route_info.origin if route_info else "Origin"
-            dest = route_info.destination if route_info else "Destination"
-            seats_str = ", ".join(booking_in.selected_seats)
-            sms_text = f"Seaty Booking Confirmed! Seats: {seats_str} ({orig} to {dest}). Booking ID: #{str(db_booking.id)[:8]}"
-            send_sms(current_user.phone_number, sms_text)
-        except Exception as e:
-            pass
 
     # Preload details for response
     db_booking.trip = trip

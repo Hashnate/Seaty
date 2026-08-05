@@ -15,6 +15,7 @@ export 'package:seaty/providers/bookings_provider.dart';
 export 'package:seaty/providers/fleet_provider.dart';
 export 'package:seaty/providers/gps_tracking_provider.dart';
 export 'package:seaty/providers/notifications_provider.dart';
+export 'package:seaty/providers/favourites_provider.dart';
 export 'package:seaty/widgets/seaty_notifications.dart';
 export 'package:seaty/screens/splash_screen.dart';
 export 'package:seaty/screens/auth_screen.dart';

@@ -273,6 +273,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
         return a.compareTo(b);
       });
 
+    final favsState = ref.watch(favouritesProvider);
+
     final filteredTrips = tripsState.trips.where((trip) {
       final hasFrom =
           _selectedFrom.isNotEmpty && _selectedFrom.toLowerCase() != 'all';
@@ -349,7 +351,20 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       }
 
       return match;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final bool aFav = favsState.isFavourite(
+          vehicleId: a['vehicle_id']?.toString(),
+          scheduleId: a['schedule_id']?.toString(),
+        );
+        final bool bFav = favsState.isFavourite(
+          vehicleId: b['vehicle_id']?.toString(),
+          scheduleId: b['schedule_id']?.toString(),
+        );
+        if (aFav && !bFav) return -1;
+        if (!aFav && bFav) return 1;
+        return 0;
+      });
 
     final double topPadding = MediaQuery.of(context).padding.top;
     final double heroHeight = 310.0 + topPadding;

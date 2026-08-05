@@ -314,3 +314,43 @@ export async function changePassword(token: string, data: Record<string, unknown
   });
 }
 
+// ==========================================
+// Image File Uploads
+// ==========================================
+export async function uploadVehicleMainImage(token: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE}/uploads/vehicle-main-image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Failed to upload image' }));
+    throw new Error(err.detail || 'Image upload failed');
+  }
+
+  return response.json();
+}
+
+export async function uploadVehicleGallery(token: string, files: File[]) {
+  const formData = new FormData();
+  files.forEach(file => formData.append('files', file));
+
+  const response = await fetch(`${API_BASE}/uploads/vehicle-gallery`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Failed to upload gallery images' }));
+    throw new Error(err.detail || 'Gallery upload failed');
+  }
+
+  return response.json();
+}
+
+

@@ -26,6 +26,9 @@ async def create_vehicle(
         total_seats=vehicle_in.total_seats,
         amenities=vehicle_in.amenities,
         document_urls=vehicle_in.document_urls,
+        contact_phone=vehicle_in.contact_phone,
+        main_image_url=vehicle_in.main_image_url,
+        gallery_image_urls=vehicle_in.gallery_image_urls[:5] if vehicle_in.gallery_image_urls else [],
         is_verified=False # Requires admin review and approval
     )
     db.add(db_vehicle)
@@ -177,6 +180,9 @@ def update_vehicle(
     vehicle.total_seats = vehicle_in.total_seats
     vehicle.amenities = vehicle_in.amenities
     vehicle.document_urls = vehicle_in.document_urls
+    vehicle.contact_phone = vehicle_in.contact_phone
+    vehicle.main_image_url = vehicle_in.main_image_url
+    vehicle.gallery_image_urls = vehicle_in.gallery_image_urls[:5] if vehicle_in.gallery_image_urls else []
     vehicle.is_verified = False  # Reset verification on edit
     
     db.commit()

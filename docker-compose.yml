@@ -27,6 +27,7 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /app/firebase-service-account.json
     volumes:
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json:ro
+      - seaty-uploads:/app/uploads
     depends_on:
       - db
     restart: always
@@ -44,3 +45,5 @@ services:
 
 volumes:
   seaty-postgres-data:
+  seaty-uploads:
+

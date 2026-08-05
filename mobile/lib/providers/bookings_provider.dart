@@ -145,6 +145,7 @@ class BookingsNotifier extends Notifier<BookingsState> {
   void selectSeatWithGender(String seatLabel, String gender) {
     final List<String> currentSelected = [...state.selectedSeats];
     if (!currentSelected.contains(seatLabel)) {
+      if (currentSelected.length >= 6) return;
       currentSelected.add(seatLabel);
     }
     final Map<String, String> currentGenders = {...state.selectedSeatGenders};

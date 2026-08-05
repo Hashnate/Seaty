@@ -110,6 +110,9 @@ class VehicleCreate(BaseModel):
     total_seats: int
     amenities: List[str] = []
     document_urls: List[str] = []
+    contact_phone: Optional[str] = None
+    main_image_url: Optional[str] = None
+    gallery_image_urls: List[str] = []
 
 class VehicleResponse(BaseModel):
     id: UUID
@@ -123,12 +126,33 @@ class VehicleResponse(BaseModel):
     amenities: List[str]
     is_verified: bool
     document_urls: List[str]
+    contact_phone: Optional[str] = None
+    main_image_url: Optional[str] = None
+    gallery_image_urls: List[str] = []
     average_rating: Optional[float] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
     class Config:
         from_attributes = True
+
+# ==========================================
+# Favourite Schemas
+# ==========================================
+class FavouriteToggleRequest(BaseModel):
+    vehicle_id: UUID
+    schedule_id: Optional[UUID] = None
+
+class FavouriteResponse(BaseModel):
+    id: UUID
+    user_id: UUID
+    vehicle_id: UUID
+    schedule_id: Optional[UUID] = None
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
 
 # ==========================================
 # Route Schemas

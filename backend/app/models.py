@@ -62,6 +62,9 @@ class Vehicle(Base):
     amenities = Column(ARRAY(String), default=[])
     is_verified = Column(Boolean, default=False)
     document_urls = Column(ARRAY(String), default=[])
+    contact_phone = Column(String, nullable=True)
+    main_image_url = Column(String, nullable=True)
+    gallery_image_urls = Column(ARRAY(String), default=[])
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
@@ -70,6 +73,22 @@ class Vehicle(Base):
     company = relationship("BusCompany", back_populates="vehicles")
     trips = relationship("Trip", back_populates="vehicle")
     location = relationship("VehicleLocation", back_populates="vehicle", uselist=False)
+
+
+class UserFavourite(Base):
+    __tablename__ = "user_favourites"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    schedule_id = Column(UUID(as_uuid=True), ForeignKey("trip_schedules.id", ondelete="CASCADE"), nullable=True)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="favourites")
+    schedule = relationship("TripSchedule")
+    vehicle = relationship("Vehicle")
+
 
 
 class Route(Base):

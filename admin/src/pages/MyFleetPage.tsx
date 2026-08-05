@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import CustomSelect from '../components/CustomSelect';
-import { getVehicles, createVehicle, deleteVehicle, updateVehicle } from '../api/client';
-import { Plus, ShieldCheck, ShieldAlert, Bus, Wifi, Plug, Tv, Armchair, Users, Briefcase, Snowflake, Settings } from 'lucide-react';
+import { getVehicles, createVehicle, deleteVehicle, updateVehicle, uploadVehicleMainImage, uploadVehicleGallery } from '../api/client';
+import { Plus, ShieldCheck, ShieldAlert, Bus, Wifi, Plug, Tv, Armchair, Users, Briefcase, Snowflake, Settings, Upload, Image as ImageIcon, X } from 'lucide-react';
 
 interface VehicleRecord {
   id: string;
@@ -12,6 +12,9 @@ interface VehicleRecord {
   total_seats: number;
   is_verified: boolean;
   amenities: string[];
+  contact_phone?: string;
+  main_image_url?: string;
+  gallery_image_urls?: string[];
 }
 
 const getAmenityIcon = (name: string, size = 14) => {
@@ -44,6 +47,12 @@ export default function MyFleetPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [name, setName] = useState('');
   const [reg, setReg] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [mainImageUrl, setMainImageUrl] = useState('');
+  const [galleryUrls, setGalleryUrls] = useState<string[]>([]);
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
   const [seats, setSeats] = useState(40);
   const [columns, setColumns] = useState(4);
   const [aisleAfter, setAisleAfter] = useState(2);
@@ -57,6 +66,7 @@ export default function MyFleetPage() {
   const [isOpenPreset, setIsOpenPreset] = useState(false);
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null);
   const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null);
+
 
   const applyPreset = (presetType: string) => {
     setPreset(presetType);
@@ -106,6 +116,9 @@ export default function MyFleetPage() {
     if (showAddModal && !editingVehicleId) {
       setName('');
       setReg('');
+      setContactPhone('');
+      setMainImageUrl('');
+      setGalleryUrls([]);
       setAmenities(['AC', 'WiFi']);
       setIsOpenPreset(false);
       applyPreset('expressway');
@@ -134,6 +147,9 @@ export default function MyFleetPage() {
     setEditingVehicleId(v.id);
     setName(v.name);
     setReg(v.registration_number);
+    setContactPhone(v.contact_phone || '');
+    setMainImageUrl(v.main_image_url || '');
+    setGalleryUrls(v.gallery_image_urls || []);
     setSeats(v.total_seats);
     
     const layout = (v as any).seat_layout || {};
@@ -146,6 +162,46 @@ export default function MyFleetPage() {
     setShowAddModal(true);
   };
 
+  const handleMainImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!token || !e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setUploadingMain(true);
+    setError('');
+    try {
+      const res = await uploadVehicleMainImage(token, file);
+      setMainImageUrl(res.url);
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload main image');
+    } finally {
+      setUploadingMain(false);
+    }
+  };
+
+  const handleGalleryChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!token || !e.target.files || e.target.files.length === 0) return;
+    const files = Array.from(e.target.files);
+
+    if (galleryUrls.length + files.length > 5) {
+      setError('Maximum 5 gallery photos allowed per bus.');
+      return;
+    }
+
+    setUploadingGallery(true);
+    setError('');
+    try {
+      const res = await uploadVehicleGallery(token, files);
+      setGalleryUrls(prev => [...prev, ...res.urls].slice(0, 5));
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload gallery image');
+    } finally {
+      setUploadingGallery(false);
+    }
+  };
+
+  const removeGalleryPhoto = (index: number) => {
+    setGalleryUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleAddBus = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
@@ -155,6 +211,9 @@ export default function MyFleetPage() {
     const vehicleData = {
       name,
       registration_number: reg,
+      contact_phone: contactPhone,
+      main_image_url: mainImageUrl,
+      gallery_image_urls: galleryUrls,
       type: 'bus',
       seat_layout: { 
         rows: Number(rows), 
@@ -177,6 +236,9 @@ export default function MyFleetPage() {
       setEditingVehicleId(null);
       setName('');
       setReg('');
+      setContactPhone('');
+      setMainImageUrl('');
+      setGalleryUrls([]);
       setSeats(40);
       setColumns(4);
       setAisleAfter(2);
@@ -383,6 +445,61 @@ export default function MyFleetPage() {
                 <div className="form-group">
                   <label className="form-label">Registration Number</label>
                   <input type="text" className="form-input" placeholder="e.g. WP-ND-9999" value={reg} onChange={(e) => setReg(e.target.value)} required />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Support / Contact Phone Number</label>
+                  <input type="tel" className="form-input" placeholder="e.g. +94771234567" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+                </div>
+
+                {/* Main Image Upload */}
+                <div className="form-group">
+                  <label className="form-label">Main Bus Image (Cover Photo)</label>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
+                    {mainImageUrl ? (
+                      <div style={{ position: 'relative', width: '80px', height: '54px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                        <img src={mainImageUrl} alt="Main Bus" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          onClick={() => setMainImageUrl('')}
+                          style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 14px', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-primary)', fontWeight: 600 }}>
+                        <Upload size={15} /> {uploadingMain ? 'Uploading...' : 'Upload Bus Image'}
+                        <input type="file" accept="image/*" onChange={handleMainImageChange} style={{ display: 'none' }} disabled={uploadingMain} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Gallery Photos Upload (Max 5) */}
+                <div className="form-group">
+                  <label className="form-label">Bus Gallery Photos (Max 5 Photos)</label>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
+                    {galleryUrls.map((url, idx) => (
+                      <div key={idx} style={{ position: 'relative', width: '64px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+                        <img src={url} alt={`Gallery ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <button
+                          type="button"
+                          onClick={() => removeGalleryPhoto(idx)}
+                          style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                    {galleryUrls.length < 5 && (
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '64px', height: '48px', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                        <ImageIcon size={16} />
+                        <span style={{ fontSize: '9px', fontWeight: 600, marginTop: '2px' }}>{uploadingGallery ? '...' : '+ Add'}</span>
+                        <input type="file" accept="image/*" multiple onChange={handleGalleryChange} style={{ display: 'none' }} disabled={uploadingGallery} />
+                      </label>
+                    )}
+                  </div>
                 </div>
 
                 <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
