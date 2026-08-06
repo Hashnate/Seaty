@@ -319,7 +319,6 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
               ],
             ),
           ),
-        ),
       ),
     );
   }

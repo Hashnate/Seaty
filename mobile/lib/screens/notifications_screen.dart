@@ -71,7 +71,7 @@ class NotificationsScreen extends ConsumerWidget {
     if (type == 'verification' || type == 'profile' || title.contains('profile') || title.contains('account')) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const ProfileScreen()),
+        MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
       );
       return;
     }
@@ -99,7 +99,7 @@ class NotificationsScreen extends ConsumerWidget {
             : targetBooking;
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => TrackerScreen(trip: tripData)),
+          MaterialPageRoute(builder: (context) => PassengerTrackingTab(trip: tripData)),
         );
         return;
       }

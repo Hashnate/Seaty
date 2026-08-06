@@ -77,16 +77,9 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
             detail="Invalid mobile number provided."
         )
 
-    # Check if target user is a conductor
-    user = db.query(models.User).filter(
-        (models.User.phone_number == payload.phone_number) |
-        (models.User.phone_number == target_norm)
-    ).first()
-    is_conductor = user and user.role == "conductor"
-
     is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
-    # Generate OTP code (123456 for conductors/dev, or random 6 digits)
-    otp_code = "123456" if is_conductor else str(random.randint(100000, 999999))
+    # Generate dynamic 6-digit OTP code (or 123456 in dev mode)
+    otp_code = "123456" if is_dev else str(random.randint(100000, 999999))
     expires_at = time.time() + 300  # Valid for 5 minutes
 
     otp_store[target_norm] = {
@@ -103,8 +96,8 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
         "message": f"Verification code sent via SMS to {payload.phone_number}",
         "phone_number": payload.phone_number,
     }
-    # Auto-fill OTP in API response ONLY for conductor accounts
-    if is_conductor:
+    # Return otp_code only in development environment
+    if is_dev:
         res["otp_code"] = otp_code
     else:
         res["otp_code"] = None
