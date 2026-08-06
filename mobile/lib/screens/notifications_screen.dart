@@ -92,7 +92,7 @@ class NotificationsScreen extends ConsumerWidget {
     }
 
     // 3. Live Tracking / GPS Notifications
-    if (type == 'tracker' || title.contains('tracker') || message.contains('tracking') || message.contains('live location')) {
+    if (type == 'tracker' || type == 'trip_update' || title.contains('tracker') || title.contains('trip') || message.contains('tracking') || message.contains('live location')) {
       if (targetBooking != null) {
         final tripData = targetBooking['trip'] is Map<String, dynamic>
             ? targetBooking['trip'] as Map<String, dynamic>
@@ -107,6 +107,10 @@ class NotificationsScreen extends ConsumerWidget {
 
     // 4. Ticket Details / Booking Screen Navigation
     if (targetBooking != null) {
+      if (type == 'booking' || title.contains('booking')) {
+        _showTicketDialog(context, targetBooking);
+        return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(

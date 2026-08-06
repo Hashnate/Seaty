@@ -17,6 +17,11 @@
 
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- Deliberately the launch drawable, NOT ?android:colorBackground.
+             FlutterActivity.onCreate() switches to this theme immediately, long
+             before Flutter's first frame — and FlutterSurfaceView is transparent
+             until then. With a plain colour here the logo vanishes and the user
+             sees an empty window between the native splash and SplashScreen. -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
 </resources>

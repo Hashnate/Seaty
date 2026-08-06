@@ -17,6 +17,11 @@
 
          This Theme is only used starting with V2 of Flutter's Android embedding. -->
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <!-- Same as the light variant. ?android:colorBackground resolves to
+             BLACK under Theme.Black, so in dark mode the gap before Flutter's
+             first frame flashed black between two white splashes. The app's
+             Flutter UI is light-only (MaterialApp sets no darkTheme), so the
+             white launch drawable is correct here too. -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
 </resources>

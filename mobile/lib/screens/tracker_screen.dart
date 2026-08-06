@@ -106,7 +106,12 @@ class BoldGradientHeroHeading extends StatelessWidget {
 // LIVE TRACKER SCREEN — OpenStreetMap (Free, No API Key)
 // =====================================================================
 class PassengerTrackingTab extends ConsumerStatefulWidget {
-  const PassengerTrackingTab({super.key});
+  final Map<String, dynamic>? trip;
+
+  const PassengerTrackingTab({
+    super.key,
+    this.trip,
+  });
 
   @override
   ConsumerState<PassengerTrackingTab> createState() =>
@@ -115,6 +120,14 @@ class PassengerTrackingTab extends ConsumerStatefulWidget {
 
 class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   String? _selectedBusId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.trip != null) {
+      _selectedBusId = widget.trip!['reg'] ?? widget.trip!['bus_reg'] ?? widget.trip!['bus_name'];
+    }
+  }
   final MapController _mapController = MapController();
   bool _isDarkModeMap = false;
   String? _activeTooltip; // ID of marker currently showing popup ('bus', 'origin', 'destination', 'stop_X')

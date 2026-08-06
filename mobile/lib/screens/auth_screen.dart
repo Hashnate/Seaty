@@ -220,7 +220,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   final _phoneController = TextEditingController();
   final _nameController = TextEditingController();
   final _otpController = TextEditingController();
-  String _generatedOtp = '';
+  final _otpFocusNode = FocusNode();
   bool _isNewUser = false;
   String _currentUserName = '';
   late String _dynamicRole;
@@ -229,6 +229,15 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
   void initState() {
     super.initState();
     _dynamicRole = widget.initialRole ?? 'passenger';
+  }
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _nameController.dispose();
+    _otpController.dispose();
+    _otpFocusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _generateAndSendOtp(BuildContext context, String name, String phone) async {
@@ -630,38 +639,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
               style: const TextStyle(color: Colors.grey, fontSize: 13),
             ),
             const SizedBox(height: 32),
-            TextField(
+            SixDigitOtpInputField(
               controller: _otpController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(
-                color: Colors.black87,
-                letterSpacing: 8,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-              maxLength: 6,
-              decoration: InputDecoration(
-                hintText: '••••••',
-                hintStyle: const TextStyle(
-                  letterSpacing: 8,
-                  color: Colors.grey,
-                ),
-                counterText: '',
-                filled: true,
-                fillColor: const Color(0xFFF4F6F9),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
-                  borderSide: const BorderSide(
-                    color: Color(0xFF0A2540),
-                    width: 1.5,
-                  ),
-                ),
-              ),
+              focusNode: _otpFocusNode,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -734,3 +714,138 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
     }
   }
 }
+
+class SixDigitOtpInputField extends StatefulWidget {
+  final TextEditingController controller;
+  final FocusNode? focusNode;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onCompleted;
+
+  const SixDigitOtpInputField({
+    super.key,
+    required this.controller,
+    this.focusNode,
+    this.onChanged,
+    this.onCompleted,
+  });
+
+  @override
+  State<SixDigitOtpInputField> createState() => _SixDigitOtpInputFieldState();
+}
+
+class _SixDigitOtpInputFieldState extends State<SixDigitOtpInputField> {
+  late FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = widget.focusNode ?? FocusNode();
+    _focusNode.addListener(_onFocusChange);
+    widget.controller.addListener(_onTextChange);
+  }
+
+  @override
+  void dispose() {
+    if (widget.focusNode == null) {
+      _focusNode.dispose();
+    } else {
+      _focusNode.removeListener(_onFocusChange);
+    }
+    widget.controller.removeListener(_onTextChange);
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (mounted) setState(() {});
+  }
+
+  void _onTextChange() {
+    if (mounted) {
+      setState(() {});
+      if (widget.onChanged != null) {
+        widget.onChanged!(widget.controller.text);
+      }
+      if (widget.controller.text.length == 6 && widget.onCompleted != null) {
+        widget.onCompleted!(widget.controller.text);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = widget.controller.text;
+    final isFocused = _focusNode.hasFocus;
+
+    return Stack(
+      children: [
+        // Hidden TextField to capture numeric soft-keyboard input
+        Positioned.fill(
+          child: Opacity(
+            opacity: 0.0,
+            child: TextField(
+              controller: widget.controller,
+              focusNode: _focusNode,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              enableInteractiveSelection: false,
+              decoration: const InputDecoration(
+                counterText: '',
+              ),
+            ),
+          ),
+        ),
+        // 6 Custom OTP Boxes matching reference image design
+        GestureDetector(
+          onTap: () {
+            FocusScope.of(context).requestFocus(_focusNode);
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(6, (index) {
+              final digit = (index < text.length) ? text[index] : '';
+              final bool isCurrentFocus = isFocused &&
+                  (index == text.length || (index == 5 && text.length == 6));
+
+              return Container(
+                width: 44,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isCurrentFocus
+                      ? Colors.white
+                      : const Color(0xFFECEEF1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isCurrentFocus
+                        ? const Color(0xFFD4AF37)
+                        : const Color(0xFFE2E8F0),
+                    width: isCurrentFocus ? 1.8 : 1.0,
+                  ),
+                  boxShadow: isCurrentFocus
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFFD4AF37).withValues(alpha: 0.15),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: Text(
+                  digit,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
+    );
+  }
+}
+

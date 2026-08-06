@@ -539,12 +539,21 @@ Future<void> _generateAndSavePDF(
 
     final pdfBytes = await pdf.save();
 
-    // 1. Save directly to user's Downloads folder
+    // 1. Determine destination directory safely
     Directory? directory;
     try {
-      directory = await getDownloadsDirectory();
+      if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+      } else {
+        directory = await getDownloadsDirectory();
+      }
     } catch (_) {}
     directory ??= await getApplicationDocumentsDirectory();
+
+    // Ensure directory exists on disk to prevent PathNotFoundException (errno = 2)
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
 
     final filePath = '${directory.path}/$ticketCode.pdf';
     final file = File(filePath);
@@ -562,7 +571,7 @@ Future<void> _generateAndSavePDF(
     if (context.mounted) {
       SeatyNotifications.show(
         context,
-        'Ticket PDF downloaded to Downloads folder! ($ticketCode.pdf)',
+        share ? 'Ticket PDF generated!' : 'Ticket PDF saved successfully! ($ticketCode.pdf)',
       );
     }
   } catch (e) {
