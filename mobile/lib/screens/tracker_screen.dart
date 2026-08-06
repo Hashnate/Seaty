@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 // =====================================================================
@@ -878,19 +879,10 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                     // Contact Conductor Quick Action Button
                                     GestureDetector(
                                       onTap: () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Row(
-                                              children: [
-                                                const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 18),
-                                                const SizedBox(width: 10),
-                                                Text('Connecting to Conductor of $_selectedBusId...'),
-                                              ],
-                                            ),
-                                            backgroundColor: const Color(0xFF0A2540),
-                                            behavior: SnackBarBehavior.floating,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                          ),
+                                        SeatyNotifications.show(
+                                          context,
+                                          'Connecting to Conductor of $_selectedBusId...',
+                                          isInfo: true,
                                         );
                                       },
                                       child: Container(

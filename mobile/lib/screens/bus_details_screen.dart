@@ -149,7 +149,9 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                           starVal <= selectedRating
                               ? Icons.star_rounded
                               : Icons.star_outline_rounded,
-                          color: const Color(0xFF2563EB),
+                          color: starVal <= selectedRating
+                              ? const Color(0xFFFFB800)
+                              : const Color(0xFFCBD5E1),
                           size: 32,
                         ),
                         onPressed: () {
@@ -1428,7 +1430,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                 children: [
                                   const Icon(
                                     Icons.star_rounded,
-                                    color: Color(0xFF2563EB),
+                                    color: Color(0xFFFFB800),
                                     size: 15,
                                   ),
                                   const SizedBox(width: 3),

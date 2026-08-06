@@ -11,6 +11,7 @@ import 'package:seaty/screens/profile_screen.dart';
 import 'package:seaty/screens/bus_details_screen.dart';
 import 'package:seaty/screens/notifications_screen.dart';
 import 'package:seaty/widgets/shimmer_loading.dart';
+import 'package:seaty/widgets/seaty_notifications.dart';
 
 // =====================================================================
 // 4. PASSENGER MAIN SCREEN
@@ -754,11 +755,11 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                           ? "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}"
                                           : null;
                                       ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Searching buses from $_selectedFrom to $_selectedTo...'),
-                                          duration: const Duration(seconds: 1),
-                                        ),
+                                      SeatyNotifications.show(
+                                        context,
+                                        'Searching buses from $_selectedFrom to $_selectedTo...',
+                                        isInfo: true,
+                                        duration: const Duration(seconds: 1),
                                       );
                                     },
                                     style: ElevatedButton.styleFrom(

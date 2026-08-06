@@ -11,6 +11,7 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/widgets/seaty_notifications.dart';
 
 String _formatTicketDate(String? dep) {
   if (dep == null || dep.isEmpty) return 'Jul 28, 2026';
@@ -63,6 +64,45 @@ String _formatTicketTime(String? dep) {
     // fallback
   }
   return '10:30 AM';
+}
+
+bool _isTicketPast(Map<String, dynamic> b) {
+  final depStr = b['departure']?.toString();
+  if (depStr == null || depStr.isEmpty) return false;
+  try {
+    DateTime? dt;
+    final parts = depStr.trim().split(' ');
+    if (parts.length >= 2) {
+      final dateParts = parts[0].split('-');
+      final timeParts = parts[1].split(':');
+      if (dateParts.length == 3 && timeParts.length >= 2) {
+        dt = DateTime(
+          int.parse(dateParts[0]),
+          int.parse(dateParts[1]),
+          int.parse(dateParts[2]),
+          int.parse(timeParts[0]),
+          int.parse(timeParts[1]),
+        );
+      }
+    }
+    dt ??= DateTime.tryParse(depStr) ?? DateTime.tryParse(depStr.replaceAll(' ', 'T'));
+    if (dt != null) {
+      return dt.isBefore(DateTime.now());
+    }
+  } catch (_) {}
+  return false;
+}
+
+bool _isTicketCompleted(Map<String, dynamic> b) {
+  final status = b['status']?.toString().toLowerCase() ?? '';
+  final boarded = b['boarded_seats'] as List?;
+  final seats = b['seats'] as List?;
+  final isFullyBoarded = boarded != null && seats != null && boarded.isNotEmpty && boarded.length >= seats.length;
+  return status == 'completed' || status == 'boarded' || status == 'used' || isFullyBoarded;
+}
+
+bool _isTicketExpired(Map<String, dynamic> b) {
+  return _isTicketPast(b) && !_isTicketCompleted(b);
 }
 
 Future<void> _generateAndSavePDF(
@@ -474,53 +514,38 @@ Future<void> _generateAndSavePDF(
 
     final pdfBytes = await pdf.save();
 
-    // 1. Always save directly to user's Documents directory using standard dart:io
-    final directory = await getApplicationDocumentsDirectory();
+    // 1. Save directly to user's Downloads folder
+    Directory? directory;
+    try {
+      directory = await getDownloadsDirectory();
+    } catch (_) {}
+    directory ??= await getApplicationDocumentsDirectory();
+
     final filePath = '${directory.path}/$ticketCode.pdf';
     final file = File(filePath);
     await file.writeAsBytes(pdfBytes);
 
-    // 2. Safely trigger native share / layout preview if plugin bindings are loaded
+    // 2. Safely trigger native share if requested
     if (share) {
       try {
         await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
       } catch (shareErr) {
         debugPrint('Native share warning: $shareErr');
       }
-    } else {
-      try {
-        await Printing.layoutPdf(
-          onLayout: (PdfPageFormat format) async => pdfBytes,
-          name: ticketCode,
-        );
-      } catch (layoutErr) {
-        debugPrint('Native layout warning: $layoutErr');
-      }
     }
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Ticket PDF saved to Documents! ($ticketCode.pdf)'),
-          backgroundColor: const Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
+      SeatyNotifications.show(
+        context,
+        'Ticket PDF downloaded to Downloads folder! ($ticketCode.pdf)',
       );
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to process PDF: $e'),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-          ),
-        ),
+      SeatyNotifications.show(
+        context,
+        'Failed to process PDF: $e',
+        isError: true,
       );
     }
   }
@@ -703,8 +728,13 @@ class _PassengerBookingsTabState extends ConsumerState<PassengerBookingsTab> {
 
       if (!matchesSearch) return false;
 
-      if (_selectedFilter == 'Completed') {
-        return false; // All current test bookings are active
+      final isPast = _isTicketPast(b);
+      final isCompleted = _isTicketCompleted(b);
+
+      if (_selectedFilter == 'Upcoming') {
+        return !isPast && !isCompleted;
+      } else if (_selectedFilter == 'Completed') {
+        return isPast || isCompleted;
       }
 
       return true;
@@ -1280,6 +1310,46 @@ class _BoardingPassTicketCard extends StatelessWidget {
                             color: Color(0xFF475569),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        if (_isTicketCompleted(b))
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFECFDF5),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFA7F3D0)),
+                            ),
+                            child: const Text(
+                              'Completed',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                            ),
+                          )
+                        else if (_isTicketExpired(b))
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFEF2F2),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                            ),
+                            child: const Text(
+                              'Expired',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFBFDBFE)),
+                            ),
+                            child: const Text(
+                              'Upcoming',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            ),
+                          ),
                       ],
                     ),
 
@@ -1358,31 +1428,6 @@ class TicketDetailsScreen extends StatelessWidget {
           ),
         ),
         centerTitle: false,
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFECFDF5),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFA7F3D0)),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Color(0xFF059669), size: 14),
-                SizedBox(width: 4),
-                Text(
-                  'CONFIRMED',
-                  style: TextStyle(
-                    color: Color(0xFF059669),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -1703,12 +1748,13 @@ class TicketDetailsScreen extends StatelessWidget {
                       'Download PDF',
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -1719,22 +1765,22 @@ class TicketDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: OutlinedButton.icon(
                     onPressed: () {
                       _generateAndSavePDF(context, b, share: true);
                     },
-                    icon: const Icon(Icons.share_rounded, color: Colors.white, size: 18),
+                    icon: const Icon(Icons.share_rounded, color: Color(0xFF2563EB), size: 18),
                     label: const Text(
                       'Share Ticket',
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2563EB),
                       ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F172A),
-                      elevation: 0,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF2563EB),
+                      side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
