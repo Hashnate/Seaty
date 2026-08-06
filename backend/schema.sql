@@ -240,6 +240,8 @@ CREATE TABLE public.notifications (
     title TEXT NOT NULL,
     message TEXT NOT NULL,
     type TEXT NOT NULL,
+    booking_id UUID REFERENCES public.bookings(id) ON DELETE SET NULL,
+    vehicle_id UUID REFERENCES public.vehicles(id) ON DELETE SET NULL,
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

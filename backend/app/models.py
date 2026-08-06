@@ -240,7 +240,9 @@ class Notification(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     title = Column(String, nullable=False)
     message = Column(Text, nullable=False)
-    type = Column(String, nullable=False)  # 'booking', 'trip_update', 'verification', 'system'
+    type = Column(String, nullable=False)  # 'booking', 'trip_ongoing', 'trip_cancelled', 'trip_rescheduled', 'trip_reminder', 'verification', 'system'
+    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.id", ondelete="SET NULL"), nullable=True)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True)
     is_read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 

@@ -126,6 +126,14 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     super.initState();
     if (widget.trip != null) {
       _selectedBusId = widget.trip!['reg'] ?? widget.trip!['bus_reg'] ?? widget.trip!['bus_name'];
+      // The shared trips cache may hold a different date than this trip's
+      // (e.g. opened from a notification while the app last searched
+      // another day) - refresh it so the trip is actually trackable here
+      // instead of silently getting deselected.
+      final depDate = widget.trip!['departure']?.toString().split(' ').first;
+      if (depDate != null && depDate.isNotEmpty) {
+        Future.microtask(() => ref.read(tripsProvider.notifier).loadTrips(date: depDate));
+      }
     }
   }
   final MapController _mapController = MapController();
@@ -237,6 +245,21 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       return now.isAfter(startTime) && now.isBefore(arrivalTime);
     }).toList();
 
+    // A single bus can legitimately appear more than once in trackableTrips
+    // (e.g. two different routes/trips scheduled on the same vehicle) but the
+    // selector and route lookup below are keyed by bus reg alone, so collapse
+    // to at most one entry per reg - otherwise the dropdown can be handed
+    // duplicate-valued items (a Flutter assertion failure) and the wrong
+    // trip's route can be drawn.
+    final Map<String, Map<String, dynamic>> trackableByReg = {};
+    for (final t in trackableTrips) {
+      final reg = t['reg']?.toString();
+      if (reg != null && reg.isNotEmpty) {
+        trackableByReg.putIfAbsent(reg, () => t);
+      }
+    }
+    final dedupedTrackableTrips = trackableByReg.values.toList();
+
     final hasSelected = trackableTrips.any((t) => t['reg'] == _selectedBusId);
     final String? selectedValue = hasSelected ? _selectedBusId : null;
 
@@ -260,7 +283,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       }
     }
 
-    final routePoints = _getRouteForTrip(tripsState.trips, selectedValue);
+    final routePoints = _getRouteForTrip(dedupedTrackableTrips, selectedValue);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -358,7 +381,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           fontSize: 13,
                         ),
                         value: selectedValue,
-                        items: trackableTrips.map((trip) {
+                        items: dedupedTrackableTrips.map((trip) {
                           return DropdownMenuItem<String>(
                             value: trip['reg'],
                             child: Text(

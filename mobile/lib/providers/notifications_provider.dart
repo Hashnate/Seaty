@@ -8,7 +8,15 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
+import 'package:seaty/providers/bookings_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+
+const Set<String> _kBookingAffectingNotificationTypes = {
+  'booking',
+  'trip_ongoing',
+  'trip_cancelled',
+  'trip_rescheduled',
+};
 
 class NotificationsState {
   final List<Map<String, dynamic>> notifications;
@@ -215,6 +223,13 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
             final data = json.decode(message);
             final List<Map<String, dynamic>> list = [data, ...state.notifications];
             state = state.copyWith(notifications: list);
+
+            // Keep the local bookings cache in sync so tapping this
+            // notification resolves to the right booking immediately,
+            // instead of relying only on the retry-on-tap fallback.
+            if (_kBookingAffectingNotificationTypes.contains(data['type'])) {
+              ref.read(bookingsProvider.notifier).loadBookings();
+            }
 
             final context = navigatorKey.currentContext;
             if (context != null) {

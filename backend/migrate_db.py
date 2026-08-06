@@ -116,6 +116,14 @@ try:
     except Exception as e:
         print(f"Error updating reviews table: {e}")
 
+    # 9. Add booking_id and vehicle_id columns to notifications table
+    print("Adding booking_id and vehicle_id columns to notifications table...")
+    try:
+        cur.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL")
+        cur.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS vehicle_id UUID REFERENCES vehicles(id) ON DELETE SET NULL")
+    except Exception as e:
+        print(f"Error updating notifications table: {e}")
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

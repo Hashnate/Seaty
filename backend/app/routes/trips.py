@@ -375,15 +375,18 @@ async def update_trip_status(
                 title = f"Trip {status.capitalize()}!"
                 if status == "cancelled":
                     msg = f"Your trip from {origin} to {destination} scheduled for {date_str} has been cancelled. A refund has been initiated."
+                    noti_type = "trip_cancelled"
                 else: # ongoing
                     msg = f"Your trip from {origin} to {destination} is now active (ongoing)! Safe travels."
-                    
+                    noti_type = "trip_ongoing"
+
                 await create_and_send_notification(
                     db=db,
                     user_id=b.passenger_id,
                     title=title,
                     message=msg,
-                    noti_type="trip_update"
+                    noti_type=noti_type,
+                    booking_id=b.id
                 )
             except Exception as noti_err:
                 print(f"Notification Error: {noti_err}")
@@ -464,7 +467,8 @@ async def update_trip(
                     user_id=b.passenger_id,
                     title="Trip Rescheduled!",
                     message=f"Your trip from {origin} to {destination} has been rescheduled. New departure time: {new_date_str}.",
-                    noti_type="trip_update"
+                    noti_type="trip_rescheduled",
+                    booking_id=b.id
                 )
             except Exception as noti_err:
                 print(f"Notification Error: {noti_err}")

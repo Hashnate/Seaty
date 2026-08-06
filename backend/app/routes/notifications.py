@@ -85,7 +85,9 @@ async def create_and_send_notification(
     user_id: UUID,
     title: str,
     message: str,
-    noti_type: str
+    noti_type: str,
+    booking_id: UUID = None,
+    vehicle_id: UUID = None
 ):
     """Save notification to Postgres, broadcast live via WS, and send FCM Push."""
     db_noti = models.Notification(
@@ -93,6 +95,8 @@ async def create_and_send_notification(
         title=title,
         message=message,
         type=noti_type,
+        booking_id=booking_id,
+        vehicle_id=vehicle_id,
         is_read=False
     )
     db.add(db_noti)
@@ -105,6 +109,8 @@ async def create_and_send_notification(
         "title": db_noti.title,
         "message": db_noti.message,
         "type": db_noti.type,
+        "booking_id": str(db_noti.booking_id) if db_noti.booking_id else None,
+        "vehicle_id": str(db_noti.vehicle_id) if db_noti.vehicle_id else None,
         "is_read": db_noti.is_read,
         "created_at": db_noti.created_at.isoformat()
     }
@@ -113,7 +119,12 @@ async def create_and_send_notification(
     # Send native FCM Push Notification if user has registered FCM token
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user and user.fcm_token:
-        send_fcm_push(user.fcm_token, title, message, {"type": noti_type, "id": str(db_noti.id)})
+        fcm_data = {"type": noti_type, "id": str(db_noti.id)}
+        if booking_id:
+            fcm_data["booking_id"] = str(booking_id)
+        if vehicle_id:
+            fcm_data["vehicle_id"] = str(vehicle_id)
+        send_fcm_push(user.fcm_token, title, message, fcm_data)
 
     return db_noti
 

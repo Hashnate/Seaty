@@ -7,7 +7,7 @@ import 'package:seaty/main.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
-import 'package:seaty/screens/profile_screen.dart';
+import 'package:seaty/screens/owner/fleet_crew_screen.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -39,8 +39,14 @@ class NotificationsScreen extends ConsumerWidget {
     switch (type) {
       case 'booking':
         return Icons.confirmation_number_rounded;
-      case 'trip_update':
-        return Icons.event_note_rounded;
+      case 'trip_ongoing':
+        return Icons.directions_bus_filled_rounded;
+      case 'trip_cancelled':
+        return Icons.cancel_rounded;
+      case 'trip_rescheduled':
+        return Icons.event_repeat_rounded;
+      case 'trip_reminder':
+        return Icons.alarm_rounded;
       case 'verification':
         return Icons.verified_user_rounded;
       default:
@@ -52,8 +58,14 @@ class NotificationsScreen extends ConsumerWidget {
     switch (type) {
       case 'booking':
         return const Color(0xFF2563EB); // Matte Orange
-      case 'trip_update':
+      case 'trip_ongoing':
         return const Color(0xFF0A2540); // Navy Blue
+      case 'trip_cancelled':
+        return const Color(0xFFDC2626); // Red
+      case 'trip_rescheduled':
+        return const Color(0xFFF59E0B); // Amber
+      case 'trip_reminder':
+        return const Color(0xFF2563EB); // Matte Orange
       case 'verification':
         return const Color(0xFF10B981); // Emerald Green
       default:
@@ -61,67 +73,103 @@ class NotificationsScreen extends ConsumerWidget {
     }
   }
 
-  void _handleNotificationTap(
-      BuildContext context, BookingsState bookingsState, Map<String, dynamic> noti) {
-    final type = (noti['type'] ?? '').toString().toLowerCase();
-    final title = (noti['title'] ?? '').toString().toLowerCase();
-    final message = (noti['message'] ?? '').toString().toLowerCase();
+  Map<String, dynamic>? _findById(List<Map<String, dynamic>> items, String? id) {
+    if (id == null || id.isEmpty) return null;
+    for (final item in items) {
+      if (item['id']?.toString() == id) return item;
+    }
+    return null;
+  }
 
-    // 1. Profile / Account / Verification Notifications
-    if (type == 'verification' || type == 'profile' || title.contains('profile') || title.contains('account')) {
+  Future<void> _handleNotificationTap(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> noti) async {
+    final type = (noti['type'] ?? '').toString().toLowerCase();
+    final bookingId = noti['booking_id']?.toString();
+
+    // 1. Vehicle verification notifications -> Fleet management screen.
+    // (These are about a vehicle the owner registered, not the user's own profile.)
+    if (type == 'verification') {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => const ProfileEditScreen()),
+        MaterialPageRoute(builder: (context) => const FleetCrewScreen(initialSubTab: 0)),
       );
       return;
     }
 
-    // 2. Booking / Ticket Lookup
-    Map<String, dynamic>? targetBooking;
-    if (bookingsState.bookings.isNotEmpty) {
-      for (var b in bookingsState.bookings) {
-        final reg = b['reg']?.toString() ?? '';
-        final idStr = b['id']?.toString() ?? '';
-        if ((reg.isNotEmpty && message.contains(reg.toLowerCase())) ||
-            (idStr.isNotEmpty && message.contains(idStr.substring(0, 8).toLowerCase()))) {
-          targetBooking = b;
-          break;
-        }
-      }
-      targetBooking ??= bookingsState.bookings.first;
-    }
-
-    // 3. Live Tracking / GPS Notifications
-    if (type == 'tracker' || type == 'trip_update' || title.contains('tracker') || title.contains('trip') || message.contains('tracking') || message.contains('live location')) {
-      if (targetBooking != null) {
-        final tripData = targetBooking['trip'] is Map<String, dynamic>
-            ? targetBooking['trip'] as Map<String, dynamic>
-            : targetBooking;
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => PassengerTrackingTab(trip: tripData)),
-        );
-        return;
+    // Resolve the exact booking this notification is about via its booking_id
+    // rather than guessing from message text.
+    Map<String, dynamic>? match;
+    if (bookingId != null && bookingId.isNotEmpty) {
+      match = _findById(ref.read(bookingsProvider).bookings, bookingId);
+      if (match == null) {
+        // The local cache may not yet include a booking created/updated after
+        // the last load (e.g. this notification arrived over the socket
+        // before a refresh) - refresh once and retry rather than falling
+        // back to an unrelated booking.
+        await ref.read(bookingsProvider.notifier).loadBookings();
+        if (!context.mounted) return;
+        match = _findById(ref.read(bookingsProvider).bookings, bookingId);
       }
     }
 
-    // 4. Ticket Details / Booking Screen Navigation
-    if (targetBooking != null) {
-      if (type == 'booking' || title.contains('booking')) {
-        _showTicketDialog(context, targetBooking);
-        return;
-      }
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => TicketDetailsScreen(booking: targetBooking!),
-        ),
-      );
-    } else {
+    if (match == null) {
       SeatyNotifications.show(
         context,
         noti['message'] ?? 'Notification details unavailable.',
       );
+      return;
+    }
+    final targetBooking = match;
+
+    // 2. Live trip -> Live Tracking screen.
+    if (type == 'trip_ongoing') {
+      final tripId = targetBooking['trip_id']?.toString();
+      Map<String, dynamic>? trip = _findById(ref.read(tripsProvider).trips, tripId);
+      if (trip == null) {
+        final depDate = targetBooking['departure']?.toString().split(' ').first;
+        if (depDate != null && depDate.isNotEmpty) {
+          await ref.read(tripsProvider.notifier).loadTrips(date: depDate);
+          if (!context.mounted) return;
+          trip = _findById(ref.read(tripsProvider).trips, tripId);
+        }
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => PassengerTrackingTab(trip: trip ?? targetBooking)),
+      );
+      return;
+    }
+
+    // 3. Booking confirmation -> QR boarding pass dialog.
+    if (type == 'booking') {
+      _showTicketDialog(context, targetBooking);
+      return;
+    }
+
+    // 4. Everything else about a specific booking (cancelled/rescheduled/reminder) -> full ticket details.
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TicketDetailsScreen(booking: targetBooking),
+      ),
+    );
+  }
+
+  (String, Color) _ticketStatusBadge(Map<String, dynamic> b) {
+    final status = (b['status'] ?? '').toString().toLowerCase();
+    switch (status) {
+      case 'completed':
+      case 'boarded':
+      case 'used':
+        return ('COMPLETED', const Color(0xFF2563EB));
+      case 'cancelled':
+        return ('CANCELLED', const Color(0xFFDC2626));
+      case 'expired':
+        return ('EXPIRED', const Color(0xFF64748B));
+      case 'pending':
+        return ('PENDING', const Color(0xFFF59E0B));
+      default:
+        return ('CONFIRMED', const Color(0xFF10B981));
     }
   }
 
@@ -132,6 +180,7 @@ class NotificationsScreen extends ConsumerWidget {
     final formattedPrice =
         double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
         b['price'].toString();
+    final (statusLabel, statusColor) = _ticketStatusBadge(b);
 
     showDialog(
       context: context,
@@ -185,12 +234,12 @@ class NotificationsScreen extends ConsumerWidget {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981),
+                              color: statusColor,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text(
-                              'CONFIRMED',
-                              style: TextStyle(
+                            child: Text(
+                              statusLabel,
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -291,7 +340,6 @@ class NotificationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notificationsState = ref.watch(notificationsProvider);
     final notificationsNotifier = ref.read(notificationsProvider.notifier);
-    final bookingsState = ref.watch(bookingsProvider);
     final list = notificationsState.notifications;
     final unreadCount = notificationsState.unreadNotificationsCount;
 
@@ -476,7 +524,7 @@ class NotificationsScreen extends ConsumerWidget {
                                             if (!isRead && notiId.isNotEmpty) {
                                               notificationsNotifier.markNotificationAsRead(notiId);
                                             }
-                                            _handleNotificationTap(context, bookingsState, noti);
+                                            _handleNotificationTap(context, ref, noti);
                                           },
                                           child: Padding(
                                             padding: const EdgeInsets.all(16.0),

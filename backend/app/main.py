@@ -113,7 +113,8 @@ async def trip_reminder_scheduler():
                             user_id=booking.passenger_id,
                             title=title,
                             message=message,
-                            noti_type="trip_reminder"
+                            noti_type="trip_reminder",
+                            booking_id=booking.id
                         )
             finally:
                 db.close()

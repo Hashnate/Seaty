@@ -45,7 +45,8 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
                 user_id=booking.passenger_id,
                 title="Booking Confirmed!",
                 message=f"Your seat(s) {seats_str} on trip {vehicle.registration_number if vehicle else ''} ({origin} ➔ {destination}) are confirmed!",
-                noti_type="booking"
+                noti_type="booking",
+                booking_id=booking.id
             )
             
             # Dispatch Confirmation SMS to Passenger after successful payment
@@ -92,7 +93,8 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
                     user_id=vehicle.owner_id,
                     title="New Booking Received",
                     message=f"{pass_name} booked seat(s) {seats_str} on your vehicle {reg_num}.",
-                    noti_type="booking"
+                    noti_type="booking",
+                    booking_id=booking.id
                 )
     except Exception as noti_err:
         print(f"Notification Error: {noti_err}")

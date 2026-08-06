@@ -469,6 +469,8 @@ class NotificationResponse(BaseModel):
     title: str
     message: str
     type: str
+    booking_id: Optional[UUID] = None
+    vehicle_id: Optional[UUID] = None
     is_read: bool
     created_at: datetime.datetime
 

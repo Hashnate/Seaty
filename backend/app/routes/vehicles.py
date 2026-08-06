@@ -45,7 +45,8 @@ async def create_vehicle(
                 user_id=admin.id,
                 title="New Vehicle Registered",
                 message=f"New vehicle verification request: Owner {current_user.full_name} registered vehicle {db_vehicle.registration_number} ({db_vehicle.name}).",
-                noti_type="verification"
+                noti_type="verification",
+                vehicle_id=db_vehicle.id
             )
     except Exception as noti_err:
         print(f"Notification Error: {noti_err}")
@@ -105,7 +106,8 @@ async def approve_vehicle(
             user_id=vehicle.owner_id,
             title="Vehicle Verification Approved!",
             message=f"Congratulations! Your vehicle {vehicle.registration_number} ({vehicle.name}) has been verified and is ready to schedule trips.",
-            noti_type="verification"
+            noti_type="verification",
+            vehicle_id=vehicle.id
         )
     except Exception as noti_err:
         print(f"Notification Error: {noti_err}")
@@ -135,7 +137,8 @@ async def reject_vehicle(
             user_id=vehicle.owner_id,
             title="Vehicle Verification Rejected",
             message=f"Your vehicle registration for {vehicle.registration_number} ({vehicle.name}) was rejected. Please review submitted documents.",
-            noti_type="verification"
+            noti_type="verification",
+            vehicle_id=vehicle.id
         )
     except Exception as noti_err:
         print(f"Notification Error: {noti_err}")
