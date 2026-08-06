@@ -95,7 +95,11 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
     bool isBoardingAvailable = true;
     String disabledReason = "";
 
-    if (departureStr != null) {
+    final isExpiredOrCancelled = status == 'EXPIRED' || status == 'CANCELLED';
+    if (isExpiredOrCancelled) {
+      isBoardingAvailable = false;
+      disabledReason = "This ticket is $status. Boarding is strictly prohibited.";
+    } else if (departureStr != null) {
       try {
         final departureTime = DateTime.parse(departureStr.replaceAll(' ', 'T'));
         final now = DateTime.now();
