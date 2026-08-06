@@ -1342,24 +1342,46 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.star_rounded,
-                      color: Color(0xFFFFB800), // Gold star
-                      size: 16,
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      ((trip['rating'] ?? trip['average_rating']) as num?)?.toStringAsFixed(1) ?? '4.8',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (context) {
+                    final num? r = (trip['rating'] ?? trip['average_rating']) as num?;
+                    if (r == null || r <= 0) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'New',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      );
+                    }
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.star_rounded,
+                          color: Color(0xFFFFB800), // Gold star
+                          size: 16,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          r.toDouble().toStringAsFixed(1),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

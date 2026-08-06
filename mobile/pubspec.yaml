@@ -80,11 +80,26 @@ flutter_launcher_icons:
   adaptive_icon_foreground: "assets/images/app_icon_adaptive_foreground.png"
   remove_alpha_ios: true
 
+# WARNING: `dart run flutter_native_splash:create` regenerates the launch images
+# at the package's own 125pt/dp base (source width / 4). The Dart splash draws the
+# same logo at 170 (`_kLogoSize` in lib/screens/splash_screen.dart), so the
+# regenerated assets make the logo jump 125 -> 170 at hand-off — the "blinking"
+# splash. If you re-run it, resize the generated files back afterwards:
+#   ios/Runner/Assets.xcassets/LaunchImage.imageset/  170 / 340 / 510 px
+#   android/.../res/drawable-{m,h,x,xx,xxx}hdpi/splash.png
+#                                       170 / 255 / 340 / 510 / 680 px
+#   android/.../res/drawable{,-night}-{m,h,x,xx,xxx}hdpi/android12splash.png
+#                                       288 / 432 / 576 / 864 / 1152 px
 flutter_native_splash:
   color: "#ffffff"
   image: "assets/images/app_logo.png"
   android_12:
-    image: "assets/images/app_icon_adaptive_foreground.png"
+    # Deliberately the full logo, NOT app_icon_adaptive_foreground.png — every
+    # other stage of the launch (iOS LaunchImage, @drawable/splash, the Dart
+    # SplashScreen) draws app_logo.png, so the icon-only foreground made the
+    # Android 12+ system splash swap artwork mid-launch. The package insets the
+    # image inside the 288dp canvas, so the wordmark clears the circular mask.
+    image: "assets/images/app_logo.png"
     color: "#ffffff"
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package

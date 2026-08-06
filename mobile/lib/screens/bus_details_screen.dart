@@ -87,7 +87,9 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
   }
 
   void _showWriteReviewModal() {
-    int selectedRating = 5;
+    int selectedRating = 0;
+    bool isSubmitting = false;
+    String? inlineError;
     final commentCtrl = TextEditingController();
 
     showModalBottomSheet(
@@ -97,15 +99,15 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      builder: (modalContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (modalContext, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
                 left: 20,
                 right: 20,
                 top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom + 20,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -139,6 +141,33 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  if (inlineError != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              inlineError!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF991B1B),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
                   // Star Selection
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -154,9 +183,14 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                               : const Color(0xFFCBD5E1),
                           size: 32,
                         ),
-                        onPressed: () {
-                          setModalState(() => selectedRating = starVal);
-                        },
+                        onPressed: isSubmitting
+                            ? null
+                            : () {
+                                setModalState(() {
+                                  selectedRating = starVal;
+                                  inlineError = null;
+                                });
+                              },
                       );
                     }),
                   ),
@@ -165,6 +199,7 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                   TextField(
                     controller: commentCtrl,
                     maxLines: 3,
+                    enabled: !isSubmitting,
                     style: const TextStyle(fontSize: 13, color: Colors.black87),
                     decoration: InputDecoration(
                       hintText: 'Describe your ride (comfort, cleanliness, punctuality)...',
@@ -185,42 +220,44 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: () async {
-                        final commentText = commentCtrl.text.trim();
-                        final vehicleId = widget.trip['vehicle_id']?.toString() ?? '';
-                        Navigator.pop(context);
+                      onPressed: isSubmitting
+                          ? null
+                          : () async {
+                              if (selectedRating <= 0) {
+                                setModalState(() {
+                                  inlineError = 'Please select a star rating first.';
+                                });
+                                return;
+                              }
+                              final commentText = commentCtrl.text.trim();
+                              final vehicleId = widget.trip['vehicle_id']?.toString() ?? '';
+                              if (vehicleId.isEmpty) return;
 
-                        if (vehicleId.isEmpty) return;
+                              setModalState(() {
+                                isSubmitting = true;
+                                inlineError = null;
+                              });
 
-                        SeatyNotifications.show(
-                          context,
-                          'Submitting review...',
-                          duration: const Duration(milliseconds: 800),
-                        );
+                              final errorMsg = await ref
+                                  .read(fleetProvider.notifier)
+                                  .submitVehicleReview(vehicleId, selectedRating, commentText);
 
-                        final errorMsg = await ref
-                            .read(fleetProvider.notifier)
-                            .submitVehicleReview(vehicleId, selectedRating, commentText);
-
-                        if (errorMsg == null) {
-                          await _loadRealtimeReviews();
-                          if (mounted) {
-                            SeatyNotifications.show(
-                              context,
-                              'Thank you! Your review is now live.',
-                            );
-                          }
-                        } else {
-                          if (mounted) {
-                            SeatyNotifications.show(
-                              context,
-                              errorMsg,
-                              isError: true,
-                              duration: const Duration(seconds: 4),
-                            );
-                          }
-                        }
-                      },
+                              if (errorMsg == null) {
+                                Navigator.pop(modalContext);
+                                await _loadRealtimeReviews();
+                                if (mounted) {
+                                  SeatyNotifications.show(
+                                    context,
+                                    'Thank you! Your review is now live.',
+                                  );
+                                }
+                              } else {
+                                setModalState(() {
+                                  isSubmitting = false;
+                                  inlineError = errorMsg;
+                                });
+                              }
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2563EB),
                         foregroundColor: Colors.white,
@@ -229,10 +266,19 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text(
-                        'Submit Review',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
+                      child: isSubmitting
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Submit Review',
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
                     ),
                   ),
                 ],
@@ -893,25 +939,27 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            _avgRating > 0 ? _avgRating.toStringAsFixed(1) : '5.0',
+                                            _avgRating > 0 ? _avgRating.toStringAsFixed(1) : 'New',
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w900,
                                               fontSize: 13,
                                             ),
                                           ),
-                                          const SizedBox(width: 3),
-                                          const Icon(
-                                            Icons.star_rounded,
-                                            color: Colors.white,
-                                            size: 13,
-                                          ),
+                                          if (_avgRating > 0) ...[
+                                            const SizedBox(width: 3),
+                                            const Icon(
+                                              Icons.star_rounded,
+                                              color: Colors.white,
+                                              size: 13,
+                                            ),
+                                          ],
                                         ],
                                       ),
                                     ),
                                     const SizedBox(height: 3),
                                     Text(
-                                      '${_totalReviews > 0 ? _totalReviews : 1} review${_totalReviews == 1 ? '' : 's'}',
+                                      '$_totalReviews review${_totalReviews == 1 ? '' : 's'}',
                                       style: TextStyle(
                                         fontSize: 10,
                                         color: Colors.grey[600],
