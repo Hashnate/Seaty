@@ -52,7 +52,33 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
             if passenger and passenger.phone_number:
                 try:
                     from app.services.sms_service import send_sms
-                    sms_text = f"Seaty Booking & Payment Confirmed! Seats: {seats_str} ({origin} to {destination}). Booking ID: #{str(booking.id)[:8]}"
+                    dep_dt = trip.departure_time
+                    if dep_dt:
+                        date_time_str = dep_dt.strftime('%d/%m/%Y at %I:%M %p')
+                    else:
+                        date_time_str = "Scheduled Departure"
+                        
+                    total_amount = float(booking.total_price) + float(booking.platform_fee or 0)
+                    fare_str = f"Rs. {total_amount:,.2f}"
+                    ref_code = f"TKT-{str(booking.id)[:8].upper()}"
+                    bus_name = vehicle.name if vehicle else "Seaty Superline"
+                    bus_no = vehicle.registration_number if vehicle else "N/A"
+                    bus_tel = (vehicle.contact_phone if vehicle and vehicle.contact_phone else "N/A")
+                    support_tel = _get_platform_setting(db, "support_phone", "0740006523")
+                    
+                    sms_text = (
+                        "BOOKING CONFIRMATION\n\n"
+                        f"{bus_name}\n"
+                        f"Bus No: {bus_no}\n"
+                        f"Route: {origin} ➔ {destination}\n"
+                        f"Date & Time: {date_time_str}\n"
+                        f"Seat(s): {seats_str}\n"
+                        f"Fare: {fare_str}\n"
+                        f"Ref: {ref_code}\n\n"
+                        f"Bus Tel: {bus_tel}\n"
+                        f"Support: {support_tel}\n\n"
+                        "Present SMS / QR code upon boarding. Thank you!"
+                    )
                     send_sms(passenger.phone_number, sms_text)
                 except Exception as sms_err:
                     print(f"SMS Dispatch Error: {sms_err}")
@@ -90,8 +116,11 @@ def initiate_payment(
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    if booking.passenger_id != current_user.id and current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Unauthorized to pay for this booking")
+    if booking.booking_status in ["expired", "cancelled"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This booking has expired or been cancelled. Please select your seats again."
+        )
 
     if booking.payment_status in ["paid", "awaiting_payment"]:
         # If already awaiting, check if there's an existing payment

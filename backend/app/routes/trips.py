@@ -215,7 +215,15 @@ def list_trips(
     
     # Preload nested structures and filter matching routes (including intermediate stops)
     filtered_trips = []
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
     for trip in trips:
+        dep_time = trip.departure_time
+        if dep_time.tzinfo is None:
+            dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+        # Exclude trips whose departure is within 30 minutes or already past
+        if dep_time <= (now_utc + datetime.timedelta(minutes=30)):
+            continue
+
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
         if trip.vehicle:
             v_reviews = db.query(models.Review).filter(models.Review.vehicle_id == trip.vehicle.id).all()

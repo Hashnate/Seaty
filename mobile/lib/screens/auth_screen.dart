@@ -240,7 +240,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
         final devOtp = result['otp_code'];
         if (devOtp != null && devOtp.toString().isNotEmpty) {
           _otpController.text = devOtp.toString();
-          SeatyNotifications.show(context, 'Dev Mode: Auto-filled OTP code (${devOtp.toString()})');
+          SeatyNotifications.show(context, 'Conductor Mode: Auto-filled OTP code (${devOtp.toString()})');
         } else {
           SeatyNotifications.show(context, 'SMS sent! Please check your mobile phone for OTP.');
         }

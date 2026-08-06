@@ -108,6 +108,14 @@ try:
     except Exception as e:
         print(f"Error updating bookings_booking_status_check: {e}")
 
+    # 8. Add booking_id and is_verified columns to reviews table
+    print("Adding booking_id and is_verified columns to reviews table...")
+    try:
+        cur.execute("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS booking_id UUID REFERENCES bookings(id) ON DELETE SET NULL")
+        cur.execute("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT TRUE")
+    except Exception as e:
+        print(f"Error updating reviews table: {e}")
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

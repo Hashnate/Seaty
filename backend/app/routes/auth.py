@@ -69,7 +69,7 @@ def normalize_phone_digits(raw: str) -> str:
     return digits[-9:] if len(digits) >= 9 else digits
 
 @router.post("/otp/send", response_model=schemas.SendOTPResponse)
-def send_otp(payload: schemas.SendOTPRequest):
+def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
     target_norm = normalize_phone_digits(payload.phone_number)
     if not target_norm:
         raise HTTPException(
@@ -77,9 +77,16 @@ def send_otp(payload: schemas.SendOTPRequest):
             detail="Invalid mobile number provided."
         )
 
+    # Check if target user is a conductor
+    user = db.query(models.User).filter(
+        (models.User.phone_number == payload.phone_number) |
+        (models.User.phone_number == target_norm)
+    ).first()
+    is_conductor = user and user.role == "conductor"
+
     is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
-    # In dev environment, set code to 123456; in production, generate random 6-digit code
-    otp_code = "123456" if is_dev else str(random.randint(100000, 999999))
+    # Generate OTP code (123456 for conductors/dev, or random 6 digits)
+    otp_code = "123456" if is_conductor else str(random.randint(100000, 999999))
     expires_at = time.time() + 300  # Valid for 5 minutes
 
     otp_store[target_norm] = {
@@ -93,11 +100,15 @@ def send_otp(payload: schemas.SendOTPRequest):
 
     res = {
         "success": True,
-        "message": f"Verification code sent via SMS to {payload.phone_number}" + (" (Dev Mode Code: 123456)" if is_dev else ""),
+        "message": f"Verification code sent via SMS to {payload.phone_number}",
         "phone_number": payload.phone_number,
     }
-    if is_dev:
+    # Auto-fill OTP in API response ONLY for conductor accounts
+    if is_conductor:
         res["otp_code"] = otp_code
+    else:
+        res["otp_code"] = None
+
     return res
 
 @router.post("/otp/verify", response_model=schemas.VerifyOTPResponse)

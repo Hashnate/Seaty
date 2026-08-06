@@ -75,6 +75,17 @@ def create_seat_hold(
     if trip.status in ["completed", "cancelled"]:
         raise HTTPException(status_code=400, detail=f"Cannot hold seats on a {trip.status} trip")
 
+    # 30-minute pre-departure cutoff validation
+    now = datetime.datetime.now(datetime.timezone.utc)
+    dep_time = trip.departure_time
+    if dep_time.tzinfo is None:
+        dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+    if now >= (dep_time - datetime.timedelta(minutes=30)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Online seat holds for this bus closed 30 minutes prior to departure."
+        )
+
     # Check seat availability
     unavailable = get_unavailable_seats(db, hold_in.trip_id)
     all_unavailable = set(unavailable["booked"]) | set(unavailable["held"])

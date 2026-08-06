@@ -126,12 +126,21 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
         double.tryParse(widget.payment['amount'].toString()) ??
         (fare + platformFee);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Seaty Checkout'),
-        automaticallyImplyLeading: false,
-      ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        _processPayment(false);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Seaty Checkout'),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () => _processPayment(false),
+          ),
+        ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),

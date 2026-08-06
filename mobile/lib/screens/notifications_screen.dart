@@ -6,6 +6,8 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/screens/ticket_screen.dart';
+import 'package:seaty/screens/profile_screen.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -61,31 +63,61 @@ class NotificationsScreen extends ConsumerWidget {
 
   void _handleNotificationTap(
       BuildContext context, BookingsState bookingsState, Map<String, dynamic> noti) {
-    if (noti['type'] == 'booking' ||
-        (noti['title'] ?? '').toLowerCase().contains('booking')) {
-      Map<String, dynamic>? targetBooking;
-      if (bookingsState.bookings.isNotEmpty) {
-        final msg = (noti['message'] ?? '').toString();
-        for (var b in bookingsState.bookings) {
-          final reg = b['reg']?.toString() ?? '';
-          final idStr = b['id']?.toString() ?? '';
-          if ((reg.isNotEmpty && msg.contains(reg)) ||
-              (idStr.isNotEmpty && msg.contains(idStr.substring(0, 8)))) {
-            targetBooking = b;
-            break;
-          }
-        }
-        targetBooking ??= bookingsState.bookings.first;
-      }
+    final type = (noti['type'] ?? '').toString().toLowerCase();
+    final title = (noti['title'] ?? '').toString().toLowerCase();
+    final message = (noti['message'] ?? '').toString().toLowerCase();
 
-      if (targetBooking != null) {
-        _showTicketDialog(context, targetBooking);
-      } else {
-        SeatyNotifications.show(
-          context,
-          'Opening your tickets...',
-        );
+    // 1. Profile / Account / Verification Notifications
+    if (type == 'verification' || type == 'profile' || title.contains('profile') || title.contains('account')) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ProfileScreen()),
+      );
+      return;
+    }
+
+    // 2. Booking / Ticket Lookup
+    Map<String, dynamic>? targetBooking;
+    if (bookingsState.bookings.isNotEmpty) {
+      for (var b in bookingsState.bookings) {
+        final reg = b['reg']?.toString() ?? '';
+        final idStr = b['id']?.toString() ?? '';
+        if ((reg.isNotEmpty && message.contains(reg.toLowerCase())) ||
+            (idStr.isNotEmpty && message.contains(idStr.substring(0, 8).toLowerCase()))) {
+          targetBooking = b;
+          break;
+        }
       }
+      targetBooking ??= bookingsState.bookings.first;
+    }
+
+    // 3. Live Tracking / GPS Notifications
+    if (type == 'tracker' || title.contains('tracker') || message.contains('tracking') || message.contains('live location')) {
+      if (targetBooking != null) {
+        final tripData = targetBooking['trip'] is Map<String, dynamic>
+            ? targetBooking['trip'] as Map<String, dynamic>
+            : targetBooking;
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => TrackerScreen(trip: tripData)),
+        );
+        return;
+      }
+    }
+
+    // 4. Ticket Details / Booking Screen Navigation
+    if (targetBooking != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TicketDetailsScreen(booking: targetBooking!),
+        ),
+      );
+    } else {
+      SeatyNotifications.show(
+        context,
+        noti['message'] ?? 'Notification details unavailable.',
+      );
     }
   }
 

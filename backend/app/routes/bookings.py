@@ -54,6 +54,17 @@ def create_booking(
             detail=f"Cannot book seats on a trip that is already {trip.status}."
         )
 
+    # 30-minute pre-departure cutoff validation
+    now = datetime.datetime.now(datetime.timezone.utc)
+    dep_time = trip.departure_time
+    if dep_time.tzinfo is None:
+        dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+    if now >= (dep_time - datetime.timedelta(minutes=30)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Online booking for this bus closed 30 minutes prior to departure."
+        )
+
     # Check seat availability (booked + held seats)
     unavailable = get_unavailable_seats(db, booking_in.trip_id)
     all_unavailable = set(unavailable["booked"]) | set(unavailable["held"])
@@ -108,9 +119,17 @@ def create_booking(
     return db_booking
 
 
+def _get_hold_duration(db: Session) -> int:
+    setting = db.query(models.PlatformSetting).filter(
+        models.PlatformSetting.key == "seat_hold_duration_minutes"
+    ).first()
+    return int(setting.value) if setting else 10
+
+
 def _auto_update_booking_statuses(db: Session, bookings: List[models.Booking]):
-    """Auto-update booking_status to 'completed' or 'expired' based on departure time and boarding status."""
+    """Auto-update booking_status to 'completed' or 'expired' based on departure time, boarding status, and hold timeout."""
     now = datetime.datetime.now(datetime.timezone.utc)
+    hold_duration_mins = _get_hold_duration(db)
     updated = False
     for b in bookings:
         if not b.trip or not b.trip.departure_time:
@@ -123,12 +142,32 @@ def _auto_update_booking_statuses(db: Session, bookings: List[models.Booking]):
         seats = set(b.selected_seats or [])
         is_boarded = len(seats) > 0 and seats.issubset(boarded)
         
+        # Check creation time for pending booking expiration
+        created_at = b.created_at
+        if created_at and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+        is_pending_expired = (
+            b.booking_status == "pending"
+            and b.payment_status != "paid"
+            and created_at
+            and (now - created_at).total_seconds() > (hold_duration_mins * 60)
+        )
+        
         if is_boarded or b.booking_status == "completed":
             if b.booking_status != "completed":
                 b.booking_status = "completed"
                 updated = True
         elif dep_time < now and b.booking_status in ["confirmed", "pending"]:
             b.booking_status = "expired"
+            updated = True
+        elif is_pending_expired:
+            b.booking_status = "expired"
+            b.payment_status = "failed"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == b.trip_id,
+                models.SeatHold.user_id == b.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
             updated = True
             
     if updated:
@@ -140,7 +179,7 @@ def _auto_update_booking_statuses(db: Session, bookings: List[models.Booking]):
 
 @router.get("", response_model=List[schemas.BookingResponse])
 def list_bookings(
-    status_filter: Optional[str] = Query(None, alias="status", description="upcoming, completed, expired, cancelled, confirmed"),
+    status_filter: Optional[str] = Query(None, alias="status", description="upcoming, completed, expired, cancelled, confirmed, pending"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
@@ -174,7 +213,7 @@ def list_bookings(
         sf = status_filter.lower().strip()
         if sf == "upcoming":
             bookings = [b for b in bookings if b.booking_status == "confirmed"]
-        elif sf in ["completed", "expired", "cancelled"]:
+        elif sf in ["completed", "expired", "cancelled", "pending"]:
             bookings = [b for b in bookings if b.booking_status == sf]
 
     return bookings
