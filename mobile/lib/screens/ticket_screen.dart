@@ -1075,15 +1075,21 @@ class _BoardingPassTicketCard extends StatelessWidget {
     final depTime = _formatTicketTime(b['departure']?.toString());
     final depDate = _formatTicketDate(b['departure']?.toString());
 
+    final isCompleted = _isTicketCompleted(b);
+    final isExpired = _isTicketExpired(b);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isExpired ? const Color(0xFFF8FAFC) : Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
+        border: Border.all(
+          color: isExpired ? const Color(0xFFE2E8F0) : const Color(0xFFF1F5F9),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+            color: const Color(0xFF0F172A).withValues(alpha: isExpired ? 0.02 : 0.04),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1111,10 +1117,10 @@ class _BoardingPassTicketCard extends StatelessWidget {
                         children: [
                           Text(
                             busName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF0F172A),
+                              color: isExpired ? const Color(0xFF475569) : const Color(0xFF0F172A),
                               letterSpacing: -0.2,
                             ),
                             maxLines: 1,
@@ -1142,20 +1148,20 @@ class _BoardingPassTicketCard extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.baseline,
                           textBaseline: TextBaseline.alphabetic,
                           children: [
-                            const Text(
+                            Text(
                               'Rs. ',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF2563EB),
+                                color: isExpired ? const Color(0xFF64748B) : const Color(0xFF2563EB),
                               ),
                             ),
                             Text(
                               formattedPrice,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 19,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF2563EB),
+                                color: isExpired ? const Color(0xFF64748B) : const Color(0xFF2563EB),
                               ),
                             ),
                           ],
@@ -1188,10 +1194,10 @@ class _BoardingPassTicketCard extends StatelessWidget {
                         children: [
                           Text(
                             depTime,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                              color: isExpired ? const Color(0xFF64748B) : const Color(0xFF0F172A),
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -1219,7 +1225,7 @@ class _BoardingPassTicketCard extends StatelessWidget {
                             children: [
                               Container(
                                 height: 2,
-                                color: const Color(0xFF93C5FD),
+                                color: isExpired ? const Color(0xFFCBD5E1) : const Color(0xFF93C5FD),
                               ),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1227,16 +1233,16 @@ class _BoardingPassTicketCard extends StatelessWidget {
                                   Container(
                                     width: 8,
                                     height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF2563EB),
+                                    decoration: BoxDecoration(
+                                      color: isExpired ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   Container(
                                     width: 8,
                                     height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF2563EB),
+                                    decoration: BoxDecoration(
+                                      color: isExpired ? const Color(0xFF94A3B8) : const Color(0xFF2563EB),
                                       shape: BoxShape.circle,
                                     ),
                                   ),
@@ -1263,12 +1269,12 @@ class _BoardingPassTicketCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Text(
+                          Text(
                             '05:00',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: Color(0xFF0F172A),
+                              color: isExpired ? const Color(0xFF64748B) : const Color(0xFF0F172A),
                             ),
                           ),
                           const SizedBox(height: 3),
@@ -1311,43 +1317,79 @@ class _BoardingPassTicketCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        if (_isTicketCompleted(b))
+                        if (isCompleted)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: const Color(0xFFECFDF5),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFA7F3D0)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFA7F3D0), width: 1.2),
                             ),
-                            child: const Text(
-                              'Completed',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF059669)),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.check_circle_rounded, size: 12, color: Color(0xFF059669)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'COMPLETED',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF059669),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           )
-                        else if (_isTicketExpired(b))
+                        else if (isExpired)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFEF2F2),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFFCA5A5)),
+                              color: const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFFECDD3), width: 1.2),
                             ),
-                            child: const Text(
-                              'Expired',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.history_rounded, size: 12, color: Color(0xFFE11D48)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'EXPIRED',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFFE11D48),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           )
                         else
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
                               color: const Color(0xFFEFF6FF),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFBFDBFE)),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: const Color(0xFFBFDBFE), width: 1.2),
                             ),
-                            child: const Text(
-                              'Upcoming',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.confirmation_number_rounded, size: 12, color: Color(0xFF2563EB)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'UPCOMING',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF2563EB),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                       ],
@@ -1365,13 +1407,21 @@ class _BoardingPassTicketCard extends StatelessWidget {
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
                           onPressed: onTap,
-                          icon: const Icon(Icons.qr_code_rounded, size: 14, color: Colors.white),
-                          label: const Text(
-                            'Ticket',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
+                          icon: Icon(
+                            (isExpired || isCompleted) ? Icons.remove_red_eye_rounded : Icons.qr_code_rounded,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          label: Text(
+                            (isExpired || isCompleted) ? 'View' : 'Ticket',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
+                            backgroundColor: isExpired
+                                ? const Color(0xFF64748B)
+                                : isCompleted
+                                    ? const Color(0xFF059669)
+                                    : const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
@@ -1410,6 +1460,9 @@ class TicketDetailsScreen extends StatelessWidget {
         double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
         b['price'].toString();
 
+    final isExpired = _isTicketExpired(b);
+    final isCompleted = _isTicketCompleted(b);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -1428,6 +1481,62 @@ class TicketDetailsScreen extends StatelessWidget {
           ),
         ),
         centerTitle: false,
+        actions: [
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: isCompleted
+                  ? const Color(0xFFECFDF5)
+                  : isExpired
+                      ? const Color(0xFFFFF1F2)
+                      : const Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isCompleted
+                    ? const Color(0xFFA7F3D0)
+                    : isExpired
+                        ? const Color(0xFFFECDD3)
+                        : const Color(0xFFBFDBFE),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isCompleted
+                      ? Icons.check_circle_rounded
+                      : isExpired
+                          ? Icons.history_rounded
+                          : Icons.confirmation_number_rounded,
+                  color: isCompleted
+                      ? const Color(0xFF059669)
+                      : isExpired
+                          ? const Color(0xFFE11D48)
+                          : const Color(0xFF2563EB),
+                  size: 14,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  isCompleted
+                      ? 'COMPLETED'
+                      : isExpired
+                          ? 'EXPIRED'
+                          : 'UPCOMING',
+                  style: TextStyle(
+                    color: isCompleted
+                        ? const Color(0xFF059669)
+                        : isExpired
+                            ? const Color(0xFFE11D48)
+                            : const Color(0xFF2563EB),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -1694,32 +1803,44 @@ class TicketDetailsScreen extends StatelessWidget {
                         Center(
                           child: Column(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 10,
+                              ColorFiltered(
+                                colorFilter: (isExpired || isCompleted)
+                                    ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
+                                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
+                                child: Opacity(
+                                  opacity: (isExpired || isCompleted) ? 0.3 : 1.0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.05),
+                                          blurRadius: 10,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                child: QrImageView(
-                                  data: b['id'].toString(),
-                                  version: QrVersions.auto,
-                                  size: 160.0,
+                                    child: QrImageView(
+                                      data: b['id'].toString(),
+                                      version: QrVersions.auto,
+                                      size: 160.0,
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              const Text(
-                                'Present this QR code to the conductor upon boarding',
+                              Text(
+                                (isExpired || isCompleted)
+                                    ? (isExpired
+                                        ? 'This ticket has expired and is no longer valid for boarding.'
+                                        : 'Trip completed — thank you for traveling with Seaty!')
+                                    : 'Present this QR code to the conductor upon boarding',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Color(0xFF64748B),
+                                  color: (isExpired || isCompleted) ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1735,61 +1856,62 @@ class TicketDetailsScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // ── Download & Share Action Buttons ──
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      _generateAndSavePDF(context, b, share: false);
-                    },
-                    icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
-                    label: const Text(
-                      'Download PDF',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+            // ── Download & Share Action Buttons (Hidden for Past / Expired / Completed Tickets) ──
+            if (!isExpired && !isCompleted)
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        _generateAndSavePDF(context, b, share: false);
+                      },
+                      icon: const Icon(Icons.download_rounded, color: Colors.white, size: 18),
+                      label: const Text(
+                        'Download PDF',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      _generateAndSavePDF(context, b, share: true);
-                    },
-                    icon: const Icon(Icons.share_rounded, color: Color(0xFF2563EB), size: 18),
-                    label: const Text(
-                      'Share Ticket',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2563EB),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        _generateAndSavePDF(context, b, share: true);
+                      },
+                      icon: const Icon(Icons.share_rounded, color: Color(0xFF2563EB), size: 18),
+                      label: const Text(
+                        'Share Ticket',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2563EB),
+                        ),
                       ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2563EB),
-                      side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF2563EB),
+                        side: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
         ),
       ),
