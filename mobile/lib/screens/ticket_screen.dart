@@ -105,6 +105,25 @@ bool _isTicketExpired(Map<String, dynamic> b) {
   return _isTicketPast(b) && !_isTicketCompleted(b);
 }
 
+String _formatCurrency(dynamic val, {bool showDecimals = false}) {
+  if (val == null) return '0';
+  final double numVal = double.tryParse(val.toString()) ?? 0.0;
+  if (showDecimals) {
+    final parts = numVal.toStringAsFixed(2).split('.');
+    final wholeStr = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return '$wholeStr.${parts[1]}';
+  } else {
+    final wholeStr = numVal.round().toString().replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return wholeStr;
+  }
+}
+
 Future<void> _generateAndSavePDF(
   BuildContext context,
   Map<String, dynamic> b, {
@@ -123,9 +142,7 @@ Future<void> _generateAndSavePDF(
     final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
     final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
     final numPassengers = (b['seats'] as List?)?.length ?? 1;
-    final formattedPrice =
-        double.tryParse(b['price'].toString())?.toStringAsFixed(1) ??
-        b['price'].toString();
+    final formattedPrice = _formatCurrency(b['price']);
     final origin = (b['origin'] ?? 'Colombo Fort').toString();
     final destination = (b['destination'] ?? 'Galle').toString();
     final busName = (b['bus_name'] ?? 'Luxury Express').toString();
@@ -1066,9 +1083,7 @@ class _BoardingPassTicketCard extends StatelessWidget {
     final ticketCode = rawTicketId.length >= 8 ? rawTicketId.substring(0, 8) : rawTicketId;
     final seats = (b['seats'] as List?)?.join(', ') ?? '1';
     final numSeats = (b['seats'] as List?)?.length ?? 1;
-    final formattedPrice =
-        double.tryParse(b['price'].toString())?.toStringAsFixed(0) ??
-        b['price'].toString();
+    final formattedPrice = _formatCurrency(b['price']);
     final origin = (b['origin'] ?? 'Trincomalee').toString();
     final destination = (b['destination'] ?? 'Colombo').toString();
     final busName = (b['bus_name'] ?? 'Soyaru Sampath Superline').toString();
@@ -1081,15 +1096,12 @@ class _BoardingPassTicketCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: isExpired ? const Color(0xFFF8FAFC) : Colors.white,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isExpired ? const Color(0xFFE2E8F0) : const Color(0xFFF1F5F9),
-          width: 1.5,
-        ),
+        border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: isExpired ? 0.02 : 0.04),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.04),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1456,9 +1468,7 @@ class TicketDetailsScreen extends StatelessWidget {
     final b = booking;
     final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
     final seats = (b['seats'] as List?)?.join(', ') ?? '';
-    final formattedPrice =
-        double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??
-        b['price'].toString();
+    final formattedPrice = _formatCurrency(b['price'], showDecimals: true);
 
     final isExpired = _isTicketExpired(b);
     final isCompleted = _isTicketCompleted(b);
@@ -1803,34 +1813,87 @@ class TicketDetailsScreen extends StatelessWidget {
                         Center(
                           child: Column(
                             children: [
-                              ColorFiltered(
-                                colorFilter: (isExpired || isCompleted)
-                                    ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
-                                    : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
-                                child: Opacity(
-                                  opacity: (isExpired || isCompleted) ? 0.3 : 1.0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.05),
-                                          blurRadius: 10,
+                              Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Opacity(
+                                    opacity: (isExpired || isCompleted) ? 0.25 : 1.0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                        border: Border.all(
+                                          color: (isExpired || isCompleted)
+                                              ? const Color(0xFFCBD5E1)
+                                              : const Color(0xFFE2E8F0),
                                         ),
-                                      ],
-                                    ),
-                                    child: QrImageView(
-                                      data: b['id'].toString(),
-                                      version: QrVersions.auto,
-                                      size: 160.0,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.04),
+                                            blurRadius: 10,
+                                          ),
+                                        ],
+                                      ),
+                                      child: QrImageView(
+                                        data: b['id'].toString(),
+                                        version: QrVersions.auto,
+                                        size: 160.0,
+                                        eyeStyle: QrEyeStyle(
+                                          eyeShape: QrEyeShape.square,
+                                          color: (isExpired || isCompleted) ? const Color(0xFF64748B) : Colors.black,
+                                        ),
+                                        dataModuleStyle: QrDataModuleStyle(
+                                          dataModuleShape: QrDataModuleShape.square,
+                                          color: (isExpired || isCompleted) ? const Color(0xFF64748B) : Colors.black,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                  if (isExpired || isCompleted)
+                                    Transform.rotate(
+                                      angle: -0.15,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                        decoration: BoxDecoration(
+                                          color: isExpired ? const Color(0xFFFFF1F2) : const Color(0xFFECFDF5),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: isExpired ? const Color(0xFFE11D48) : const Color(0xFF059669),
+                                            width: 2.0,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: (isExpired ? const Color(0xFFE11D48) : const Color(0xFF059669)).withValues(alpha: 0.15),
+                                              blurRadius: 8,
+                                            ),
+                                          ],
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              isExpired ? Icons.history_rounded : Icons.check_circle_rounded,
+                                              size: 15,
+                                              color: isExpired ? const Color(0xFFE11D48) : const Color(0xFF059669),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              isExpired ? 'EXPIRED' : 'COMPLETED',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w900,
+                                                color: isExpired ? const Color(0xFFE11D48) : const Color(0xFF059669),
+                                                letterSpacing: 1.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
                               Text(
                                 (isExpired || isCompleted)
                                     ? (isExpired

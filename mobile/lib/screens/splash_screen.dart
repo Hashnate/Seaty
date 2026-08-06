@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/auth_screen.dart';
 
@@ -63,17 +64,14 @@ class _SplashScreenState extends State<SplashScreen>
                   children: [
                     Image.asset(
                       'assets/images/app_logo.png',
-                      height: 220,
+                      height: 170,
                       fit: BoxFit.contain,
                       errorBuilder: (context, error, stackTrace) => const Icon(
                         Icons.directions_bus_rounded,
                         size: 90,
                         color: Color(0xFF2563EB),
                       ),
-                    )
-                        .animate()
-                        .fadeIn(duration: 800.ms, curve: Curves.easeOut)
-                        .scale(begin: const Offset(0.8, 0.8), end: const Offset(1.0, 1.0), duration: 1000.ms, curve: Curves.easeOutBack),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'LUXURY TRANSPORT',
@@ -85,26 +83,13 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     )
                         .animate()
-                        .fadeIn(delay: 500.ms, duration: 600.ms)
-                        .slideY(begin: 0.3, end: 0, delay: 500.ms, duration: 600.ms),
+                        .fadeIn(delay: 300.ms, duration: 500.ms)
+                        .slideY(begin: 0.2, end: 0, delay: 300.ms, duration: 500.ms),
+                    const SizedBox(height: 24),
+                    const SeatyBusLoadingIndicator.small()
+                        .animate()
+                        .fadeIn(delay: 500.ms),
                   ],
-                ),
-              ),
-              Positioned(
-                bottom: 40,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF2563EB),
-                      ),
-                    ),
-                  ).animate().fadeIn(delay: 800.ms),
                 ),
               ),
             ],

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:seaty/main.dart'; // import appStateProvider and global definitions
 import 'package:seaty/screens/tracker_screen.dart'; // import BoldGradientHeroHeading
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 // Profile Edit Screen
 class ProfileEditScreen extends ConsumerStatefulWidget {
@@ -389,13 +390,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                           ),
                           child: _isSaving
                               ? const Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
+                                  child: SeatyBusLoadingIndicator.small(
+                                    busColor: Colors.white,
                                   ),
                                 )
                               : const Text(

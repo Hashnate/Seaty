@@ -8,6 +8,7 @@ import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/widgets/animated_3d_seat.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/sandbox_payment_screen.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 // Seat Selector Screen
 class SeatSelectorScreen extends ConsumerStatefulWidget {
@@ -645,7 +646,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+              child: SeatyBusLoadingIndicator(message: 'Loading available seats...'),
             )
           : Column(
               children: [
@@ -815,13 +816,8 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                           elevation: 0,
                         ),
                         child: _isBookingInProgress
-                            ? const SizedBox(
-                                height: 22,
-                                width: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
+                            ? const SeatyBusLoadingIndicator.small(
+                                busColor: Colors.white,
                               )
                             : const Row(
                                 mainAxisAlignment: MainAxisAlignment.center,

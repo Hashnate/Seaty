@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 class FleetCrewScreen extends ConsumerStatefulWidget {
   final int initialSubTab;
@@ -71,11 +72,7 @@ class _FleetCrewScreenState extends ConsumerState<FleetCrewScreen>
                   if (isLoading) ...[
                     const SizedBox(height: 16),
                     const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
+                      child: SeatyBusLoadingIndicator.small(),
                     ),
                   ],
                 ],

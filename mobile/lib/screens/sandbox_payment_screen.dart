@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 class SandboxPaymentScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> payment;
@@ -25,6 +26,25 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
   late Timer _timer;
   int _secondsRemaining = 600; // 10 minutes hold timer
   bool _isProcessing = false;
+
+  String _formatCurrency(dynamic val, {bool showDecimals = false}) {
+    if (val == null) return '0';
+    final double numVal = double.tryParse(val.toString()) ?? 0.0;
+    if (showDecimals) {
+      final parts = numVal.toStringAsFixed(2).split('.');
+      final wholeStr = parts[0].replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+      return '$wholeStr.${parts[1]}';
+    } else {
+      final wholeStr = numVal.round().toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+      return wholeStr;
+    }
+  }
 
   @override
   void initState() {
@@ -188,11 +208,11 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                         const Divider(height: 24),
                         _buildRow(
                           'Seat Fare',
-                          'Rs. ${fare.toStringAsFixed(0)}',
+                          'Rs. ${_formatCurrency(fare)}',
                         ),
                         _buildRow(
                           'Platform Fee',
-                          'Rs. ${platformFee.toStringAsFixed(0)}',
+                          'Rs. ${_formatCurrency(platformFee)}',
                         ),
                         const Divider(height: 24),
                         Row(
@@ -207,7 +227,7 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                               ),
                             ),
                             Text(
-                              'Rs. ${total.toStringAsFixed(2)}',
+                              'Rs. ${_formatCurrency(total, showDecimals: true)}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w900,
                                 fontSize: 18,
@@ -253,8 +273,8 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                       ),
                       const SizedBox(height: 24),
                       if (_isProcessing)
-                        const CircularProgressIndicator(
-                          color: Color(0xFF2563EB),
+                        const SeatyBusLoadingIndicator(
+                          message: 'Authorizing payment transaction...',
                         )
                       else ...[
                         ElevatedButton(

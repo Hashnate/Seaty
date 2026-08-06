@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 class ConductorScanTab extends ConsumerStatefulWidget {
   const ConductorScanTab({super.key});
@@ -51,8 +52,8 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFF2563EB),
+        child: SeatyBusLoadingIndicator(
+          message: 'Verifying passenger ticket...',
         ),
       ),
     );

@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 class ConductorHomeTab extends ConsumerStatefulWidget {
   final Function(int tabIndex)? onNavigate;
@@ -304,14 +305,7 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                           ),
                         ),
                         if (_isLoadingManifest)
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Color(0xFF2563EB),
-                            ),
-                          ),
+                          const SeatyBusLoadingIndicator.small(),
                       ],
                     ),
                     const SizedBox(height: 12),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 class BusDetailsScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> trip;
@@ -1486,12 +1487,9 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
 
                     if (_isLoadingReviews)
                       const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
+                        padding: EdgeInsets.symmetric(vertical: 16),
                         child: Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF2563EB),
-                            strokeWidth: 2.5,
-                          ),
+                          child: SeatyBusLoadingIndicator.small(),
                         ),
                       )
                     else if (_reviewsList.isEmpty)

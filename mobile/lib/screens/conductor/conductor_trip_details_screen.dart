@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 class ConductorTripDetailsScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> trip;
@@ -392,7 +393,7 @@ class _ConductorTripDetailsScreenState
       ),
       body: _isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF2563EB)),
+              child: SeatyBusLoadingIndicator(message: 'Loading manifest & passenger details...'),
             )
           : Column(
               children: [
