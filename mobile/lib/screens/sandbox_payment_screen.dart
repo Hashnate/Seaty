@@ -169,23 +169,6 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Order Details Card
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Colors.black12),
-                  ),
-                  color: Colors.white,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
->>>>>>> 8b9350477fdabb80e558e95de7a3931d9a407312
                       children: [
                         Icon(
                           Icons.hourglass_bottom_rounded,
@@ -343,6 +326,7 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
               ),
             ),
           ),
+        ),
       ),
     );
   }

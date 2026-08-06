@@ -210,7 +210,7 @@ class AuthNotifier extends Notifier<AuthState> {
               'phone_number': phone,
               'full_name': name,
               'role': assignedRole,
-              if (otpCode != null) 'otp_code': otpCode,
+              'otp_code': ?otpCode,
             }),
           )
           .timeout(const Duration(seconds: 5));

@@ -107,6 +107,10 @@ class NotificationsScreen extends ConsumerWidget {
 
     // 4. Ticket Details / Booking Screen Navigation
     if (targetBooking != null) {
+      if (type == 'booking' || title.contains('booking')) {
+        _showTicketDialog(context, targetBooking);
+        return;
+      }
       Navigator.push(
         context,
         MaterialPageRoute(
