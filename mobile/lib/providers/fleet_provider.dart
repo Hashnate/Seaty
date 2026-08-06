@@ -286,12 +286,12 @@ class FleetNotifier extends Notifier<FleetState> {
     return {'average_rating': 0.0, 'total_reviews': 0, 'reviews': []};
   }
 
-  Future<bool> submitVehicleReview(
+  Future<String?> submitVehicleReview(
     String vehicleId,
     int rating,
     String comment,
   ) async {
-    if (vehicleId.isEmpty) return false;
+    if (vehicleId.isEmpty) return 'Invalid vehicle ID.';
     final settings = ref.read(settingsProvider);
     final auth = ref.read(authProvider);
 
@@ -310,12 +310,31 @@ class FleetNotifier extends Notifier<FleetState> {
               'passenger_name': auth.userName.isNotEmpty ? auth.userName : 'Passenger',
             }),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 5));
 
-      return response.statusCode == 201 || response.statusCode == 200;
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        return null;
+      }
+
+      try {
+        final data = json.decode(response.body);
+        if (data is Map && data.containsKey('detail')) {
+          final detail = data['detail'];
+          if (detail is String) return detail;
+          if (detail is List && detail.isNotEmpty) {
+            final first = detail.first;
+            if (first is Map && first.containsKey('msg')) {
+              return first['msg'].toString();
+            }
+          }
+          return detail.toString();
+        }
+      } catch (_) {}
+
+      return 'Failed to submit review (HTTP ${response.statusCode}).';
     } catch (e) {
       debugPrint('Error submitting review: $e');
-      return false;
+      return 'Network error while submitting review.';
     }
   }
 }

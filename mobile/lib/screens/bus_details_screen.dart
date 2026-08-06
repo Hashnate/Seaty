@@ -198,11 +198,11 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                           duration: const Duration(milliseconds: 800),
                         );
 
-                        final success = await ref
+                        final errorMsg = await ref
                             .read(fleetProvider.notifier)
                             .submitVehicleReview(vehicleId, selectedRating, commentText);
 
-                        if (success) {
+                        if (errorMsg == null) {
                           await _loadRealtimeReviews();
                           if (mounted) {
                             SeatyNotifications.show(
@@ -214,8 +214,9 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
                           if (mounted) {
                             SeatyNotifications.show(
                               context,
-                              'Failed to submit review.',
+                              errorMsg,
                               isError: true,
+                              duration: const Duration(seconds: 4),
                             );
                           }
                         }
