@@ -128,11 +128,24 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
 
     return PopScope(
       canPop: !_isProcessing,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (!_isProcessing) {
+          _processPayment(false);
+        }
+      },
       child: Scaffold(
         backgroundColor: const Color(0xFFF8FAFC),
         appBar: AppBar(
           title: const Text('Seaty Checkout'),
-          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () {
+              if (!_isProcessing) {
+                _processPayment(false);
+              }
+            },
+          ),
         ),
         body: Center(
           child: SingleChildScrollView(
@@ -156,6 +169,23 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Order Details Card
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: Colors.black12),
+                  ),
+                  color: Colors.white,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+>>>>>>> 8b9350477fdabb80e558e95de7a3931d9a407312
                       children: [
                         Icon(
                           Icons.hourglass_bottom_rounded,
@@ -313,7 +343,6 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
               ),
             ),
           ),
-        ),
       ),
     );
   }

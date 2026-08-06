@@ -102,7 +102,15 @@ bool _isTicketCompleted(Map<String, dynamic> b) {
 }
 
 bool _isTicketExpired(Map<String, dynamic> b) {
+  final status = (b['booking_status'] ?? b['status'])?.toString().toLowerCase() ?? '';
+  if (status == 'expired' || status == 'cancelled') return true;
   return _isTicketPast(b) && !_isTicketCompleted(b);
+}
+
+bool _isTicketPending(Map<String, dynamic> b) {
+  final bookingStatus = b['booking_status']?.toString().toLowerCase() ?? '';
+  final paymentStatus = b['payment_status']?.toString().toLowerCase() ?? '';
+  return (bookingStatus == 'pending' || paymentStatus == 'pending' || paymentStatus == 'awaiting_payment') && !_isTicketExpired(b) && !_isTicketCompleted(b);
 }
 
 String _formatCurrency(dynamic val, {bool showDecimals = false}) {
@@ -1472,6 +1480,7 @@ class TicketDetailsScreen extends StatelessWidget {
 
     final isExpired = _isTicketExpired(b);
     final isCompleted = _isTicketCompleted(b);
+    final isPending = _isTicketPending(b);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -1500,14 +1509,18 @@ class TicketDetailsScreen extends StatelessWidget {
                   ? const Color(0xFFECFDF5)
                   : isExpired
                       ? const Color(0xFFFFF1F2)
-                      : const Color(0xFFEFF6FF),
+                      : isPending
+                          ? const Color(0xFFFFFBEB)
+                          : const Color(0xFFEFF6FF),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isCompleted
                     ? const Color(0xFFA7F3D0)
                     : isExpired
                         ? const Color(0xFFFECDD3)
-                        : const Color(0xFFBFDBFE),
+                        : isPending
+                            ? const Color(0xFFFCD34D)
+                            : const Color(0xFFBFDBFE),
               ),
             ),
             child: Row(
@@ -1517,12 +1530,16 @@ class TicketDetailsScreen extends StatelessWidget {
                       ? Icons.check_circle_rounded
                       : isExpired
                           ? Icons.history_rounded
-                          : Icons.confirmation_number_rounded,
+                          : isPending
+                              ? Icons.timer_outlined
+                              : Icons.confirmation_number_rounded,
                   color: isCompleted
                       ? const Color(0xFF059669)
                       : isExpired
                           ? const Color(0xFFE11D48)
-                          : const Color(0xFF2563EB),
+                          : isPending
+                              ? const Color(0xFFD97706)
+                              : const Color(0xFF2563EB),
                   size: 14,
                 ),
                 const SizedBox(width: 4),
@@ -1531,13 +1548,17 @@ class TicketDetailsScreen extends StatelessWidget {
                       ? 'COMPLETED'
                       : isExpired
                           ? 'EXPIRED'
-                          : 'UPCOMING',
+                          : isPending
+                              ? 'UNPAID'
+                              : 'UPCOMING',
                   style: TextStyle(
                     color: isCompleted
                         ? const Color(0xFF059669)
                         : isExpired
                             ? const Color(0xFFE11D48)
-                            : const Color(0xFF2563EB),
+                            : isPending
+                                ? const Color(0xFFD97706)
+                                : const Color(0xFF2563EB),
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
@@ -1813,9 +1834,36 @@ class TicketDetailsScreen extends StatelessWidget {
                         Center(
                           child: Column(
                             children: [
-                              Stack(
-                                alignment: Alignment.center,
-                                children: [
+                              if (isPending)
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFFBEB),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFFFCD34D)),
+                                  ),
+                                  child: const Column(
+                                    children: [
+                                      Icon(Icons.timer_outlined, color: Color(0xFFD97706), size: 36),
+                                      SizedBox(height: 8),
+                                      Text(
+                                        'Payment Pending',
+                                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF92400E), fontSize: 16),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'Boarding QR code will be generated once payment is confirmed.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: Color(0xFFB45309), fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              else
+                                Stack(
+                                  alignment: Alignment.center,
+                                  children: [
                                   Opacity(
                                     opacity: (isExpired || isCompleted) ? 0.25 : 1.0,
                                     child: Container(

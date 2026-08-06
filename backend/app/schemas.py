@@ -500,14 +500,17 @@ class ReviewCreate(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     comment: Optional[str] = None
     passenger_name: Optional[str] = "Anonymous Passenger"
+    booking_id: Optional[UUID] = None
 
 class ReviewResponse(BaseModel):
     id: UUID
     vehicle_id: UUID
     user_id: UUID
+    booking_id: Optional[UUID] = None
     passenger_name: str
     rating: int
     comment: Optional[str] = None
+    is_verified: bool = True
     created_at: datetime.datetime
 
     class Config:
