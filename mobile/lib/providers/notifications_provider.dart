@@ -72,6 +72,8 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
   Future<void> registerFcmTokenWithBackend() async {
     final auth = ref.read(authProvider);
     if (auth.token.isEmpty || auth.token.startsWith('simulated')) return;
+    // main() starts Firebase after runApp, so this can be reached first.
+    await firebaseReady;
     final settings = ref.read(settingsProvider);
 
     for (int attempt = 0; attempt < 5; attempt++) {

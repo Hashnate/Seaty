@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,9 +33,19 @@ export 'package:seaty/screens/notifications_screen.dart';
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Providers read globalPrefs synchronously, so this one genuinely has to
+  // finish before the first build.
   globalPrefs = await SharedPreferences.getInstance();
-  await initFirebaseMessaging();
+
   runApp(const ProviderScope(child: SeatyApp()));
+
+  // Deliberately started after runApp and never awaited. Firebase.initializeApp()
+  // plus the background-handler registration — which boots a second, headless
+  // FlutterEngine and registers every plugin into it — used to run before the
+  // first frame existed, delaying every cold start. Nothing the splash paints
+  // needs Firebase; callers that do await `firebaseReady`.
+  unawaited(initFirebaseMessaging());
 }
 
 class SeatyApp extends StatelessWidget {

@@ -31,6 +31,19 @@ const double _kLogoSize = 170.0;
 /// Gap between the logo's box and the tagline.
 const double _kTaglineGap = 16.0;
 
+/// How long the revealed splash stays up after the native hand-off completes.
+///
+/// The reveal animations finish at ~800ms (tagline: 300ms delay + 500ms fade;
+/// loader: 500ms delay), so this leaves them a moment to settle rather than
+/// cutting them off mid-flight.
+const Duration _kMinRevealDuration = Duration(milliseconds: 1100);
+
+/// Hard ceiling measured from `initState`.
+///
+/// Reaching it means the hand-off stalled — a wedged `precacheImage`, a slow
+/// first frame. Advance anyway rather than stranding the user on the logo.
+const Duration _kMaxSplashDuration = Duration(milliseconds: 2800);
+
 // =====================================================================
 // DART-LEVEL SPLASH SCREEN (Shows on every Hot Restart)
 // =====================================================================
@@ -49,18 +62,21 @@ class _SplashScreenState extends State<SplashScreen> {
 
   bool _handOffStarted = false;
 
+  /// Fires only if the hand-off never gets there on its own.
+  Timer? _ceiling;
+
+  bool _navigated = false;
+
   @override
   void initState() {
     super.initState();
+    _ceiling = Timer(_kMaxSplashDuration, _openApp);
+  }
 
-    Timer(const Duration(milliseconds: 2800), () {
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          SeatyPageRoute(page: const AuthWrapper()),
-        );
-      }
-    });
+  @override
+  void dispose() {
+    _ceiling?.cancel();
+    super.dispose();
   }
 
   @override
@@ -69,6 +85,18 @@ class _SplashScreenState extends State<SplashScreen> {
     if (_handOffStarted) return;
     _handOffStarted = true;
     unawaited(_handOffFromNativeSplash());
+  }
+
+  /// Leaves the splash for the app. Idempotent — the hand-off path and the
+  /// ceiling timer both call it, and whichever arrives first wins.
+  void _openApp() {
+    if (_navigated || !mounted) return;
+    _navigated = true;
+    _ceiling?.cancel();
+    Navigator.pushReplacement(
+      context,
+      SeatyPageRoute(page: const AuthWrapper()),
+    );
   }
 
   /// Hands control from the native launch screen to this widget.
@@ -87,7 +115,14 @@ class _SplashScreenState extends State<SplashScreen> {
       // native splash — fall through and hand over regardless.
     }
     FlutterNativeSplash.remove();
-    if (mounted) setState(() => _revealed = true);
+    if (!mounted) return;
+    setState(() => _revealed = true);
+
+    // Drive the exit off actual readiness rather than a fixed wall-clock wait.
+    // On a warm start the precache above returns in tens of milliseconds, so
+    // this leaves the splash at ~1.2s instead of a flat 2.8s.
+    await Future<void>.delayed(_kMinRevealDuration);
+    _openApp();
   }
 
   @override

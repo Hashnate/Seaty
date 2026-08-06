@@ -197,7 +197,26 @@ void setupPushNotifications() async {
   }
 }
 
-Future<void> initFirebaseMessaging() async {
+Future<void>? _firebaseInit;
+
+/// Completes once [initFirebaseMessaging] has finished, successfully or not.
+///
+/// `main()` no longer awaits Firebase before `runApp` — registering the
+/// background handler boots a second, headless FlutterEngine and registers
+/// every plugin into it, which used to happen before the first frame existed.
+/// Anything that touches `FirebaseMessaging` must await this first, or it can
+/// run against an uninitialised Firebase and burn a retry.
+///
+/// Safe to await before `main()` has called [initFirebaseMessaging]: that call
+/// happens synchronously after `runApp`, so `_firebaseInit` is always assigned
+/// before the first widget builds.
+Future<void> get firebaseReady => _firebaseInit ?? Future<void>.value();
+
+/// Idempotent — repeat calls return the in-flight or completed future rather
+/// than initialising Firebase (and a second background engine) again.
+Future<void> initFirebaseMessaging() => _firebaseInit ??= _initFirebaseMessaging();
+
+Future<void> _initFirebaseMessaging() async {
   try {
     // Only initialize FCM on platforms that support it natively (Android, iOS, Web, macOS)
     if (kIsWeb || (!Platform.isWindows && !Platform.isLinux)) {
