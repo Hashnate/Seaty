@@ -123,6 +123,37 @@ async def trip_reminder_scheduler():
         # Run every 30 seconds
         await asyncio.sleep(30)
 
+async def auto_expire_bookings_scheduler():
+    """Background task to auto-expire past bookings periodically."""
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                now = datetime.datetime.now(datetime.timezone.utc)
+                candidates = db.query(models.Booking).join(models.Trip).filter(
+                    models.Booking.booking_status == "confirmed",
+                    models.Trip.departure_time < now
+                ).all()
+
+                for b in candidates:
+                    boarded = set(b.trip.boarded_seats or [])
+                    seats = set(b.selected_seats or [])
+                    if seats and seats.issubset(boarded):
+                        b.booking_status = "completed"
+                    else:
+                        b.booking_status = "expired"
+
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Error in auto_expire_bookings_scheduler: {e}")
+
+        # Run every 60 seconds
+        await asyncio.sleep(60)
+
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(trip_reminder_scheduler())
+    asyncio.create_task(auto_expire_bookings_scheduler())

@@ -185,7 +185,7 @@ class Booking(Base):
     total_price = Column(Numeric(10, 2), nullable=False)
     platform_fee = Column(Numeric(10, 2), nullable=False, default=0)
     payment_status = Column(String, default="pending")  # 'pending', 'awaiting_payment', 'paid', 'failed', 'refunded'
-    booking_status = Column(String, default="pending")  # 'pending', 'confirmed', 'cancelled'
+    booking_status = Column(String, default="pending")  # 'pending', 'confirmed', 'cancelled', 'completed', 'expired'
     passenger_details = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)

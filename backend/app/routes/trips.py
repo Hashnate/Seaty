@@ -595,6 +595,13 @@ def toggle_seat_board_status(
             final_action = "boarded"
         
     trip.boarded_seats = boarded
+    # Auto-update bookings for this trip to completed if all seats are boarded
+    trip_bookings = db.query(models.Booking).filter(models.Booking.trip_id == trip.id).all()
+    boarded_set = set(boarded)
+    for b in trip_bookings:
+        seats_set = set(b.selected_seats or [])
+        if seats_set and seats_set.issubset(boarded_set):
+            b.booking_status = "completed"
     db.commit()
     
     return {"message": f"Seat {seat} marked as {final_action}", "boarded_seats": boarded}

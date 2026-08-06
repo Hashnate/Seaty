@@ -100,6 +100,14 @@ try:
         );
     """)
 
+    # 7. Update bookings booking_status check constraint to support 'completed' and 'expired'
+    print("Updating bookings_booking_status_check constraint...")
+    try:
+        cur.execute("ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_booking_status_check")
+        cur.execute("ALTER TABLE bookings ADD CONSTRAINT bookings_booking_status_check CHECK (booking_status IN ('pending', 'confirmed', 'cancelled', 'completed', 'expired'))")
+    except Exception as e:
+        print(f"Error updating bookings_booking_status_check: {e}")
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

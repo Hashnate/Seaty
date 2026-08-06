@@ -154,7 +154,7 @@ CREATE TABLE public.bookings (
     total_price NUMERIC(10, 2) NOT NULL,
     platform_fee NUMERIC(10, 2) NOT NULL DEFAULT 0, -- Commission charged by Seaty
     payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'awaiting_payment', 'paid', 'failed', 'refunded')),
-    booking_status TEXT NOT NULL DEFAULT 'pending' CHECK (booking_status IN ('pending', 'confirmed', 'cancelled')),
+    booking_status TEXT NOT NULL DEFAULT 'pending' CHECK (booking_status IN ('pending', 'confirmed', 'cancelled', 'completed', 'expired')),
     passenger_details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

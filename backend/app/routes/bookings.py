@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 import uuid
 import datetime
@@ -108,8 +108,39 @@ def create_booking(
     return db_booking
 
 
+def _auto_update_booking_statuses(db: Session, bookings: List[models.Booking]):
+    """Auto-update booking_status to 'completed' or 'expired' based on departure time and boarding status."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    updated = False
+    for b in bookings:
+        if not b.trip or not b.trip.departure_time:
+            continue
+        dep_time = b.trip.departure_time
+        if dep_time.tzinfo is None:
+            dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+        
+        boarded = set(b.trip.boarded_seats or [])
+        seats = set(b.selected_seats or [])
+        is_boarded = len(seats) > 0 and seats.issubset(boarded)
+        
+        if is_boarded or b.booking_status == "completed":
+            if b.booking_status != "completed":
+                b.booking_status = "completed"
+                updated = True
+        elif dep_time < now and b.booking_status in ["confirmed", "pending"]:
+            b.booking_status = "expired"
+            updated = True
+            
+    if updated:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
+
 @router.get("", response_model=List[schemas.BookingResponse])
 def list_bookings(
+    status_filter: Optional[str] = Query(None, alias="status", description="upcoming, completed, expired, cancelled, confirmed"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
@@ -136,6 +167,15 @@ def list_bookings(
         if booking.trip:
             booking.trip.route = db.query(models.Route).filter(models.Route.id == booking.trip.route_id).first()
             booking.trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == booking.trip.vehicle_id).first()
+
+    _auto_update_booking_statuses(db, bookings)
+
+    if status_filter:
+        sf = status_filter.lower().strip()
+        if sf == "upcoming":
+            bookings = [b for b in bookings if b.booking_status == "confirmed"]
+        elif sf in ["completed", "expired", "cancelled"]:
+            bookings = [b for b in bookings if b.booking_status == sf]
 
     return bookings
 
@@ -168,6 +208,8 @@ def get_booking(
     if booking.trip:
         booking.trip.route = db.query(models.Route).filter(models.Route.id == booking.trip.route_id).first()
         booking.trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == booking.trip.vehicle_id).first()
+
+    _auto_update_booking_statuses(db, [booking])
 
     return booking
 
