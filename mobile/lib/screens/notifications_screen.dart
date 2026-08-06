@@ -61,8 +61,10 @@ class NotificationsScreen extends ConsumerWidget {
 
   void _handleNotificationTap(
       BuildContext context, BookingsState bookingsState, Map<String, dynamic> noti) {
-    if (noti['type'] == 'booking' ||
-        (noti['title'] ?? '').toLowerCase().contains('booking')) {
+    final type = (noti['type'] ?? '').toString();
+    final title = (noti['title'] ?? '').toString().toLowerCase();
+
+    if (type == 'booking' || title.contains('booking')) {
       Map<String, dynamic>? targetBooking;
       if (bookingsState.bookings.isNotEmpty) {
         final msg = (noti['message'] ?? '').toString();
@@ -86,6 +88,17 @@ class NotificationsScreen extends ConsumerWidget {
           'Opening your tickets...',
         );
       }
+    } else if (type == 'trip_update' || title.contains('trip') || title.contains('tracking')) {
+      Map<String, dynamic>? tripData;
+      if (bookingsState.bookings.isNotEmpty) {
+        tripData = bookingsState.bookings.first;
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PassengerTrackingTab(trip: tripData),
+        ),
+      );
     }
   }
 

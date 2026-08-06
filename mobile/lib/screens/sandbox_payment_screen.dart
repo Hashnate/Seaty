@@ -126,188 +126,191 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
         double.tryParse(widget.payment['amount'].toString()) ??
         (fare + platformFee);
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text('Seaty Checkout'),
-        automaticallyImplyLeading: false,
-      ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Hold Timer Capsule
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 10,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    border: Border.all(color: Colors.amber.shade200),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.hourglass_bottom_rounded,
-                        color: Colors.amber.shade800,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Seats held for ${_formatTimer()}',
-                        style: TextStyle(
-                          color: Colors.amber.shade900,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Order Details Card
-                Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Colors.black12),
-                  ),
-                  color: Colors.white,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    return PopScope(
+      canPop: !_isProcessing,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF8FAFC),
+        appBar: AppBar(
+          title: const Text('Seaty Checkout'),
+          automaticallyImplyLeading: false,
+        ),
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Hold Timer Capsule
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      border: Border.all(color: Colors.amber.shade200),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
-                          'Booking Summary',
+                        Icon(
+                          Icons.hourglass_bottom_rounded,
+                          color: Colors.amber.shade800,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Seats held for ${_formatTimer()}',
                           style: TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 16,
-                            color: Color(0xFF0A2540),
+                            color: Colors.amber.shade900,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        _buildRow('Bus Service', widget.trip['bus_name']),
-                        _buildRow(
-                          'Route',
-                          '${widget.trip['origin']} → ${widget.trip['destination']}',
-                        ),
-                        _buildRow(
-                          'Selected Seats',
-                          selectedSeatsList.join(', '),
-                        ),
-                        const Divider(height: 24),
-                        _buildRow(
-                          'Seat Fare',
-                          'Rs. ${_formatCurrency(fare)}',
-                        ),
-                        _buildRow(
-                          'Platform Fee',
-                          'Rs. ${_formatCurrency(platformFee)}',
-                        ),
-                        const Divider(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text(
-                              'Total Amount',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: Color(0xFF0A2540),
-                              ),
-                            ),
-                            Text(
-                              'Rs. ${_formatCurrency(total, showDecimals: true)}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                fontSize: 18,
-                                color: Color(0xFF2563EB),
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 24),
+                  const SizedBox(height: 20),
 
-                // Sandbox Gateway Action Area
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
+                  // Order Details Card
+                  Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: Colors.black12),
+                    ),
                     color: Colors.white,
-                    border: Border.all(color: Colors.black12),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.security,
-                        color: Color(0xFF10B981),
-                        size: 40,
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Secure Sandbox Payment Portal',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'This simulates secure token validation. Click authorize to complete reservation.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 11),
-                      ),
-                      const SizedBox(height: 24),
-                      if (_isProcessing)
-                        const SeatyBusLoadingIndicator(
-                          message: 'Authorizing payment transaction...',
-                        )
-                      else ...[
-                        ElevatedButton(
-                          onPressed: () => _processPayment(true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF10B981),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(50),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Booking Summary',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 16,
+                              color: Color(0xFF0A2540),
                             ),
                           ),
-                          child: const Text(
-                            'Authorize & Complete Payment',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          const SizedBox(height: 16),
+                          _buildRow('Bus Service', widget.trip['bus_name']),
+                          _buildRow(
+                            'Route',
+                            '${widget.trip['origin']} → ${widget.trip['destination']}',
                           ),
+                          _buildRow(
+                            'Selected Seats',
+                            selectedSeatsList.join(', '),
+                          ),
+                          const Divider(height: 24),
+                          _buildRow(
+                            'Seat Fare',
+                            'Rs. ${_formatCurrency(fare)}',
+                          ),
+                          _buildRow(
+                            'Platform Fee',
+                            'Rs. ${_formatCurrency(platformFee)}',
+                          ),
+                          const Divider(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Total Amount',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: Color(0xFF0A2540),
+                                ),
+                              ),
+                              Text(
+                                'Rs. ${_formatCurrency(total, showDecimals: true)}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 18,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Sandbox Gateway Action Area
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black12),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.security,
+                          color: Color(0xFF10B981),
+                          size: 40,
                         ),
                         const SizedBox(height: 12),
-                        TextButton(
-                          onPressed: () => _processPayment(false),
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.redAccent,
-                          ),
-                          child: const Text(
-                            'Cancel & Release Seats',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                        const Text(
+                          'Secure Sandbox Payment Portal',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'This simulates secure token validation. Click authorize to complete reservation.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 11),
+                        ),
+                        const SizedBox(height: 24),
+                        if (_isProcessing)
+                          const SeatyBusLoadingIndicator(
+                            message: 'Authorizing payment transaction...',
+                          )
+                        else ...[
+                          ElevatedButton(
+                            onPressed: () => _processPayment(true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              minimumSize: const Size.fromHeight(50),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Authorize & Complete Payment',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => _processPayment(false),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                            ),
+                            child: const Text(
+                              'Cancel & Release Seats',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

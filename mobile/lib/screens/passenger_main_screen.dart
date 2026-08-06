@@ -251,7 +251,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   @override
   Widget build(BuildContext context) {
     final tripsState = ref.watch(tripsProvider);
-    final notificationsState = ref.watch(notificationsProvider);
 
     final allTrips = tripsState.trips;
     final Set<String> placesSet = {'All'};
@@ -1049,11 +1048,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
           RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
           (Match m) => '${m[1]},',
         );
-
-    // ── Parse seats ──
-    final int totalSeats = trip['total_seats'] as int? ?? 40;
-    final int bookedCount = (trip['booked_seats'] as List?)?.length ?? 0;
-    final int seatsLeft = (totalSeats - bookedCount).clamp(0, totalSeats);
 
     // ── Parse distance ──
     final routeObj = trip['route'];

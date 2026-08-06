@@ -24,7 +24,6 @@ class _BusDetailsScreenState extends ConsumerState<BusDetailsScreen> {
   late final PageController _pageController;
   Timer? _sliderTimer;
   int _currentImageIndex = 0;
-  bool _isFavorite = false;
 
   final List<String> _sliderImages = [
     'assets/images/bus_slider_1.png',
