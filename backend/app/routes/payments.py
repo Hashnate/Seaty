@@ -44,7 +44,7 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
                 db=db,
                 user_id=booking.passenger_id,
                 title="Booking Confirmed!",
-                message=f"Your seat(s) {seats_str} on trip {vehicle.registration_number if vehicle else ''} ({origin} ➔ {destination}) are confirmed!",
+                message=f"Your seat(s) {seats_str} on trip {vehicle.registration_number if vehicle else ''} ({origin} to {destination}) are confirmed!",
                 noti_type="booking",
                 booking_id=booking.id
             )
@@ -64,14 +64,24 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
                     ref_code = f"TKT-{str(booking.id)[:8].upper()}"
                     bus_name = vehicle.name if vehicle else "Seaty Superline"
                     bus_no = vehicle.registration_number if vehicle else "N/A"
-                    bus_tel = (vehicle.contact_phone if vehicle and vehicle.contact_phone else "N/A")
-                    support_tel = _get_platform_setting(db, "support_phone", "0740006523")
+                    
+                    # Fetch Bus Tel from vehicle / owner / company provided in database
+                    bus_tel = "N/A"
+                    if vehicle:
+                        if vehicle.contact_phone and vehicle.contact_phone.strip():
+                            bus_tel = vehicle.contact_phone.strip()
+                        elif vehicle.owner and vehicle.owner.phone_number and vehicle.owner.phone_number.strip():
+                            bus_tel = vehicle.owner.phone_number.strip()
+                        elif vehicle.company and vehicle.company.contact_phone and vehicle.company.contact_phone.strip():
+                            bus_tel = vehicle.company.contact_phone.strip()
+
+                    support_tel = _get_platform_setting(db, "support_phone", "0262237803")
                     
                     sms_text = (
                         "BOOKING CONFIRMATION\n\n"
                         f"{bus_name}\n"
                         f"Bus No: {bus_no}\n"
-                        f"Route: {origin} ➔ {destination}\n"
+                        f"Route: {origin} to {destination}\n"
                         f"Date & Time: {date_time_str}\n"
                         f"Seat(s): {seats_str}\n"
                         f"Fare: {fare_str}\n"

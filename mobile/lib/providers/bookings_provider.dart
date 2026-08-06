@@ -80,6 +80,8 @@ class BookingsNotifier extends Notifier<BookingsState> {
           final b = item as Map<String, dynamic>;
           final trip = b['trip'] ?? {};
           final vehicle = trip['vehicle'] ?? {};
+          final conductor = trip['conductor'] ?? {};
+          final conductorPhone = (conductor['phone_number'] ?? vehicle['contact_phone'] ?? 'N/A').toString();
           loadedBookings.add({
             'id': b['id'],
             'trip_id': b['trip_id'],
@@ -91,11 +93,21 @@ class BookingsNotifier extends Notifier<BookingsState> {
                     .replaceAll('T', ' ')
                     .substring(0, 16) ??
                 '2026-07-13 14:00',
+            'arrival':
+                trip['arrival_time']
+                    ?.toString()
+                    .replaceAll('T', ' ')
+                    .substring(0, 16) ??
+                '',
+            'stops': trip['route']?['stops'] ?? [],
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
             'seats': List<String>.from(b['selected_seats'] ?? []),
             'price': double.tryParse(b['total_price'].toString()) ?? 0.0,
+            'platform_fee': double.tryParse(b['platform_fee']?.toString() ?? '0.0') ?? 25.0,
             'status': b['booking_status'] ?? 'pending',
+            'payment_status': b['payment_status'] ?? 'pending',
+            'conductor_phone': conductorPhone,
             'passenger_name': b['passenger']?['full_name'] ?? 'Passenger',
             'boarded_seats': List<String>.from(trip['boarded_seats'] ?? []),
             'passenger_details': b['passenger_details'] ?? {},

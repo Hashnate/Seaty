@@ -124,6 +124,13 @@ try:
     except Exception as e:
         print(f"Error updating notifications table: {e}")
 
+    # 10. Seed support_phone platform setting
+    print("Upserting support_phone setting...")
+    try:
+        cur.execute("INSERT INTO platform_settings (key, value, description) VALUES ('support_phone', '0262237803', 'Customer support contact phone number') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value")
+    except Exception as e:
+        print(f"Error upserting support_phone: {e}")
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

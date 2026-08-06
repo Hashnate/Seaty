@@ -150,12 +150,36 @@ Future<void> _generateAndSavePDF(
     final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
     final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
     final numPassengers = (b['seats'] as List?)?.length ?? 1;
-    final formattedPrice = _formatCurrency(b['price']);
+    
+    final totalPrice = double.tryParse(b['price']?.toString() ?? '0.0') ?? 0.0;
+    final platformFee = double.tryParse(b['platform_fee']?.toString() ?? '0.0') ?? 25.0;
+    final baseFare = (totalPrice > platformFee) ? (totalPrice - platformFee) : totalPrice;
+    final formattedBaseFare = _formatCurrency(baseFare, showDecimals: true);
+    final formattedPlatformFee = _formatCurrency(platformFee, showDecimals: true);
+    final formattedTotalPrice = _formatCurrency(totalPrice, showDecimals: true);
+    
     final origin = (b['origin'] ?? 'Colombo Fort').toString();
     final destination = (b['destination'] ?? 'Galle').toString();
     final busName = (b['bus_name'] ?? 'Luxury Express').toString();
     final regNumber = (b['reg'] ?? 'WP-ND-8942').toString();
     final depTimeStr = (b['departure'] ?? '2026-07-27 23:00').toString();
+    final arrTimeStr = (b['arrival'] ?? '').toString();
+    final conductorPhone = (b['conductor_phone'] ?? '0771234567').toString();
+
+    DateTime? depDt = DateTime.tryParse(depTimeStr.replaceAll(' ', 'T'));
+    DateTime? arrDt = arrTimeStr.isNotEmpty ? DateTime.tryParse(arrTimeStr.replaceAll(' ', 'T')) : null;
+    arrDt ??= (depDt != null ? depDt.add(const Duration(hours: 6)) : null);
+
+    final String droppingTimeFormatted = arrDt != null
+        ? '${arrDt.hour.toString().padLeft(2, '0')}:${arrDt.minute.toString().padLeft(2, '0')}'
+        : '05:15';
+
+    final String droppingDateFormatted = arrDt != null
+        ? '${arrDt.day.toString().padLeft(2, '0')}/${arrDt.month.toString().padLeft(2, '0')}/${arrDt.year}'
+        : 'Next Day';
+
+    final bool isNextDay = depDt != null && arrDt != null && (arrDt.day != depDt.day || arrDt.month != depDt.month);
+    final String droppingDateDisplay = isNextDay ? '$droppingDateFormatted (Next Day)' : droppingDateFormatted;
 
     pdf.addPage(
       pw.Page(
@@ -165,33 +189,41 @@ Future<void> _generateAndSavePDF(
           return pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              // 1. Top Header Row (Logo + eTICKET + Customer Care)
+              // 1. Top Header Row (Seaty Logo + eTICKET + Customer Care)
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
                   pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
+                      pw.Text(
+                        'seaty',
+                        style: pw.TextStyle(
+                          color: PdfColors.blue800,
+                          fontSize: 26,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(
+                        '.lk',
+                        style: pw.TextStyle(
+                          color: PdfColors.red600,
+                          fontSize: 26,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(width: 14),
                       pw.Container(
-                        padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: const pw.BoxDecoration(
-                          color: PdfColors.red700,
-                          borderRadius: pw.BorderRadius.all(pw.Radius.circular(6)),
-                        ),
-                        child: pw.Text(
-                          'seaty',
-                          style: pw.TextStyle(
-                            color: PdfColors.white,
-                            fontSize: 18,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
+                        height: 20,
+                        width: 1,
+                        color: PdfColors.grey400,
                       ),
                       pw.SizedBox(width: 14),
                       pw.Text(
                         'eTICKET',
                         style: pw.TextStyle(
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: pw.FontWeight.bold,
                           color: PdfColors.grey800,
                         ),
@@ -207,16 +239,16 @@ Future<void> _generateAndSavePDF(
                       ),
                       pw.SizedBox(height: 2),
                       pw.Text(
-                        'Boarding Point Ph. No: 0775555555 | Seaty Care: 0112345678',
-                        style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+                        'Conductor Ph. No: $conductorPhone | Seaty Care: 0262237803',
+                        style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900),
                       ),
                     ],
                   ),
                 ],
               ),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 14),
               pw.Divider(thickness: 1, color: PdfColors.grey300),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 14),
 
               // 2. Main Trip Summary & QR Code Section
               pw.Row(
@@ -227,7 +259,7 @@ Future<void> _generateAndSavePDF(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
                       pw.Text(
-                        '$origin -> $destination',
+                        '$origin to $destination',
                         style: pw.TextStyle(
                           fontSize: 18,
                           fontWeight: pw.FontWeight.bold,
@@ -276,15 +308,15 @@ Future<void> _generateAndSavePDF(
                         child: pw.BarcodeWidget(
                           barcode: pw.Barcode.qrCode(),
                           data: b['id'].toString(),
-                          width: 110,
-                          height: 110,
+                          width: 100,
+                          height: 100,
                         ),
                       ),
                       pw.SizedBox(height: 4),
                       pw.Container(
                         width: 140,
                         child: pw.Text(
-                          'Please show the QR code at the time of boarding for contactless check-in',
+                          'Show this QR code upon boarding for digital check-in',
                           textAlign: pw.TextAlign.center,
                           style: pw.TextStyle(
                             fontSize: 7.5,
@@ -297,27 +329,27 @@ Future<void> _generateAndSavePDF(
                 ],
               ),
 
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 14),
               pw.Divider(thickness: 1, color: PdfColors.grey300),
-              pw.SizedBox(height: 12),
+              pw.SizedBox(height: 10),
 
               // Guidelines Banner
               pw.Container(
                 padding: const pw.EdgeInsets.all(8),
                 decoration: const pw.BoxDecoration(
-                  color: PdfColors.yellow100,
+                  color: PdfColors.blue50,
                   borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
                 ),
                 child: pw.Text(
-                  'Please Note: It is mandatory to follow the travel guidelines of your source and destination state of travel. View Guidelines: https://seaty.lk/travel-guidelines',
+                  'Please Note: Boarding starts 30 minutes prior to scheduled departure. Please report at the boarding location on time.',
                   style: pw.TextStyle(
-                    fontSize: 8,
+                    fontSize: 8.5,
                     fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.amber900,
+                    color: PdfColors.blue900,
                   ),
                 ),
               ),
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 14),
 
               // 3. 4-Column Details Table
               pw.Table(
@@ -349,7 +381,7 @@ Future<void> _generateAndSavePDF(
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Text('22:45', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text('30 Mins Prior', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                             pw.Text('Reporting time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                           ],
                         ),
@@ -359,7 +391,7 @@ Future<void> _generateAndSavePDF(
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Text('23:00', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            pw.Text('Scheduled', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
                             pw.Text('Departure time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                           ],
                         ),
@@ -399,7 +431,7 @@ Future<void> _generateAndSavePDF(
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Text('Near Clock Tower', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text('$origin Stand', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                             pw.Text('Landmark', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                           ],
                         ),
@@ -409,7 +441,7 @@ Future<void> _generateAndSavePDF(
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Text('$origin Bus Terminal Stand #4', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
+                            pw.Text('$origin Central Bus Terminal', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
                             pw.Text('Address', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                           ],
                         ),
@@ -429,7 +461,7 @@ Future<void> _generateAndSavePDF(
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Text('05:15', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text(droppingTimeFormatted, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
                             pw.Text('Dropping point time', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                           ],
                         ),
@@ -439,7 +471,7 @@ Future<void> _generateAndSavePDF(
                         child: pw.Column(
                           crossAxisAlignment: pw.CrossAxisAlignment.start,
                           children: [
-                            pw.Text('Next Day', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                            pw.Text(droppingDateDisplay, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.5)),
                             pw.Text('Dropping point Date', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                           ],
                         ),
@@ -459,7 +491,7 @@ Future<void> _generateAndSavePDF(
                 ],
               ),
 
-              pw.SizedBox(height: 16),
+              pw.SizedBox(height: 14),
 
               // Passenger & Seat Breakdown Table
               pw.Table(
@@ -470,64 +502,74 @@ Future<void> _generateAndSavePDF(
                 children: [
                   pw.TableRow(
                     children: [
-                      pw.Text('Passenger Details (Name, Gender)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
-                      pw.Text('Seat Number', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Passenger Details (Name)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
+                      pw.Text('Seat Number(s)', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600, fontWeight: pw.FontWeight.bold)),
                     ],
                   ),
                   pw.TableRow(
                     children: [
                       pw.Padding(
                         padding: const pw.EdgeInsets.only(top: 4),
-                        child: pw.Text('Primary Passenger (Adult)', style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold)),
+                        child: pw.Text((b['passenger_name'] ?? 'Primary Passenger').toString(), style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold)),
                       ),
                       pw.Padding(
                         padding: const pw.EdgeInsets.only(top: 4),
-                        child: pw.Text(seatsList, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.red900)),
+                        child: pw.Text(seatsList, style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
                       ),
                     ],
                   ),
                 ],
               ),
 
-              pw.SizedBox(height: 20),
+              pw.SizedBox(height: 16),
               pw.Divider(thickness: 1, color: PdfColors.grey300),
-              pw.SizedBox(height: 12),
+              pw.SizedBox(height: 10),
 
-              // Total Fare Box
+              // Fare Breakdown Box (Base Fare + Service Charge + Total Amount)
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
                   pw.Text(
-                    'NOTE : This operator accepts mTicket, you need not carry a print out',
+                    'NOTE: Present this digital PDF or SMS upon boarding.',
                     style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
                   ),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
+                      pw.Text('Ticket Fare: Rs. $formattedBaseFare', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                      pw.SizedBox(height: 2),
+                      pw.Text('Service Charge: Rs. $formattedPlatformFee', style: pw.TextStyle(fontSize: 9, color: PdfColors.grey800)),
+                      pw.SizedBox(height: 4),
                       pw.Row(
                         children: [
-                          pw.Text('Total Fare : ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
-                          pw.Text('Rs. $formattedPrice', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
+                          pw.Text('Total Amount: ', style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                          pw.Text('Rs. $formattedTotalPrice', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold, color: PdfColors.black)),
                         ],
                       ),
-                      pw.Text('(Rs. 0 inclusive of GST and service charge, if any)', style: pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
                     ],
                   ),
                 ],
               ),
 
-              pw.SizedBox(height: 24),
+              pw.SizedBox(height: 18),
               pw.Divider(thickness: 1, color: PdfColors.grey400),
-              pw.SizedBox(height: 10),
+              pw.SizedBox(height: 8),
 
-              // Footer Guarantee
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.center,
+              // Footer Important Guidelines & Policy
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    'Note: Your booking is covered under Seaty FlexiTicket. You can change your travel date for free up to 8 hours before departure.',
-                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey800),
+                    'Important Terms & Travel Policy:',
+                    style: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold, color: PdfColors.black),
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Text(
+                    '• Boarding starts 30 minutes prior to departure. Passengers must report to the boarding location on time.\n'
+                    '• Confirmed ticket bookings are non-refundable and non-cancellable.\n'
+                    '• Passengers must carry a valid National Identity Card (NIC) or Passport for verification during boarding.',
+                    style: pw.TextStyle(fontSize: 7.5, color: PdfColors.grey800, lineSpacing: 1.5),
                   ),
                 ],
               ),
@@ -744,8 +786,16 @@ class _PassengerBookingsTabState extends ConsumerState<PassengerBookingsTab> {
   Widget build(BuildContext context) {
     final bookingsState = ref.watch(bookingsProvider);
 
-    // Filter bookings list dynamically
+    // Filter bookings list dynamically (exclude unpaid failed/cancelled draft sessions)
     final filteredBookings = bookingsState.bookings.where((b) {
+      final paymentStatus = (b['payment_status'] ?? '').toString().toLowerCase();
+      final status = (b['status'] ?? b['booking_status'] ?? '').toString().toLowerCase();
+
+      // An unpaid session that is cancelled or failed is not a ticket
+      if (paymentStatus != 'paid' && status != 'pending') {
+        return false;
+      }
+
       final origin = (b['origin'] ?? '').toString().toLowerCase();
       final destination = (b['destination'] ?? '').toString().toLowerCase();
       final busName = (b['bus_name'] ?? '').toString().toLowerCase();

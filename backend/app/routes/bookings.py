@@ -196,8 +196,18 @@ def list_bookings(
             models.Trip.conductor_id == current_user.id
         ).order_by(models.Booking.created_at.desc()).all()
     else:
-        # Passengers get their own bookings
-        bookings = db.query(models.Booking).filter(models.Booking.passenger_id == current_user.id).order_by(models.Booking.created_at.desc()).all()
+        # Passengers get their own bookings (only paid bookings or active pending holds; exclude unpaid failed/cancelled sessions)
+        from sqlalchemy import or_, and_
+        bookings = db.query(models.Booking).filter(
+            models.Booking.passenger_id == current_user.id,
+            or_(
+                models.Booking.payment_status == "paid",
+                and_(
+                    models.Booking.booking_status == "pending",
+                    models.Booking.payment_status == "pending"
+                )
+            )
+        ).order_by(models.Booking.created_at.desc()).all()
 
     # Populate nested structures for returning to client
     for booking in bookings:
@@ -206,6 +216,8 @@ def list_bookings(
         if booking.trip:
             booking.trip.route = db.query(models.Route).filter(models.Route.id == booking.trip.route_id).first()
             booking.trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == booking.trip.vehicle_id).first()
+            if booking.trip.conductor_id:
+                booking.trip.conductor = db.query(models.User).filter(models.User.id == booking.trip.conductor_id).first()
 
     _auto_update_booking_statuses(db, bookings)
 
@@ -247,6 +259,8 @@ def get_booking(
     if booking.trip:
         booking.trip.route = db.query(models.Route).filter(models.Route.id == booking.trip.route_id).first()
         booking.trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == booking.trip.vehicle_id).first()
+        if booking.trip.conductor_id:
+            booking.trip.conductor = db.query(models.User).filter(models.User.id == booking.trip.conductor_id).first()
 
     _auto_update_booking_statuses(db, [booking])
 

@@ -215,7 +215,8 @@ INSERT INTO public.platform_settings (key, value, description) VALUES
     ('commission_fixed_fee', '25.00', 'Fixed fee in LKR added to each booking'),
     ('seat_hold_duration_minutes', '10', 'How long seats are held during payment (minutes)'),
     ('payment_gateway', 'sandbox', 'Active payment gateway: sandbox, payhere, stripe'),
-    ('currency', 'LKR', 'Default currency for all transactions');
+    ('currency', 'LKR', 'Default currency for all transactions'),
+    ('support_phone', '0262237803', 'Customer support contact phone number');
 
 -- ==========================================
 -- 10. Vehicle Locations Table (For real-time GPS tracking)
