@@ -151,9 +151,9 @@ Future<void> _generateAndSavePDF(
     final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
     final numPassengers = (b['seats'] as List?)?.length ?? 1;
     
-    final totalPrice = double.tryParse(b['price']?.toString() ?? '0.0') ?? 0.0;
-    final platformFee = double.tryParse(b['platform_fee']?.toString() ?? '0.0') ?? 25.0;
-    final baseFare = (totalPrice > platformFee) ? (totalPrice - platformFee) : totalPrice;
+    final baseFare = double.tryParse(b['price']?.toString() ?? '0.0') ?? 0.0;
+    final platformFee = double.tryParse(b['platform_fee']?.toString() ?? '0.0') ?? 0.0;
+    final totalPrice = baseFare + platformFee;
     final formattedBaseFare = _formatCurrency(baseFare, showDecimals: true);
     final formattedPlatformFee = _formatCurrency(platformFee, showDecimals: true);
     final formattedTotalPrice = _formatCurrency(totalPrice, showDecimals: true);

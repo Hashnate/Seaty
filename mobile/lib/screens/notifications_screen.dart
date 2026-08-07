@@ -96,19 +96,40 @@ class NotificationsScreen extends ConsumerWidget {
       return;
     }
 
-    // Resolve the exact booking this notification is about via its booking_id
-    // rather than guessing from message text.
+    // Resolve the exact booking this notification is about via its booking_id or trip_id
     Map<String, dynamic>? match;
+    final notiTripId = noti['trip_id']?.toString();
+
     if (bookingId != null && bookingId.isNotEmpty) {
       match = _findById(ref.read(bookingsProvider).bookings, bookingId);
-      if (match == null) {
-        // The local cache may not yet include a booking created/updated after
-        // the last load (e.g. this notification arrived over the socket
-        // before a refresh) - refresh once and retry rather than falling
-        // back to an unrelated booking.
-        await ref.read(bookingsProvider.notifier).loadBookings();
-        if (!context.mounted) return;
+    }
+
+    if (match == null && notiTripId != null && notiTripId.isNotEmpty) {
+      final userBookings = ref.read(bookingsProvider).bookings;
+      for (final b in userBookings) {
+        if (b['trip_id']?.toString() == notiTripId) {
+          match = b;
+          break;
+        }
+      }
+    }
+
+    if (match == null) {
+      // Refresh local bookings list once to ensure recently created/reminded bookings exist
+      await ref.read(bookingsProvider.notifier).loadBookings();
+      if (!context.mounted) return;
+
+      if (bookingId != null && bookingId.isNotEmpty) {
         match = _findById(ref.read(bookingsProvider).bookings, bookingId);
+      }
+      if (match == null && notiTripId != null && notiTripId.isNotEmpty) {
+        final userBookings = ref.read(bookingsProvider).bookings;
+        for (final b in userBookings) {
+          if (b['trip_id']?.toString() == notiTripId) {
+            match = b;
+            break;
+          }
+        }
       }
     }
 
@@ -140,13 +161,7 @@ class NotificationsScreen extends ConsumerWidget {
       return;
     }
 
-    // 3. Booking confirmation -> QR boarding pass dialog.
-    if (type == 'booking') {
-      _showTicketDialog(context, targetBooking);
-      return;
-    }
-
-    // 4. Everything else about a specific booking (cancelled/rescheduled/reminder) -> full ticket details.
+    // 3. Booking notifications -> full ticket details screen.
     Navigator.push(
       context,
       MaterialPageRoute(
