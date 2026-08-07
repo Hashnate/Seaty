@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -181,6 +181,12 @@ Future<void> _generateAndSavePDF(
     final bool isNextDay = depDt != null && arrDt != null && (arrDt.day != depDt.day || arrDt.month != depDt.month);
     final String droppingDateDisplay = isNextDay ? '$droppingDateFormatted (Next Day)' : droppingDateFormatted;
 
+    pw.MemoryImage? logoImage;
+    try {
+      final logoByteData = await rootBundle.load('assets/images/app_icon_adaptive_foreground.png');
+      logoImage = pw.MemoryImage(logoByteData.buffer.asUint8List());
+    } catch (_) {}
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -197,18 +203,18 @@ Future<void> _generateAndSavePDF(
                   pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
+                      if (logoImage != null) ...[
+                        pw.Container(
+                          width: 28,
+                          height: 28,
+                          child: pw.Image(logoImage),
+                        ),
+                        pw.SizedBox(width: 8),
+                      ],
                       pw.Text(
                         'seaty',
                         style: pw.TextStyle(
                           color: PdfColors.blue800,
-                          fontSize: 26,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.Text(
-                        '.lk',
-                        style: pw.TextStyle(
-                          color: PdfColors.red600,
                           fontSize: 26,
                           fontWeight: pw.FontWeight.bold,
                         ),
@@ -601,19 +607,32 @@ Future<void> _generateAndSavePDF(
     final file = File(filePath);
     await file.writeAsBytes(pdfBytes);
 
-    // 2. Safely trigger native share if requested
+    // 2. Trigger native share or save/download dialog
     if (share) {
       try {
         await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
       } catch (shareErr) {
         debugPrint('Native share warning: $shareErr');
       }
+    } else {
+      // Download PDF option: Open native "Save to Files / Save as PDF" preview & save dialog
+      try {
+        await Printing.layoutPdf(
+          onLayout: (PdfPageFormat format) async => pdfBytes,
+          name: '$ticketCode.pdf',
+        );
+      } catch (layoutErr) {
+        debugPrint('Native layout warning: $layoutErr');
+        try {
+          await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
+        } catch (_) {}
+      }
     }
 
     if (context.mounted) {
       SeatyNotifications.show(
         context,
-        share ? 'Ticket PDF generated!' : 'Ticket PDF saved successfully! ($ticketCode.pdf)',
+        share ? 'Ticket PDF ready to share!' : 'Ticket PDF ready to save! ($ticketCode.pdf)',
       );
     }
   } catch (e) {
