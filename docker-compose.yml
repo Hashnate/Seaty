@@ -32,6 +32,13 @@ services:
       - db
     restart: always
 
+  website:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+    container_name: seaty-website
+    restart: always
+
   admin:
     build:
       context: ./admin
@@ -41,6 +48,7 @@ services:
       - "8025:80"
     depends_on:
       - backend
+      - website
     restart: always
 
 volumes:

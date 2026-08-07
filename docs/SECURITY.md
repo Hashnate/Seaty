@@ -121,7 +121,7 @@ configuring log retention.
 already flags it. Because the admin SPA stores its token in `localStorage` rather than a cookie,
 this is not directly exploitable as CSRF, but it removes a layer that should be there.
 
-**Fix**: restrict to `https://seaty.hashnate.com` and whatever the mobile app needs.
+**Fix**: restrict to `https://admin.seaty.hashnate.com` and whatever the mobile app needs.
 
 ### 9. Development mode silently disables OTP
 

@@ -4,7 +4,8 @@ Bus/luxury-transport seat booking and live-tracking platform for Sri Lanka. Pass
 trips, pick seats on a live seat map, pay, and track their bus in real time. Operators manage
 fleets, recurring schedules, and staff. Conductors scan tickets and mark boarding.
 
-**Live domains:** `seaty.hashnate.com` (admin web) · `api.seaty.hashnate.com` (API)
+**Live domains:** `seaty.hashnate.com` (marketing site) · `admin.seaty.hashnate.com` (admin web) ·
+`api.seaty.hashnate.com` (API)
 
 ---
 
@@ -15,6 +16,7 @@ fleets, recurring schedules, and staff. Conductors scan tickets and mark boardin
 | `backend/`  | FastAPI · SQLAlchemy · PostgreSQL           | REST API + WebSockets for seats, tracking, notifications          |
 | `mobile/`   | Flutter 3.11 · Riverpod                     | Passenger, owner, and conductor app (iOS + Android)               |
 | `admin/`    | React 19 · TypeScript · Vite · Nginx        | Admin & operator dashboard (also reverse-proxies the API)         |
+| `website/`  | Static HTML/CSS/JS · Nginx                  | Public marketing site, download links, Privacy Policy & Terms     |
 | `database/` | Postgres 16 Docker image                    | Ships `backend/schema.sql` as an init script                      |
 | `.github/`  | GitHub Actions                              | Mobile release build → TestFlight + APK/AAB artifacts             |
 
@@ -26,6 +28,7 @@ fleets, recurring schedules, and staff. Conductors scan tickets and mark boardin
 | [API reference](docs/API.md)               | Every endpoint, role requirements, WebSocket protocols             |
 | [Development](docs/DEVELOPMENT.md)         | Running backend, admin, and mobile locally                         |
 | [Deployment](docs/DEPLOYMENT.md)           | Docker Compose stack, CI/CD, environment variables                 |
+| [Website](docs/WEBSITE.md)                 | Marketing site structure, editing content, deploying to its domain |
 | [Security](docs/SECURITY.md)               | **Known unauthenticated endpoints and auth gaps — read before launch** |
 
 > [!WARNING]

@@ -1,0 +1,135 @@
+/*
+  Seaty marketing site — design tokens.
+  Brand anchors (navy/blue/ice-blue/coral) come straight from the app
+  (mobile/lib/theme/app_colors.dart, admin/src/index.css). Everything else here —
+  the indigo/cyan depth ramp, the amber partner for coral, and the full slate
+  scale — extends those anchors into a richer palette for hero gradients, glass
+  cards, and illustration work than the app's flat 5-color UI palette supports.
+*/
+
+:root {
+  /* Brand anchors */
+  --c-navy: #081a30;
+  --c-navy-deep: #040d1a;
+  --c-blue: #2563eb;
+  --c-blue-soft: #3b82f6;
+  --c-ice-blue: #93c5fd;
+  --c-coral: #ff6b4a;
+  --c-coral-hover: #ff522b;
+
+  /* Depth ramp — rotates brand hue round blue → violet → glowing cyan */
+  --c-indigo-950: #0a0f24;
+  --c-indigo-900: #121d42;
+  --c-indigo-700: #253368;
+  --c-blue-700: #1d4ed8;
+  --c-cyan-400: #06b6d4;
+  --c-cyan-300: #22d3ee;
+  --c-cyan-100: #cff4fc;
+
+  /* Warm accent pair — coral gets a gold/amber partner for premium CTAs */
+  --c-coral-light: #ffb577;
+  --c-amber: #f59e0b;
+  --c-amber-deep: #d97706;
+
+  /* Neutral (slate) scale */
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+  --slate-950: #070b14;
+
+  /* Semantic */
+  --c-success: #10b981;
+  --c-warning: #f59e0b;
+  --c-error: #ef4444;
+
+  /* Surfaces & text */
+  --bg-page: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #f1f5f9;
+  --bg-dark: #081a30;
+  --bg-dark-surface: #0e2440;
+  --bg-dark-card: rgba(14, 36, 64, 0.7);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-on-dark: #ffffff;
+  --text-on-dark-muted: #cbd5e1;
+  --border-color: rgba(15, 23, 42, 0.09);
+  --border-color-dark: rgba(255, 255, 255, 0.14);
+
+  /* Gradients */
+  --gradient-hero: linear-gradient(
+    135deg,
+    #040d1a 0%,
+    #081a30 30%,
+    #121d42 60%,
+    #1d4ed8 90%,
+    #06b6d4 100%
+  );
+  --gradient-mesh-glow: radial-gradient(
+      circle at 15% 20%,
+      rgba(34, 211, 238, 0.22),
+      transparent 45%
+    ),
+    radial-gradient(circle at 85% 10%, rgba(147, 197, 253, 0.2), transparent 40%),
+    radial-gradient(circle at 75% 85%, rgba(255, 107, 74, 0.14), transparent 45%);
+  --gradient-cta: linear-gradient(135deg, #ff6b4a 0%, #e04f2d 100%);
+  --gradient-cta-hover: linear-gradient(135deg, #ff8264 0%, #ff522b 100%);
+  --gradient-accent-soft: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+  --gradient-card-border: linear-gradient(
+    135deg,
+    rgba(147, 197, 253, 0.4),
+    rgba(34, 211, 238, 0.2)
+  );
+
+  /* Typography */
+  --font-heading: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Spacing (4px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+  --space-20: 5rem;
+  --space-24: 6rem;
+  --space-32: 8rem;
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 999px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 20px 48px rgba(8, 26, 48, 0.12);
+  --shadow-glow-blue: 0 8px 32px rgba(37, 99, 235, 0.28);
+  --shadow-glow-coral: 0 8px 28px rgba(255, 107, 74, 0.35);
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 0.18s;
+  --dur-base: 0.32s;
+  --dur-slow: 0.6s;
+
+  /* Layout */
+  --container-max: 1240px;
+  --header-h: 76px;
+}

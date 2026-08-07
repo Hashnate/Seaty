@@ -23,11 +23,15 @@
                  └─────────────┘        └────────────────┘       └────────────────┘
 ```
 
-Only the `admin` container publishes a host port (`8025:80`). The backend and database are
-reachable only on the Compose network, so **Nginx is the single ingress** for both the SPA and
-the API. `admin/nginx.conf` defines two server blocks: one matching `api.seaty.hashnate.com`
-that proxies everything to the backend, and a default one that serves the SPA and proxies
-`/api/v1/`. Both set `Upgrade`/`Connection` headers, so WebSockets pass through.
+Only the `admin` container publishes a host port (`8025:80`). The backend, database, and the
+static marketing site (`website/`) are reachable only on the Compose network, so **Nginx is the
+single ingress** for the SPA, the API, and the marketing site alike. `admin/nginx.conf` defines
+three server blocks: one matching `api.seaty.hashnate.com` that proxies everything to the
+backend, one matching `seaty.hashnate.com`/`www.seaty.hashnate.com` that proxies to the
+`website` container, and a default one that serves the admin SPA and proxies `/api/v1/`. The
+API and default blocks set `Upgrade`/`Connection` headers so WebSockets pass through; the
+marketing site has none (it's static, no WebSocket routes). See
+[WEBSITE.md](WEBSITE.md) for the marketing site itself.
 
 ## Backend
 

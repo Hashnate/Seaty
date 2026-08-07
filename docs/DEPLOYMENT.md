@@ -12,7 +12,7 @@
 
 Only `admin` is published. Everything external — the SPA, the REST API, and all three WebSocket
 endpoints — enters through that one Nginx container on port 8025, which a host-level reverse
-proxy (and TLS terminator) is expected to sit in front of for `seaty.hashnate.com` and
+proxy (and TLS terminator) is expected to sit in front of for `admin.seaty.hashnate.com` and
 `api.seaty.hashnate.com`.
 
 ```bash
