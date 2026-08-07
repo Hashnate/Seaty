@@ -185,8 +185,14 @@ Future<void> _generateAndSavePDF(
     pw.MemoryImage? logoImage;
     try {
       final logoByteData = await rootBundle.load('assets/images/app_icon_adaptive_foreground.png');
-      logoImage = pw.MemoryImage(logoByteData.buffer.asUint8List());
-    } catch (_) {}
+      final logoBytes = logoByteData.buffer.asUint8List(
+        logoByteData.offsetInBytes,
+        logoByteData.lengthInBytes,
+      );
+      logoImage = pw.MemoryImage(logoBytes);
+    } catch (e) {
+      debugPrint('Error loading logo for PDF: $e');
+    }
 
     pdf.addPage(
       pw.Page(
@@ -608,32 +614,29 @@ Future<void> _generateAndSavePDF(
     final file = File(filePath);
     await file.writeAsBytes(pdfBytes);
 
-    // 2. Trigger native share or save/download dialog
-    if (share) {
-      try {
-        await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
-      } catch (shareErr) {
-        debugPrint('Native share warning: $shareErr');
+    // 2. Safely trigger native share / save to files modal with bounds calculation
+    Rect? shareBounds;
+    if (context.mounted) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        shareBounds = box.localToGlobal(Offset.zero) & box.size;
       }
-    } else {
-      // Download PDF option: Open native "Save to Files / Save as PDF" preview & save dialog
-      try {
-        await Printing.layoutPdf(
-          onLayout: (PdfPageFormat format) async => pdfBytes,
-          name: '$ticketCode.pdf',
-        );
-      } catch (layoutErr) {
-        debugPrint('Native layout warning: $layoutErr');
-        try {
-          await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
-        } catch (_) {}
-      }
+    }
+
+    try {
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: '$ticketCode.pdf',
+        bounds: shareBounds,
+      );
+    } catch (shareErr) {
+      debugPrint('Native share warning: $shareErr');
     }
 
     if (context.mounted) {
       SeatyNotifications.show(
         context,
-        share ? 'Ticket PDF ready to share!' : 'Ticket PDF ready to save! ($ticketCode.pdf)',
+        share ? 'Ticket PDF shared!' : 'Ticket PDF saved successfully! ($ticketCode.pdf)',
       );
     }
   } catch (e) {
