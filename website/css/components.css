@@ -154,9 +154,11 @@
   .nav-links {
     display: none;
   }
+
   .nav-actions .btn {
     display: none;
   }
+
   .nav-toggle {
     display: flex;
   }
@@ -375,55 +377,125 @@
 
 .hero {
   position: relative;
-  background-color: var(--c-navy-deep);
+  width: 100%;
+  aspect-ratio: 1962 / 802;
+  background-color: #040d1a;
   background-image: 
-    linear-gradient(180deg, rgba(4, 13, 26, 0.78) 0%, rgba(8, 26, 48, 0.90) 100%),
-    url('../assets/images/hero_srilanka_bg.png');
+    linear-gradient(90deg, rgba(4, 13, 26, 0.90) 0%, rgba(4, 13, 26, 0.70) 35%, rgba(4, 13, 26, 0.15) 55%, transparent 70%),
+    url('../assets/images/background2.png');
   background-position: center center;
-  background-size: cover;
+  background-size: 100% 100%;
   background-repeat: no-repeat;
   color: #ffffff;
   overflow: hidden;
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hero h1,
+.hero .lede,
+.hero .eyebrow {
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.85), 0 1px 4px rgba(0, 0, 0, 0.95);
+}
+
+/* ---------- Phone Screen Overlay Animation inside Hero Background ---------- */
+.hero-phone-overlay {
+  position: absolute;
+  top: 34.8%;
+  left: 51.3%;
+  width: 8.7%;
+  height: 49.8%;
+  border-radius: clamp(16px, 1.35vw, 28px);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 4;
+  transform: rotate(-0.35deg);
+  box-shadow: 0 0 0 2.5px #0a0a0a, inset 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
+.phone-screens-slider {
+  display: flex;
+  width: 300%;
+  height: 100%;
+  animation: phoneScreenSlide 9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.phone-screens-slider img {
+  width: 33.3333%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+
+@keyframes phoneScreenSlide {
+  0%, 28% {
+    transform: translateX(0%);
+  }
+  33%, 61% {
+    transform: translateX(-33.3333%);
+  }
+  66%, 94% {
+    transform: translateX(-66.6666%);
+  }
+  100% {
+    transform: translateX(0%);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    aspect-ratio: auto;
+    min-height: 520px;
+    background-size: cover;
+    background-position: right top;
+    padding-block: var(--space-12);
+  }
+  
+  .hero-phone-overlay {
+    display: none;
+  }
 }
 
 .hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 15% 30%, rgba(6, 182, 212, 0.22), transparent 45%),
-              radial-gradient(circle at 85% 75%, rgba(255, 107, 74, 0.18), transparent 45%);
-  pointer-events: none;
+  display: none;
 }
 
 .stat-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-6);
-  background: rgba(4, 13, 26, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  gap: var(--space-4);
+  max-width: 480px;
+  background: rgba(4, 13, 26, 0.70);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  padding: var(--space-6) var(--space-8);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-@media (max-width: 760px) {
+@media (max-width: 560px) {
   .stat-strip {
-    grid-template-columns: repeat(2, 1fr);
+    flex-direction: column;
+    gap: var(--space-3);
   }
 }
 
 .stat-item {
   text-align: center;
+  flex: 1;
 }
 
 .stat-value {
   display: block;
   font-family: var(--font-heading);
-  font-weight: 800;
-  font-size: clamp(1.75rem, 2vw + 1rem, 2.5rem);
+  font-weight: 700;
+  font-size: 1.15rem;
+  white-space: nowrap;
   background: var(--gradient-accent-soft);
   -webkit-background-clip: text;
   background-clip: text;
@@ -431,8 +503,9 @@
 }
 
 .stat-label {
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   color: var(--text-on-dark-muted);
+  white-space: nowrap;
 }
 
 /* ---------- Steps timeline ---------- */
@@ -859,7 +932,7 @@
   border-radius: 1px;
 }
 
-.qr-mock span:nth-child(3n) ,
+.qr-mock span:nth-child(3n),
 .qr-mock span:nth-child(7n + 2),
 .qr-mock span:nth-child(5n + 1) {
   background: transparent;
@@ -930,6 +1003,19 @@
   transition: transform var(--dur-base) var(--ease-standard), box-shadow var(--dur-base);
 }
 
+.image-frame-lg {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  height: auto;
+}
+
+.image-frame-lg img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--c-navy);
+}
+
 .image-frame:hover {
   transform: translateY(-4px);
   box-shadow: 0 24px 50px rgba(8, 26, 48, 0.22);
@@ -939,6 +1025,24 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.app-store-phone-frame {
+  max-width: 340px;
+  width: 100%;
+  margin-inline: auto;
+  border-radius: 36px;
+  border: 4px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.6);
+  background: transparent;
+  overflow: hidden;
+}
+
+.app-store-phone-frame img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
   display: block;
 }
 
@@ -1040,7 +1144,7 @@
   direction: rtl;
 }
 
-.feature-showcase-reverse > * {
+.feature-showcase-reverse>* {
   direction: ltr;
 }
 
@@ -1093,3 +1197,781 @@
   margin: 0;
 }
 
+/* ---------- Realistic Seaty Luxury Bus Live Seat Map Component ---------- */
+.seaty-seat-card-demo {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.04);
+  border: 1px solid #e2e8f0;
+  width: min(390px, 100%);
+  margin-inline: auto;
+  font-family: var(--ff-heading, 'Plus Jakarta Sans', sans-serif);
+}
+
+.seat-map-legend {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.legend-pill {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.pill-available {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+}
+
+.pill-male {
+  background: #2563eb;
+}
+
+.pill-female {
+  background: #ec4899;
+}
+
+.pill-held {
+  background: #eab308;
+}
+
+.bus-layout-frame {
+  background: #f8fafc;
+  border-radius: 16px;
+  border: 1.5px solid #cbd5e1;
+  overflow: hidden;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.driver-cabin-bar {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.entry-door {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #10b981;
+}
+
+.cabin-notch {
+  width: 36px;
+  height: 4px;
+  background: #334155;
+  border-radius: 2px;
+}
+
+.steering-cabin {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #e2e8f0;
+}
+
+.steering-cabin small {
+  color: #f97316;
+  font-weight: 600;
+}
+
+.bus-seats-container {
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.seat-pair {
+  display: flex;
+  gap: 6px;
+}
+
+.aisle-indicator {
+  color: #cbd5e1;
+  font-size: 0.75rem;
+  font-weight: 800;
+  user-select: none;
+}
+
+.seat-item {
+  width: 36px;
+  height: 38px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 700;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.seat-item.seat-male {
+  background: #2563eb !important;
+  border-color: #1d4ed8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.35);
+}
+
+.seat-item.seat-female {
+  background: #ec4899 !important;
+  border-color: #db2777 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 8px rgba(236, 72, 153, 0.35);
+}
+
+.seat-item.seat-held {
+  background: #eab308 !important;
+  border-color: #ca8a04 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 8px rgba(234, 179, 8, 0.35);
+}
+
+.gender-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 17px;
+  height: 17px;
+  background: #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.gender-badge svg {
+  display: block;
+}
+
+.seat-row.back-bench {
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+/* ---------- Dynamic Seat Booking Pulse Animation ---------- */
+.animate-seat-booking {
+  animation: dynamicSeatFill 9s ease-in-out infinite;
+  animation-delay: calc(var(--delay, 0) * 0.4s);
+}
+
+@keyframes dynamicSeatFill {
+  0%, 25% {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #1e293b;
+    transform: scale(1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  }
+  35%, 65% {
+    background: #2563eb;
+    border-color: #1d4ed8;
+    color: #ffffff;
+    transform: scale(1.08);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.45);
+  }
+  75%, 90% {
+    background: #ec4899;
+    border-color: #db2777;
+    color: #ffffff;
+    transform: scale(1.04);
+    box-shadow: 0 4px 12px rgba(236, 72, 153, 0.45);
+  }
+  100% {
+    background: #ffffff;
+    border-color: #cbd5e1;
+    color: #1e293b;
+    transform: scale(1);
+  }
+}
+
+.seat-item:hover,
+.seat-item.is-hovered {
+  transform: scale(1.16) !important;
+  z-index: 10;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22) !important;
+}
+
+/* ---------- Seaty Live GPS Highway Map & Smartphone Frame Component ---------- */
+.phone-map-container {
+  max-width: 320px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.phone-mockup-frame {
+  background: #0f172a;
+  border-radius: 42px;
+  padding: 10px;
+  box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.35), 0 0 0 2px rgba(255, 255, 255, 0.1);
+  border: 4px solid #1e293b;
+  position: relative;
+}
+
+.phone-mockup-frame::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80px;
+  height: 16px;
+  background: #0f172a;
+  border-radius: 10px;
+  z-index: 10;
+}
+
+.phone-screen-viewport {
+  border-radius: 32px;
+  overflow: hidden;
+  position: relative;
+  background: #f8fafc;
+}
+
+.app-screen-image-wrapper {
+  position: relative;
+  width: 100%;
+  border-radius: 32px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.app-screen-full-img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.map-overlay-live-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.live-status-overlay-badge {
+  position: absolute;
+  top: 26.2%;
+  left: 7.5%;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(6px);
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 6;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.live-status-bottom-banner {
+  position: absolute;
+  bottom: 23%;
+  left: 7.5%;
+  right: 7.5%;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  padding: 10px 14px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  z-index: 6;
+}
+
+.app-mobile-screen {
+  background: #f8fafc;
+  padding: 14px 14px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-family: var(--ff-heading, 'Plus Jakarta Sans', sans-serif);
+}
+
+.app-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 2px 6px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.status-right-icons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.battery-badge {
+  background: #f59e0b;
+  color: #ffffff;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.app-header-title-block {
+  padding-inline: 4px;
+  text-align: left;
+}
+
+.app-header-title-block h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #081a30;
+  margin: 0;
+}
+
+.underline-blue {
+  position: relative;
+  display: inline-block;
+}
+
+.underline-blue::after {
+  content: "";
+  position: absolute;
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: #2563eb;
+  border-radius: 2px;
+}
+
+.app-header-title-block p {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 4px 0 0 0;
+  font-weight: 500;
+}
+
+.bus-selector-card {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  border: 1.5px solid #e2e8f0;
+}
+
+.bus-selector-icon {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.3);
+}
+
+.bus-dropdown-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.bus-select-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: #2563eb;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+  padding-right: 20px;
+  font-family: inherit;
+}
+
+.dropdown-arrow {
+  position: absolute;
+  right: 0;
+  color: #94a3b8;
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+.seaty-direct-map-card,
+.seaty-map-card-demo {
+  position: relative;
+  width: 100%;
+  margin-inline: auto;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  border: 1px solid #cbd5e1;
+  background: #cce7ef;
+  aspect-ratio: 4 / 4.8;
+}
+
+.direct-map-img,
+.map-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.app-bottom-navbar {
+  background: #0f172a;
+  border-radius: 28px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  color: #94a3b8;
+  margin-top: 4px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.25);
+}
+
+.nav-item-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.nav-item-icon:hover {
+  color: #ffffff;
+}
+
+.nav-item-btn.is-active {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #ffffff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.map-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.map-status-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 6;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.live-dot-pulse {
+  width: 8px;
+  height: 8px;
+  background: #10b981;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: liveGreenPulse 1.8s infinite;
+}
+
+@keyframes liveGreenPulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.map-controls-pill {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  overflow: hidden;
+  z-index: 6;
+}
+
+.map-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: #1e293b;
+  font-weight: 800;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.map-btn:hover {
+  background: #f1f5f9;
+}
+
+.map-btn + .map-btn {
+  border-top: 1px solid #e2e8f0;
+}
+
+.map-route-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.animated-route-dash {
+  animation: routeDashFlow 2s linear infinite;
+}
+
+@keyframes routeDashFlow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+.marker-ping {
+  animation: mapMarkerPing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes mapMarkerPing {
+  75%, 100% {
+    transform: scale(2.2);
+    opacity: 0;
+  }
+}
+
+/* Moving Bus Marker along Highway Route */
+.moving-bus-marker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+  offset-path: path("M 605 840 C 530 1020, 440 1200, 315 1370");
+  animation: busSmoothDrive 9.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.small-bus-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(4px);
+  padding: 3px 8px 3px 4px;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+  border: 1.5px solid rgba(255, 255, 255, 0.4);
+}
+
+.small-bus-circle {
+  width: 22px;
+  height: 22px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.6);
+}
+
+.small-speed-tag {
+  color: #10b981;
+  font-size: 0.65rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+@keyframes busSmoothDrive {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+  }
+  94% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+.bus-badge-tooltip {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #ffffff;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bus-route-tag {
+  color: #60a5fa;
+}
+
+.bus-speed-tag {
+  color: #10b981;
+  font-weight: 800;
+}
+
+.bus-icon-circle {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.5), 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+.map-bottom-info {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  padding: 12px 16px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  z-index: 6;
+}
+
+.info-icon-circle {
+  width: 32px;
+  height: 32px;
+  background: #eff6ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.info-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.info-title {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.info-subtitle {
+  font-size: 0.74rem;
+  color: #475569;
+  font-weight: 600;
+}

@@ -79,16 +79,168 @@
           <li>✓ Layouts match each operator's actual vehicle configuration</li>
         </ul>
       </div>
-      <div class="reveal reveal-scale card" style="background:var(--c-navy);padding:var(--space-10);">
-        <div class="seat-grid" style="width:min(320px,100%);grid-template-columns:repeat(8,1fr);" aria-hidden="true">
-          <span class="seat" style="--d:0"></span><span class="seat" style="--d:1"></span><span class="seat" style="--d:2"></span><span class="seat" style="--d:3"></span><span class="seat" style="--d:4"></span><span class="seat" style="--d:5"></span><span class="seat" style="--d:6"></span><span class="seat" style="--d:7"></span>
-          <span class="seat" style="--d:8"></span><span class="seat" style="--d:9"></span><span class="seat" style="--d:10"></span><span class="seat" style="--d:11"></span><span class="seat" style="--d:12"></span><span class="seat" style="--d:13"></span><span class="seat" style="--d:14"></span><span class="seat" style="--d:15"></span>
-          <span class="seat" style="--d:16"></span><span class="seat" style="--d:17"></span><span class="seat" style="--d:18"></span><span class="seat" style="--d:19"></span><span class="seat" style="--d:20"></span><span class="seat" style="--d:21"></span><span class="seat" style="--d:22"></span><span class="seat" style="--d:23"></span>
+      <div class="reveal reveal-scale seaty-seat-card-demo">
+        <div class="seat-map-legend">
+          <span class="legend-item"><i class="legend-pill pill-available"></i> Available</span>
+          <span class="legend-item"><i class="legend-pill pill-male"></i> Male</span>
+          <span class="legend-item"><i class="legend-pill pill-female"></i> Female</span>
+          <span class="legend-item"><i class="legend-pill pill-held"></i> Held</span>
         </div>
-        <div class="seat-legend" style="margin-top:var(--space-6);">
-          <span><i class="dot-available"></i>Available</span>
-          <span><i class="dot-held"></i>Held</span>
-          <span><i class="dot-selected"></i>Selected</span>
+
+        <div class="bus-layout-frame">
+          <div class="driver-cabin-bar">
+            <div class="entry-door">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M15 12h.01"/></svg>
+              <span>ENTRY DOOR</span>
+            </div>
+            <div class="cabin-notch"></div>
+            <div class="steering-cabin">
+              <span>DRIVER CABIN <small>Steering (RHD)</small></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v6M3 12h6M15 12h6M8.5 15.5l3.5-3.5"/></svg>
+            </div>
+          </div>
+
+          <div class="bus-seats-container">
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item seat-male">1</div>
+                <div class="seat-item">2</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">3</div>
+                <div class="seat-item">4</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">5</div>
+                <div class="seat-item">6</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">7</div>
+                <div class="seat-item">8</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">9</div>
+                <div class="seat-item seat-female">10<span class="gender-badge gender-badge-female"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M7 21l2-7h6l2 7"/><path d="M9 14h6"/></svg></span></div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">11</div>
+                <div class="seat-item seat-female">12<span class="gender-badge gender-badge-female"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M7 21l2-7h6l2 7"/><path d="M9 14h6"/></svg></span></div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item seat-male">13<span class="gender-badge gender-badge-male"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg></span></div>
+                <div class="seat-item">14</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">15</div>
+                <div class="seat-item">16</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">17</div>
+                <div class="seat-item">18</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">19</div>
+                <div class="seat-item">20</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item seat-male">21<span class="gender-badge gender-badge-male"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg></span></div>
+                <div class="seat-item">22</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">23</div>
+                <div class="seat-item seat-female">24<span class="gender-badge gender-badge-female"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#ec4899" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M7 21l2-7h6l2 7"/><path d="M9 14h6"/></svg></span></div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">25</div>
+                <div class="seat-item">26</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">27</div>
+                <div class="seat-item">28</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">29</div>
+                <div class="seat-item">30</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">31</div>
+                <div class="seat-item">32</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">33</div>
+                <div class="seat-item seat-male">34<span class="gender-badge gender-badge-male"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg></span></div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">35</div>
+                <div class="seat-item seat-male">36<span class="gender-badge gender-badge-male"><svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg></span></div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item animate-seat-booking" style="--delay:1;">37</div>
+                <div class="seat-item animate-seat-booking" style="--delay:3;">38</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item animate-seat-booking" style="--delay:2;">39</div>
+                <div class="seat-item animate-seat-booking" style="--delay:4;">40</div>
+              </div>
+            </div>
+
+            <div class="seat-row">
+              <div class="seat-pair">
+                <div class="seat-item">41</div>
+                <div class="seat-item">42</div>
+              </div>
+              <div class="aisle-indicator">↑</div>
+              <div class="seat-pair">
+                <div class="seat-item">43</div>
+                <div class="seat-item">44</div>
+              </div>
+            </div>
+
+            <div class="seat-row back-bench">
+              <div class="seat-item">45</div>
+              <div class="seat-item">46</div>
+              <div class="seat-item">47</div>
+              <div class="seat-item">48</div>
+              <div class="seat-item">49</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -97,8 +249,142 @@
   <!-- ============ REAL-TIME GPS TRACKING ============ -->
   <section class="section" id="tracking" style="background:var(--bg-surface-alt);">
     <div class="container" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-16);align-items:center;">
-      <div class="reveal reveal-scale image-frame" style="order:2;">
-        <img src="assets/images/hero_srilanka_bg.png" alt="Sri Lanka Coastal Expressway Luxury Coach with GPS Tracking" />
+      <div class="reveal reveal-scale phone-map-container" style="order:2;">
+        <div class="phone-mockup-frame">
+          <div class="phone-screen-viewport">
+            <div class="app-screen-image-wrapper">
+              <!-- Exact Mobile App Screen Graphic provided by user -->
+              <img src="assets/images/image_copy_3.png" alt="Seaty Live Tracker Mobile Screen View" class="app-screen-full-img" />
+
+              <!-- Overlay SVG City Pins & NATIVE Animated Buses STRICTLY CLIPPED INSIDE THE MAP AREA -->
+              <svg class="map-overlay-live-svg" viewBox="0 0 1000 2160" preserveAspectRatio="none">
+                <defs>
+                  <!-- ClipPath restricting all elements strictly inside the map card boundaries -->
+                  <clipPath id="mapBoxClip">
+                    <rect x="45" y="550" width="910" height="1120" rx="42" />
+                  </clipPath>
+                </defs>
+
+                <!-- Route Motion Paths inside Map Card -->
+                <path id="busPath1" d="M 605 840 C 530 1020, 440 1200, 315 1370" fill="none" stroke="none" />
+                <path id="busPath2" d="M 315 1370 C 370 1320, 410 1280, 470 1260" fill="none" stroke="none" />
+                <path id="busPath3" d="M 420 720 C 430 860, 440 1010, 315 1370" fill="none" stroke="none" />
+                <path id="busPath4" d="M 315 1370 C 400 1380, 480 1370, 560 1340" fill="none" stroke="none" />
+
+                <!-- Group strictly clipped to the Map Card Box -->
+                <g clip-path="url(#mapBoxClip)">
+                  <!-- City Pins -->
+                  <!-- Trincomalee -->
+                  <g class="city-marker" transform="translate(605, 840)">
+                    <circle r="10" fill="#2563eb" opacity="0.35" class="marker-ping" />
+                    <circle r="5" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+                    <rect x="8" y="-12" width="95" height="20" rx="5" fill="#0f172a" opacity="0.88" />
+                    <text x="13" y="2" fill="#ffffff" font-size="10" font-weight="700" font-family="sans-serif">Trincomalee</text>
+                  </g>
+
+                  <!-- Colombo Hub -->
+                  <g class="city-marker" transform="translate(315, 1370)">
+                    <circle r="14" fill="#ef4444" opacity="0.35" class="marker-ping" />
+                    <circle r="7" fill="#ef4444" stroke="#ffffff" stroke-width="2.5" />
+                    <rect x="-92" y="-12" width="82" height="20" rx="5" fill="#0f172a" opacity="0.88" />
+                    <text x="-86" y="2" fill="#ffffff" font-size="10" font-weight="700" font-family="sans-serif">Colombo</text>
+                  </g>
+
+                  <!-- Kandy -->
+                  <g class="city-marker" transform="translate(470, 1260)">
+                    <circle r="9" fill="#10b981" opacity="0.35" class="marker-ping" />
+                    <circle r="4.5" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+                    <rect x="8" y="-12" width="65" height="20" rx="5" fill="#0f172a" opacity="0.88" />
+                    <text x="13" y="2" fill="#ffffff" font-size="10" font-weight="700" font-family="sans-serif">Kandy</text>
+                  </g>
+
+                  <!-- Kilinochchi -->
+                  <g class="city-marker" transform="translate(420, 720)">
+                    <circle r="9" fill="#8b5cf6" opacity="0.35" class="marker-ping" />
+                    <circle r="4.5" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+                    <rect x="8" y="-12" width="80" height="20" rx="5" fill="#0f172a" opacity="0.88" />
+                    <text x="13" y="2" fill="#ffffff" font-size="10" font-weight="700" font-family="sans-serif">Kilinochchi</text>
+                  </g>
+
+                  <!-- Badulla -->
+                  <g class="city-marker" transform="translate(560, 1340)">
+                    <circle r="9" fill="#f59e0b" opacity="0.35" class="marker-ping" />
+                    <circle r="4.5" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+                    <rect x="8" y="-12" width="65" height="20" rx="5" fill="#0f172a" opacity="0.88" />
+                    <text x="13" y="2" fill="#ffffff" font-size="10" font-weight="700" font-family="sans-serif">Badulla</text>
+                  </g>
+
+                  <!-- BUS 1: Trincomalee -> Colombo -->
+                  <g class="moving-svg-bus-group">
+                    <animateMotion dur="7.5s" repeatCount="indefinite">
+                      <mpath href="#busPath1" />
+                    </animateMotion>
+                    <circle r="18" fill="#2563eb" opacity="0.25" class="marker-ping" />
+                    <circle r="12" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+                    <rect x="-6" y="-4" width="12" height="8" rx="2" fill="#ffffff" />
+                    <circle cx="-3" cy="3" r="1.2" fill="#0f172a" />
+                    <circle cx="3" cy="3" r="1.2" fill="#0f172a" />
+                    <g transform="translate(16, -10)">
+                      <rect x="0" y="0" width="58" height="18" rx="5" fill="#0f172a" opacity="0.9" stroke="#2563eb" stroke-width="1" />
+                      <text x="6" y="13" fill="#10b981" font-size="10" font-weight="800" font-family="sans-serif">84 km/h</text>
+                    </g>
+                  </g>
+
+                  <!-- BUS 2: Colombo -> Kandy -->
+                  <g class="moving-svg-bus-group">
+                    <animateMotion dur="5.5s" repeatCount="indefinite">
+                      <mpath href="#busPath2" />
+                    </animateMotion>
+                    <circle r="18" fill="#10b981" opacity="0.25" class="marker-ping" />
+                    <circle r="12" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+                    <rect x="-6" y="-4" width="12" height="8" rx="2" fill="#ffffff" />
+                    <circle cx="-3" cy="3" r="1.2" fill="#0f172a" />
+                    <circle cx="3" cy="3" r="1.2" fill="#0f172a" />
+                    <g transform="translate(16, -10)">
+                      <rect x="0" y="0" width="58" height="18" rx="5" fill="#0f172a" opacity="0.9" stroke="#10b981" stroke-width="1" />
+                      <text x="6" y="13" fill="#34d399" font-size="10" font-weight="800" font-family="sans-serif">72 km/h</text>
+                    </g>
+                  </g>
+
+                  <!-- BUS 3: Kilinochchi -> Colombo -->
+                  <g class="moving-svg-bus-group">
+                    <animateMotion dur="8.5s" repeatCount="indefinite">
+                      <mpath href="#busPath3" />
+                    </animateMotion>
+                    <circle r="18" fill="#8b5cf6" opacity="0.25" class="marker-ping" />
+                    <circle r="12" fill="#8b5cf6" stroke="#ffffff" stroke-width="2" />
+                    <rect x="-6" y="-4" width="12" height="8" rx="2" fill="#ffffff" />
+                    <circle cx="-3" cy="3" r="1.2" fill="#0f172a" />
+                    <circle cx="3" cy="3" r="1.2" fill="#0f172a" />
+                    <g transform="translate(16, -10)">
+                      <rect x="0" y="0" width="58" height="18" rx="5" fill="#0f172a" opacity="0.9" stroke="#8b5cf6" stroke-width="1" />
+                      <text x="6" y="13" fill="#a78bfa" font-size="10" font-weight="800" font-family="sans-serif">90 km/h</text>
+                    </g>
+                  </g>
+
+                  <!-- BUS 4: Colombo -> Badulla -->
+                  <g class="moving-svg-bus-group">
+                    <animateMotion dur="6.5s" repeatCount="indefinite">
+                      <mpath href="#busPath4" />
+                    </animateMotion>
+                    <circle r="18" fill="#f59e0b" opacity="0.25" class="marker-ping" />
+                    <circle r="12" fill="#f59e0b" stroke="#ffffff" stroke-width="2" />
+                    <rect x="-6" y="-4" width="12" height="8" rx="2" fill="#ffffff" />
+                    <circle cx="-3" cy="3" r="1.2" fill="#0f172a" />
+                    <circle cx="3" cy="3" r="1.2" fill="#0f172a" />
+                    <g transform="translate(16, -10)">
+                      <rect x="0" y="0" width="58" height="18" rx="5" fill="#0f172a" opacity="0.9" stroke="#f59e0b" stroke-width="1" />
+                      <text x="6" y="13" fill="#fbbf24" font-size="10" font-weight="800" font-family="sans-serif">88 km/h</text>
+                    </g>
+                  </g>
+                </g>
+              </svg>
+
+
+
+            </div>
+          </div>
+        </div>
       </div>
       <div class="reveal reveal-right" style="order:1;">
         <span class="eyebrow">Real-Time GPS Tracking</span>
@@ -131,7 +417,7 @@
         </ul>
       </div>
       <div class="image-frame reveal">
-        <img src="assets/images/srilanka_conductor_scan.png" alt="Sri Lankan Bus Conductor Scanning Ticket" />
+        <img src="assets/images/image_copy_7.png" alt="Sri Lankan Bus Conductor Validating Ticket with POS Terminal" />
       </div>
     </div>
   </section>
@@ -140,7 +426,7 @@
   <section class="section" id="pricing" style="background:var(--bg-surface-alt);">
     <div class="container" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-16);align-items:center;">
       <div class="image-frame reveal">
-        <img src="assets/images/srilanka_passenger_app.png" alt="Sri Lankan Passenger completing secure checkout in Seaty app" />
+        <img src="assets/images/image_copy_10.png" alt="Seaty Admin staff managing secure fare calculation on tablet" />
       </div>
       <div class="reveal reveal-right">
         <span class="eyebrow">Fare Protection &amp; Security</span>
