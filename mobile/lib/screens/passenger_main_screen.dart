@@ -12,6 +12,7 @@ import 'package:seaty/screens/bus_details_screen.dart';
 import 'package:seaty/screens/notifications_screen.dart';
 import 'package:seaty/widgets/shimmer_loading.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/providers/notifications_provider.dart';
 
 // =====================================================================
 // 4. PASSENGER MAIN SCREEN
@@ -47,6 +48,9 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
   }
 
   Widget _buildTelegramBottomNavBar(BuildContext context) {
+    final notificationsState = ref.watch(notificationsProvider);
+    final unreadCount = notificationsState.unreadNotificationsCount;
+
     return Container(
       margin: const EdgeInsets.only(left: 16, right: 16, bottom: 20),
       padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -90,6 +94,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
             Icons.notifications_none_rounded,
             Icons.notifications_rounded,
             'Alerts',
+            badgeCount: unreadCount,
           ),
         ],
       ),
@@ -100,12 +105,57 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
     int index,
     IconData outlineIcon,
     IconData solidIcon,
-    String label,
-  ) {
+    String label, {
+    int badgeCount = 0,
+  }) {
     final isSelected = _currentIndex == index;
     final activeColor = Colors.white;
     final activeBgColor = const Color(0xFF2563EB); // Matte Orange
     final inactiveColor = Colors.white.withOpacity(0.75);
+
+    Widget iconWidget = Icon(
+      isSelected ? solidIcon : outlineIcon,
+      color: isSelected ? activeColor : inactiveColor,
+      size: 24,
+    );
+
+    if (badgeCount > 0) {
+      iconWidget = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          iconWidget,
+          Positioned(
+            right: -6,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444), // Vibrant Red
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF0F172A),
+                  width: 1.5,
+                ),
+              ),
+              constraints: const BoxConstraints(
+                minWidth: 16,
+                minHeight: 16,
+              ),
+              child: Text(
+                badgeCount > 99 ? '99+' : '$badgeCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  height: 1.0,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
 
     return GestureDetector(
       onTap: () => setState(() => _currentIndex = index),
@@ -127,11 +177,7 @@ class _PassengerMainScreenState extends ConsumerState<PassengerMainScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                isSelected ? solidIcon : outlineIcon,
-                color: isSelected ? activeColor : inactiveColor,
-                size: 24,
-              ),
+              iconWidget,
               if (isSelected) ...[
                 const SizedBox(width: 8),
                 Text(
