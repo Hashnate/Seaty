@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
+import 'package:seaty/utils/sri_lanka_time.dart';
 
 class BookingsState {
   final List<Map<String, dynamic>> bookings;
@@ -88,17 +89,9 @@ class BookingsNotifier extends Notifier<BookingsState> {
             'origin': trip['route']?['origin'] ?? 'Colombo Fort',
             'destination': trip['route']?['destination'] ?? 'Galle',
             'departure':
-                trip['departure_time']
-                    ?.toString()
-                    .replaceAll('T', ' ')
-                    .substring(0, 16) ??
+                isoToSriLankaWallClock(trip['departure_time']) ??
                 '2026-07-13 14:00',
-            'arrival':
-                trip['arrival_time']
-                    ?.toString()
-                    .replaceAll('T', ' ')
-                    .substring(0, 16) ??
-                '',
+            'arrival': isoToSriLankaWallClock(trip['arrival_time']) ?? '',
             'stops': trip['route']?['stops'] ?? [],
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
@@ -356,10 +349,7 @@ class BookingsNotifier extends Notifier<BookingsState> {
           'origin': trip['route']?['origin'] ?? 'Colombo Fort',
           'destination': trip['route']?['destination'] ?? 'Galle',
           'departure':
-              trip['departure_time']
-                  ?.toString()
-                  .replaceAll('T', ' ')
-                  .substring(0, 16) ??
+              isoToSriLankaWallClock(trip['departure_time']) ??
               '2026-07-13 14:00',
           'bus_name': vehicle['name'] ?? 'Luxury Express',
           'reg': vehicle['registration_number'] ?? 'WP-ND-0000',

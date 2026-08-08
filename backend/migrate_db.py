@@ -152,6 +152,14 @@ try:
     except Exception as e:
         print(f"Error creating vehicle_location_history table: {e}")
 
+    # NOTE: step 12 (a one-time -5:30 shift of existing trips.departure_time/
+    # arrival_time) was removed here. It assumed the Postgres session timezone
+    # defaulted to UTC, which was never confirmed against the live database and
+    # turned out to be wrong - existing trip times were already correct.
+    # See app/timezone_utils.py for the (still valid) going-forward write/read
+    # helpers; do not reintroduce a blind historical-data shift without first
+    # confirming `SHOW timezone;` against production and getting explicit sign-off.
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

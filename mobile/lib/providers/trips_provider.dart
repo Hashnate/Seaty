@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
+import 'package:seaty/utils/sri_lanka_time.dart';
 
 class TripsState {
   final List<Map<String, dynamic>> trips;
@@ -89,10 +90,7 @@ class TripsNotifier extends Notifier<TripsState> {
             'destination': tripMap['route']?['destination'] ?? 'Galle',
             'route': tripMap['route'],
             'departure':
-                tripMap['departure_time']
-                    ?.toString()
-                    .replaceAll('T', ' ')
-                    .substring(0, 16) ??
+                isoToSriLankaWallClock(tripMap['departure_time']) ??
                 '2026-07-13 14:00',
             'price':
                 double.tryParse(tripMap['price_per_seat'].toString()) ?? 1600.0,
@@ -108,7 +106,7 @@ class TripsNotifier extends Notifier<TripsState> {
             'gallery_image_urls': List<String>.from(vehicle['gallery_image_urls'] ?? []),
             'booked_seats': List<String>.from(tripMap['booked_seats'] ?? []),
             'boarded_seats': List<String>.from(tripMap['boarded_seats'] ?? []),
-            'arrival': tripMap['arrival_time']?.toString().replaceAll('T', ' ').substring(0, 16) ?? '',
+            'arrival': isoToSriLankaWallClock(tripMap['arrival_time']) ?? '',
           });
         }
         state = state.copyWith(trips: loadedTrips, isLoading: false);

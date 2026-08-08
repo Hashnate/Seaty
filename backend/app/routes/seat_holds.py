@@ -7,6 +7,7 @@ import datetime
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import now_sl, to_sl
 
 router = APIRouter(prefix="/seat-holds", tags=["Seat Holds"])
 
@@ -76,10 +77,8 @@ def create_seat_hold(
         raise HTTPException(status_code=400, detail=f"Cannot hold seats on a {trip.status} trip")
 
     # 30-minute pre-departure cutoff validation
-    now = datetime.datetime.now(datetime.timezone.utc)
-    dep_time = trip.departure_time
-    if dep_time.tzinfo is None:
-        dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+    now = now_sl()
+    dep_time = to_sl(trip.departure_time)
     if now >= (dep_time - datetime.timedelta(minutes=30)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

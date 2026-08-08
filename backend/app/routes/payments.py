@@ -7,6 +7,7 @@ import datetime
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import now_sl, to_sl
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
@@ -24,6 +25,17 @@ def _calculate_platform_fee(db: Session, subtotal: float) -> float:
     pct = float(_get_platform_setting(db, "commission_percentage", "3.0"))
     fixed = float(_get_platform_setting(db, "commission_fixed_fee", "25.0"))
     return round((subtotal * pct / 100) + fixed, 2)
+
+
+def _is_past_booking_cutoff(trip: "models.Trip | None") -> bool:
+    """True once we're within 30 minutes of departure (or past it) - the same
+    cutoff enforced when the booking/hold was first created. Payment can take
+    a while to complete, so this must be re-checked before confirming a seat,
+    not just at the moment the booking/hold was first created."""
+    if not trip or not trip.departure_time:
+        return False
+    dep_time = to_sl(trip.departure_time)
+    return now_sl() >= (dep_time - datetime.timedelta(minutes=30))
 
 
 async def _send_booking_notifications(db: Session, booking: models.Booking):
@@ -53,7 +65,7 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
             if passenger and passenger.phone_number:
                 try:
                     from app.services.sms_service import send_sms
-                    dep_dt = trip.departure_time
+                    dep_dt = to_sl(trip.departure_time)
                     if dep_dt:
                         date_time_str = dep_dt.strftime('%d/%m/%Y at %I:%M %p')
                     else:
@@ -144,6 +156,13 @@ def initiate_payment(
             return existing_payment
         if booking.payment_status == "paid":
             raise HTTPException(status_code=400, detail="Booking is already paid")
+
+    trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
+    if _is_past_booking_cutoff(trip):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Online payment for this bus closed 30 minutes prior to departure."
+        )
 
     # Calculate platform fee
     platform_fee = _calculate_platform_fee(db, float(booking.total_price))
@@ -254,6 +273,30 @@ async def sandbox_complete_payment(
     if payment.status == "completed":
         return payment
 
+    booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
+    trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first() if booking else None
+
+    if _is_past_booking_cutoff(trip):
+        # Booking closed while this payment was in flight - fail it instead of
+        # confirming a seat on a bus that's already boarding or gone.
+        payment.status = "failed"
+        payment.gateway_response = {
+            "sandbox": True,
+            "message": "Payment could not be completed - booking closed 30 minutes before departure",
+            "failed_at": datetime.datetime.utcnow().isoformat()
+        }
+        if booking:
+            booking.payment_status = "failed"
+            booking.booking_status = "cancelled"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+        db.commit()
+        db.refresh(payment)
+        return payment
+
     # Mark payment as completed
     payment.status = "completed"
     payment.paid_at = datetime.datetime.utcnow()
@@ -264,7 +307,6 @@ async def sandbox_complete_payment(
     }
 
     # Update booking status
-    booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
     if booking:
         booking.payment_status = "paid"
         booking.booking_status = "confirmed"
@@ -340,11 +382,27 @@ async def payment_webhook(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     if payload.status == "completed":
+        booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
+        trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first() if booking else None
+
+        if _is_past_booking_cutoff(trip):
+            payment.status = "failed"
+            payment.gateway_response = payload.gateway_data
+            if booking:
+                booking.payment_status = "failed"
+                booking.booking_status = "cancelled"
+                db.query(models.SeatHold).filter(
+                    models.SeatHold.trip_id == booking.trip_id,
+                    models.SeatHold.user_id == booking.passenger_id,
+                    models.SeatHold.is_released == False
+                ).update({"is_released": True})
+            db.commit()
+            return {"status": "ok", "payment_id": str(payment.id)}
+
         payment.status = "completed"
         payment.paid_at = datetime.datetime.utcnow()
         payment.gateway_response = payload.gateway_data
 
-        booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
         if booking:
             booking.payment_status = "paid"
             booking.booking_status = "confirmed"

@@ -7,6 +7,7 @@ import datetime
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import now_sl
 
 router = APIRouter(prefix="/schedules", tags=["Schedules"])
 
@@ -174,7 +175,7 @@ def update_schedule(
         schedule.conductor_id = None
         
     # Retroactively update future trips generated from this schedule
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = now_sl()
     db.query(models.Trip).filter(
         models.Trip.schedule_id == schedule.id,
         models.Trip.departure_time >= now

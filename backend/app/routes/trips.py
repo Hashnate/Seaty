@@ -8,6 +8,7 @@ import asyncio
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import SRI_LANKA_TZ, now_sl, to_sl
 
 router = APIRouter(prefix="/trips", tags=["Trips"])
 
@@ -96,8 +97,8 @@ def create_trip(
         id=uuid.uuid4(),
         vehicle_id=trip_in.vehicle_id,
         route_id=trip_in.route_id,
-        departure_time=trip_in.departure_time,
-        arrival_time=trip_in.arrival_time,
+        departure_time=to_sl(trip_in.departure_time),
+        arrival_time=to_sl(trip_in.arrival_time),
         price_per_seat=trip_in.price_per_seat,
         status="scheduled",
         conductor_id=cond_id
@@ -127,8 +128,8 @@ def list_trips(
     if date:
         try:
             target_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
-            start_time = datetime.datetime.combine(target_date, datetime.time.min)
-            end_time = datetime.datetime.combine(target_date, datetime.time.max)
+            start_time = datetime.datetime.combine(target_date, datetime.time.min, tzinfo=SRI_LANKA_TZ)
+            end_time = datetime.datetime.combine(target_date, datetime.time.max, tzinfo=SRI_LANKA_TZ)
             
             # Generate trips from active schedules if date is within next 5 days
             today = datetime.date.today()
@@ -180,12 +181,12 @@ def list_trips(
                             
                             veh_id = override.replacement_vehicle_id if override else sched.vehicle_id
                             
-                            # Construct departure/arrival times
-                            dep_time = datetime.datetime.combine(target_date, sched.departure_time)
+                            # Construct departure/arrival times (schedule times are Sri Lanka wall-clock)
+                            dep_time = datetime.datetime.combine(target_date, sched.departure_time, tzinfo=SRI_LANKA_TZ)
                             if sched.arrival_time < sched.departure_time:
-                                arr_time = datetime.datetime.combine(target_date + datetime.timedelta(days=1), sched.arrival_time)
+                                arr_time = datetime.datetime.combine(target_date + datetime.timedelta(days=1), sched.arrival_time, tzinfo=SRI_LANKA_TZ)
                             else:
-                                arr_time = datetime.datetime.combine(target_date, sched.arrival_time)
+                                arr_time = datetime.datetime.combine(target_date, sched.arrival_time, tzinfo=SRI_LANKA_TZ)
                                 
                             new_trip = models.Trip(
                                 id=uuid.uuid4(),
@@ -215,13 +216,11 @@ def list_trips(
     
     # Preload nested structures and filter matching routes (including intermediate stops)
     filtered_trips = []
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    now_sri_lanka = now_sl()
     for trip in trips:
-        dep_time = trip.departure_time
-        if dep_time.tzinfo is None:
-            dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+        dep_time = to_sl(trip.departure_time)
         # Exclude trips whose departure is within 30 minutes or already past
-        if dep_time <= (now_utc + datetime.timedelta(minutes=30)):
+        if dep_time <= (now_sri_lanka + datetime.timedelta(minutes=30)):
             continue
 
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
@@ -370,8 +369,8 @@ async def update_trip_status(
                 route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
                 origin = route.origin if route else "Origin"
                 destination = route.destination if route else "Destination"
-                date_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
-                
+                date_str = to_sl(trip.departure_time).strftime("%Y-%m-%d %H:%M")
+
                 title = f"Trip {status.capitalize()}!"
                 if status == "cancelled":
                     msg = f"Your trip from {origin} to {destination} scheduled for {date_str} has been cancelled. A refund has been initiated."
@@ -442,8 +441,8 @@ async def update_trip(
     old_dep_time = trip.departure_time
     trip.vehicle_id = trip_in.vehicle_id
     trip.route_id = trip_in.route_id
-    trip.departure_time = trip_in.departure_time
-    trip.arrival_time = trip_in.arrival_time
+    trip.departure_time = to_sl(trip_in.departure_time)
+    trip.arrival_time = to_sl(trip_in.arrival_time)
     trip.price_per_seat = trip_in.price_per_seat
     
     db.commit()
@@ -460,7 +459,7 @@ async def update_trip(
                 from app.routes.notifications import create_and_send_notification
                 origin = route.origin
                 destination = route.destination
-                new_date_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+                new_date_str = to_sl(trip.departure_time).strftime("%Y-%m-%d %H:%M")
                 
                 await create_and_send_notification(
                     db=db,
@@ -571,11 +570,12 @@ def toggle_seat_board_status(
         
     if action == "board":
         # 30-minute validation check
-        now = datetime.datetime.now(datetime.timezone.utc)
-        earliest_boarding_time = trip.departure_time - datetime.timedelta(minutes=30)
+        now = now_sl()
+        dep_time = to_sl(trip.departure_time)
+        earliest_boarding_time = dep_time - datetime.timedelta(minutes=30)
         if now < earliest_boarding_time:
             minutes_until_boarding = int((earliest_boarding_time - now).total_seconds() / 60)
-            departure_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+            departure_str = dep_time.strftime("%Y-%m-%d %H:%M")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Boarding is only allowed within 30 minutes of the ride. Departure is in {minutes_until_boarding} minutes (at {departure_str})."
@@ -594,11 +594,12 @@ def toggle_seat_board_status(
             final_action = "unboarded"
         else:
             # Enforce 30-minute check for boarding inside toggle
-            now = datetime.datetime.now(datetime.timezone.utc)
-            earliest_boarding_time = trip.departure_time - datetime.timedelta(minutes=30)
+            now = now_sl()
+            dep_time = to_sl(trip.departure_time)
+            earliest_boarding_time = dep_time - datetime.timedelta(minutes=30)
             if now < earliest_boarding_time:
                 minutes_until_boarding = int((earliest_boarding_time - now).total_seconds() / 60)
-                departure_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+                departure_str = dep_time.strftime("%Y-%m-%d %H:%M")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Boarding is only allowed within 30 minutes of the ride. Departure is in {minutes_until_boarding} minutes (at {departure_str})."

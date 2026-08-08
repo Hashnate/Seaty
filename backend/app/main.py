@@ -68,6 +68,7 @@ import asyncio
 import datetime
 from app.database import SessionLocal
 from app import models
+from app.timezone_utils import now_sl, to_sl
 
 async def trip_reminder_scheduler():
     """Background task to send reminders 30 minutes before a trip starts."""
@@ -75,7 +76,7 @@ async def trip_reminder_scheduler():
         try:
             db = SessionLocal()
             try:
-                now = datetime.datetime.now()
+                now = now_sl()
                 thirty_mins_from_now = now + datetime.timedelta(minutes=30)
                 
                 # Fetch confirmed bookings for scheduled trips starting in the next 30 minutes
@@ -99,7 +100,7 @@ async def trip_reminder_scheduler():
                         trip = booking.trip
                         origin = trip.route.origin if (trip and trip.route) else "Colombo"
                         dest = trip.route.destination if (trip and trip.route) else "Galle"
-                        departure = trip.departure_time.strftime("%I:%M %p")
+                        departure = to_sl(trip.departure_time).strftime("%I:%M %p")
                         
                         title = "Trip Reminder - 30 Mins to Departure"
                         message = (
@@ -130,7 +131,7 @@ async def auto_expire_bookings_scheduler():
         try:
             db = SessionLocal()
             try:
-                now = datetime.datetime.now(datetime.timezone.utc)
+                now = now_sl()
                 candidates = db.query(models.Booking).join(models.Trip).filter(
                     models.Booking.booking_status == "confirmed",
                     models.Trip.departure_time < now

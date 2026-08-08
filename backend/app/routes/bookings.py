@@ -9,6 +9,7 @@ from app.database import get_db
 from app import models, schemas, auth
 from app.routes.seat_holds import get_unavailable_seats
 from app.routes.trips import notify_seat_change
+from app.timezone_utils import now_sl, to_sl
 
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
@@ -55,10 +56,8 @@ def create_booking(
         )
 
     # 30-minute pre-departure cutoff validation
-    now = datetime.datetime.now(datetime.timezone.utc)
-    dep_time = trip.departure_time
-    if dep_time.tzinfo is None:
-        dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+    now = now_sl()
+    dep_time = to_sl(trip.departure_time)
     if now >= (dep_time - datetime.timedelta(minutes=30)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -128,21 +127,19 @@ def _get_hold_duration(db: Session) -> int:
 
 def _auto_update_booking_statuses(db: Session, bookings: List[models.Booking]):
     """Auto-update booking_status to 'completed' or 'expired' based on departure time, boarding status, and hold timeout."""
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = now_sl()
     hold_duration_mins = _get_hold_duration(db)
     updated = False
     for b in bookings:
         if not b.trip or not b.trip.departure_time:
             continue
-        dep_time = b.trip.departure_time
-        if dep_time.tzinfo is None:
-            dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
-        
+        dep_time = to_sl(b.trip.departure_time)
+
         boarded = set(b.trip.boarded_seats or [])
         seats = set(b.selected_seats or [])
         is_boarded = len(seats) > 0 and seats.issubset(boarded)
-        
-        # Check creation time for pending booking expiration
+
+        # Check creation time for pending booking expiration (created_at is a UTC audit timestamp)
         created_at = b.created_at
         if created_at and created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=datetime.timezone.utc)
