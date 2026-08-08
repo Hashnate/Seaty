@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
+import 'package:seaty/providers/notifications_provider.dart';
 
 class OwnerHomeTab extends ConsumerStatefulWidget {
   final Function(int navIndex, int subTab)? onNavigate;
@@ -16,6 +17,7 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final fleetState = ref.watch(fleetProvider);
+    final unreadNotis = ref.watch(notificationsProvider).unreadNotificationsCount;
     final ownerName = authState.userName.isNotEmpty ? authState.userName : 'Bus Owner';
     final vehicleCount = fleetState.vehicles.isNotEmpty ? fleetState.vehicles.length : 12;
     final conductorCount = fleetState.conductors.isNotEmpty
@@ -88,11 +90,48 @@ class _OwnerHomeTabState extends ConsumerState<OwnerHomeTab> {
                       border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
                     child: IconButton(
-                      icon: const Icon(
-                        Icons.notifications_outlined,
-                        color: Color(0xFF0F172A),
-                        size: 22,
-                      ),
+                      icon: unreadNotis > 0
+                          ? Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                const Icon(
+                                  Icons.notifications_outlined,
+                                  color: Color(0xFF0F172A),
+                                  size: 22,
+                                ),
+                                Positioned(
+                                  right: -4,
+                                  top: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFEF4444),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.white, width: 1.5),
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    child: Text(
+                                      unreadNotis > 99 ? '99+' : '$unreadNotis',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        height: 1.0,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : const Icon(
+                              Icons.notifications_outlined,
+                              color: Color(0xFF0F172A),
+                              size: 22,
+                            ),
                       onPressed: () {
                         Navigator.push(
                           context,

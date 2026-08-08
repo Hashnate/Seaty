@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -151,9 +152,9 @@ Future<void> _generateAndSavePDF(
     final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
     final numPassengers = (b['seats'] as List?)?.length ?? 1;
     
-    final totalPrice = double.tryParse(b['price']?.toString() ?? '0.0') ?? 0.0;
-    final platformFee = double.tryParse(b['platform_fee']?.toString() ?? '0.0') ?? 25.0;
-    final baseFare = (totalPrice > platformFee) ? (totalPrice - platformFee) : totalPrice;
+    final baseFare = double.tryParse(b['price']?.toString() ?? '0.0') ?? 0.0;
+    final platformFee = double.tryParse(b['platform_fee']?.toString() ?? '0.0') ?? 0.0;
+    final totalPrice = baseFare + platformFee;
     final formattedBaseFare = _formatCurrency(baseFare, showDecimals: true);
     final formattedPlatformFee = _formatCurrency(platformFee, showDecimals: true);
     final formattedTotalPrice = _formatCurrency(totalPrice, showDecimals: true);
@@ -181,6 +182,18 @@ Future<void> _generateAndSavePDF(
     final bool isNextDay = depDt != null && arrDt != null && (arrDt.day != depDt.day || arrDt.month != depDt.month);
     final String droppingDateDisplay = isNextDay ? '$droppingDateFormatted (Next Day)' : droppingDateFormatted;
 
+    pw.MemoryImage? logoImage;
+    try {
+      final logoByteData = await rootBundle.load('assets/images/app_icon_adaptive_foreground.png');
+      final logoBytes = logoByteData.buffer.asUint8List(
+        logoByteData.offsetInBytes,
+        logoByteData.lengthInBytes,
+      );
+      logoImage = pw.MemoryImage(logoBytes);
+    } catch (e) {
+      debugPrint('Error loading logo for PDF: $e');
+    }
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -197,18 +210,18 @@ Future<void> _generateAndSavePDF(
                   pw.Row(
                     crossAxisAlignment: pw.CrossAxisAlignment.center,
                     children: [
+                      if (logoImage != null) ...[
+                        pw.Container(
+                          width: 28,
+                          height: 28,
+                          child: pw.Image(logoImage),
+                        ),
+                        pw.SizedBox(width: 8),
+                      ],
                       pw.Text(
                         'seaty',
                         style: pw.TextStyle(
                           color: PdfColors.blue800,
-                          fontSize: 26,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.Text(
-                        '.lk',
-                        style: pw.TextStyle(
-                          color: PdfColors.red600,
                           fontSize: 26,
                           fontWeight: pw.FontWeight.bold,
                         ),
@@ -601,19 +614,29 @@ Future<void> _generateAndSavePDF(
     final file = File(filePath);
     await file.writeAsBytes(pdfBytes);
 
-    // 2. Safely trigger native share if requested
-    if (share) {
-      try {
-        await Printing.sharePdf(bytes: pdfBytes, filename: '$ticketCode.pdf');
-      } catch (shareErr) {
-        debugPrint('Native share warning: $shareErr');
+    // 2. Safely trigger native share / save to files modal with bounds calculation
+    Rect? shareBounds;
+    if (context.mounted) {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box != null && box.hasSize) {
+        shareBounds = box.localToGlobal(Offset.zero) & box.size;
       }
+    }
+
+    try {
+      await Printing.sharePdf(
+        bytes: pdfBytes,
+        filename: '$ticketCode.pdf',
+        bounds: shareBounds,
+      );
+    } catch (shareErr) {
+      debugPrint('Native share warning: $shareErr');
     }
 
     if (context.mounted) {
       SeatyNotifications.show(
         context,
-        share ? 'Ticket PDF generated!' : 'Ticket PDF saved successfully! ($ticketCode.pdf)',
+        share ? 'Ticket PDF shared!' : 'Ticket PDF saved successfully! ($ticketCode.pdf)',
       );
     }
   } catch (e) {

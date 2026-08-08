@@ -40,6 +40,36 @@ const numberSeatsSequentially = (seats: { row: number; col: number; label: strin
   }));
 };
 
+const VehicleRowThumbnail = ({ mainImageUrl, name }: { mainImageUrl?: string; name: string }) => {
+  const [imgError, setImgError] = useState(false);
+
+  if (mainImageUrl && !imgError) {
+    const srcUrl = mainImageUrl.includes('?') ? mainImageUrl : `${mainImageUrl}?v=1`;
+    return (
+      <img
+        src={srcUrl}
+        alt={name}
+        style={{ width: '48px', height: '34px', borderRadius: '6px', objectFit: 'cover', border: '1px solid rgba(0,0,0,0.1)', flexShrink: 0 }}
+        onError={(e) => {
+          const target = e.currentTarget;
+          if (!target.dataset.retried) {
+            target.dataset.retried = 'true';
+            target.src = `${mainImageUrl}?t=${Date.now()}`;
+          } else {
+            setImgError(true);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ width: '48px', height: '34px', borderRadius: '6px', background: 'rgba(10,37,64,0.06)', border: '1px solid rgba(10,37,64,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', flexShrink: 0 }}>
+      <Bus size={18} />
+    </div>
+  );
+};
+
 export default function MyFleetPage() {
   const { token } = useAuth();
   const [vehicles, setVehicles] = useState<VehicleRecord[]>([]);
@@ -303,7 +333,12 @@ export default function MyFleetPage() {
               {vehicles.map(v => (
                 <tr key={v.id}>
                   <td>
-                    <div style={{ fontWeight: 'bold' }}>{v.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <VehicleRowThumbnail mainImageUrl={v.main_image_url} name={v.name} />
+                      <div>
+                        <div style={{ fontWeight: 'bold' }}>{v.name}</div>
+                      </div>
+                    </div>
                   </td>
                   <td>
                     <span style={{ fontFamily: 'monospace', fontWeight: 'bold', fontSize: '13px' }}>{v.registration_number}</span>
@@ -428,8 +463,46 @@ export default function MyFleetPage() {
 
       {showAddModal && (
         <div className="modal-backdrop" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', zIndex: 1000, backdropFilter: 'blur(8px)', overflowY: 'auto', padding: '40px 20px' }}>
-          <div className="table-card" style={{ width: '960px', maxWidth: '95vw', background: '#ffffff', border: '1px solid var(--border-color)', padding: '28px', borderRadius: '24px', boxShadow: '0 24px 48px -12px rgba(10, 37, 64, 0.18)', margin: 'auto' }}>
-            <h3 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: 800, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="table-card" style={{ position: 'relative', width: '960px', maxWidth: '95vw', background: '#ffffff', border: '1px solid var(--border-color)', padding: '28px', borderRadius: '24px', boxShadow: '0 24px 48px -12px rgba(10, 37, 64, 0.18)', margin: 'auto' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddModal(false);
+                setEditingVehicleId(null);
+              }}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                background: 'rgba(15, 23, 42, 0.05)',
+                border: '1px solid rgba(15, 23, 42, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#64748b',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                zIndex: 10
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                e.currentTarget.style.color = '#ef4444';
+                e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(15, 23, 42, 0.05)';
+                e.currentTarget.style.color = '#64748b';
+                e.currentTarget.style.borderColor = 'rgba(15, 23, 42, 0.08)';
+              }}
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+
+            <h3 style={{ margin: '0 0 20px 0', fontSize: '22px', fontWeight: 800, color: 'var(--text-dark)', display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '40px' }}>
               <Bus style={{ color: 'var(--color-primary)' }} /> {editingVehicleId ? 'Edit Bus & Design Layout' : 'Register New Bus & Design Layout'}
             </h3>
             {error && <div style={{ color: '#ef4444', marginBottom: '16px', fontSize: '13px', background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>{error}</div>}
@@ -457,12 +530,23 @@ export default function MyFleetPage() {
                   <label className="form-label">Main Bus Image (Cover Photo)</label>
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '6px' }}>
                     {mainImageUrl ? (
-                      <div style={{ position: 'relative', width: '80px', height: '54px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                        <img src={mainImageUrl} alt="Main Bus" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div style={{ position: 'relative', width: '96px', height: '64px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#f1f5f9' }}>
+                        <img
+                          src={mainImageUrl}
+                          alt="Main Bus"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.dataset.retried) {
+                              target.dataset.retried = 'true';
+                              target.src = target.src.includes('?') ? `${target.src}&t=${Date.now()}` : `${target.src}?t=${Date.now()}`;
+                            }
+                          }}
+                        />
                         <button
                           type="button"
                           onClick={() => setMainImageUrl('')}
-                          style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          style={{ position: 'absolute', top: 3, right: 3, background: 'rgba(0,0,0,0.65)', color: 'white', border: 'none', borderRadius: '50%', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                         >
                           <X size={12} />
                         </button>
@@ -481,21 +565,32 @@ export default function MyFleetPage() {
                   <label className="form-label">Bus Gallery Photos (Max 5 Photos)</label>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
                     {galleryUrls.map((url, idx) => (
-                      <div key={idx} style={{ position: 'relative', width: '64px', height: '48px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
-                        <img src={url} alt={`Gallery ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <div key={idx} style={{ position: 'relative', width: '72px', height: '52px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', background: '#f1f5f9' }}>
+                        <img
+                          src={url}
+                          alt={`Gallery ${idx + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            if (!target.dataset.retried) {
+                              target.dataset.retried = 'true';
+                              target.src = target.src.includes('?') ? `${target.src}&t=${Date.now()}` : `${target.src}?t=${Date.now()}`;
+                            }
+                          }}
+                        />
                         <button
                           type="button"
                           onClick={() => removeGalleryPhoto(idx)}
-                          style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                          style={{ position: 'absolute', top: 2, right: 2, background: 'rgba(0,0,0,0.65)', color: 'white', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
                         >
                           <X size={10} />
                         </button>
                       </div>
                     ))}
                     {galleryUrls.length < 5 && (
-                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '64px', height: '48px', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                      <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '72px', height: '52px', background: 'var(--bg-secondary)', border: '1px dashed var(--border-color)', borderRadius: '6px', cursor: 'pointer', color: 'var(--text-muted)' }}>
                         <ImageIcon size={16} />
-                        <span style={{ fontSize: '9px', fontWeight: 600, marginTop: '2px' }}>{uploadingGallery ? '...' : '+ Add'}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>{uploadingGallery ? '...' : '+ Add'}</span>
                         <input type="file" accept="image/*" multiple onChange={handleGalleryChange} style={{ display: 'none' }} disabled={uploadingGallery} />
                       </label>
                     )}
