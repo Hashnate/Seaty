@@ -274,6 +274,18 @@ class VehicleLocation(Base):
     vehicle = relationship("Vehicle", back_populates="location")
 
 
+class VehicleLocationHistory(Base):
+    __tablename__ = "vehicle_location_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    latitude = Column(Numeric, nullable=False)
+    longitude = Column(Numeric, nullable=False)
+    speed = Column(Numeric(5, 2), nullable=True)
+    heading = Column(Numeric(5, 2), nullable=True)
+    recorded_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
+
+
 class Review(Base):
     __tablename__ = "reviews"
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -120,6 +121,7 @@ class PassengerTrackingTab extends ConsumerStatefulWidget {
 
 class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   String? _selectedBusId;
+  Timer? _staleTicker;
 
   @override
   void initState() {
@@ -135,7 +137,18 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
         Future.microtask(() => ref.read(tripsProvider.notifier).loadTrips(date: depDate));
       }
     }
+    // Keeps the "last update Xs ago" / stale badge fresh without new GPS data arriving.
+    _staleTicker = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted) setState(() {});
+    });
   }
+
+  @override
+  void dispose() {
+    _staleTicker?.cancel();
+    super.dispose();
+  }
+
   final MapController _mapController = MapController();
   bool _isDarkModeMap = false;
   String? _activeTooltip; // ID of marker currently showing popup ('bus', 'origin', 'destination', 'stop_X')
@@ -273,6 +286,11 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     }
 
     final isTracking = gpsState.isTracking && gpsState.trackedBusLocation != null && hasSelected;
+
+    final secondsSinceUpdate = gpsState.lastUpdateAt == null
+        ? null
+        : DateTime.now().difference(gpsState.lastUpdateAt!).inSeconds;
+    final isStaleUpdate = secondsSinceUpdate != null && secondsSinceUpdate > 30;
 
     LatLng? busPosition;
     if (isTracking) {
@@ -703,7 +721,9 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       const SizedBox(height: 2),
                                       Text(
                                         _activeTooltip == 'bus'
-                                            ? 'Live speed: ${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? "45"} km/h • Tracking Active'
+                                            ? (gpsState.trackedBusLocation != null
+                                                ? 'Live speed: ${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? "0"} km/h • Tracking Active'
+                                                : 'Waiting for driver to start broadcasting…')
                                             : _activeTooltip == 'origin'
                                                 ? 'Journey Start Point'
                                                 : _activeTooltip == 'destination'
@@ -962,12 +982,27 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       const Color(0xFF0A2540),
                                     ),
                                     const SizedBox(width: 8),
-                                    _buildStatChip(
-                                      Icons.signal_cellular_alt_rounded,
-                                      'Strong',
-                                      'signal',
-                                      const Color(0xFF10B981),
-                                    ),
+                                    if (gpsState.isReconnecting)
+                                      _buildStatChip(
+                                        Icons.sync_rounded,
+                                        'Reconnecting',
+                                        'connection',
+                                        const Color(0xFFF59E0B),
+                                      )
+                                    else if (isStaleUpdate)
+                                      _buildStatChip(
+                                        Icons.warning_amber_rounded,
+                                        '${secondsSinceUpdate}s ago',
+                                        'stale',
+                                        const Color(0xFFF59E0B),
+                                      )
+                                    else
+                                      _buildStatChip(
+                                        Icons.signal_cellular_alt_rounded,
+                                        'Live',
+                                        'connection',
+                                        const Color(0xFF10B981),
+                                      ),
                                   ],
                                 ),
                               ],

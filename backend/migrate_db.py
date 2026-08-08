@@ -131,6 +131,27 @@ try:
     except Exception as e:
         print(f"Error upserting support_phone: {e}")
 
+    # 11. Create vehicle_location_history table (breadcrumb trail for live tracking)
+    print("Creating vehicle_location_history table if not exists...")
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vehicle_location_history (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+                latitude DOUBLE PRECISION NOT NULL,
+                longitude DOUBLE PRECISION NOT NULL,
+                speed NUMERIC(5, 2),
+                heading NUMERIC(5, 2),
+                recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vehicle_location_history_vehicle_time
+            ON vehicle_location_history(vehicle_id, recorded_at);
+        """)
+    except Exception as e:
+        print(f"Error creating vehicle_location_history table: {e}")
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")
