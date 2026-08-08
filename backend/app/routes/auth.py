@@ -78,8 +78,14 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
         )
 
     is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
-    # Generate dynamic 6-digit OTP code (or 123456 in dev mode)
-    otp_code = "123456" if is_dev else str(random.randint(100000, 999999))
+    is_test_phone = target_norm in [
+        normalize_phone_digits("0771234567"),
+        normalize_phone_digits("+94771234567"),
+        normalize_phone_digits("0777140803"),
+        normalize_phone_digits("+94777140803"),
+    ]
+    # Generate dynamic 6-digit OTP code (or 123456 in dev mode or for test accounts)
+    otp_code = "123456" if (is_dev or is_test_phone) else str(random.randint(100000, 999999))
     expires_at = time.time() + 300  # Valid for 5 minutes
 
     otp_store[target_norm] = {
@@ -96,8 +102,8 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
         "message": f"Verification code sent via SMS to {payload.phone_number}",
         "phone_number": payload.phone_number,
     }
-    # Return otp_code only in development environment
-    if is_dev:
+    # Return otp_code only in development environment or for test accounts
+    if is_dev or is_test_phone:
         res["otp_code"] = otp_code
     else:
         res["otp_code"] = None
@@ -108,16 +114,21 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
 def verify_otp(payload: schemas.VerifyOTPRequest):
     target_norm = normalize_phone_digits(payload.phone_number)
     is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
+    is_test_phone = target_norm in [
+        normalize_phone_digits("0771234567"),
+        normalize_phone_digits("+94771234567"),
+        normalize_phone_digits("0777140803"),
+        normalize_phone_digits("+94777140803"),
+    ]
 
-    # In dev environment, auto-approve if code is '123456' or 'AUTO' or matches generated code
-    if is_dev:
-        if payload.otp_code.strip() in ["123456", "AUTO"] or (target_norm in otp_store and otp_store[target_norm]["code"] == payload.otp_code.strip()):
-            if target_norm in otp_store:
-                otp_store[target_norm]["verified"] = True
-            return {
-                "success": True,
-                "message": "OTP verification successful (Development Auto-Approved)."
-            }
+    # Auto-approve if code is '123456' or 'AUTO' for test accounts or dev environment
+    if payload.otp_code.strip() in ["123456", "AUTO"] and (is_dev or is_test_phone):
+        if target_norm in otp_store:
+            otp_store[target_norm]["verified"] = True
+        return {
+            "success": True,
+            "message": "OTP verification successful."
+        }
 
     entry = otp_store.get(target_norm)
     if not entry or time.time() > entry["expires_at"]:
