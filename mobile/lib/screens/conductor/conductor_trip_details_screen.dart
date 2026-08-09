@@ -170,9 +170,11 @@ class _ConductorTripDetailsScreenState
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) {
+      // Named so they can't be used for anything outliving the sheet - popping
+      // kills them, and toasts shown afterwards must use this screen's context.
+      builder: (sheetContext) {
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (modalContext, setModalState) {
             return Padding(
               padding: const EdgeInsets.all(24.0),
               child: Column(
@@ -232,17 +234,19 @@ class _ConductorTripDetailsScreenState
                                     passenger['seat'],
                                   );
                                 });
-                                if (mounted) Navigator.pop(context);
-                                SeatyNotifications.show(
-                                  context,
-                                  isBoarded
-                                      ? 'Passenger Marked as Boarded'
-                                      : 'Boarding Undone',
-                                );
+                                Navigator.pop(sheetContext);
+                                if (mounted) {
+                                  SeatyNotifications.show(
+                                    context,
+                                    isBoarded
+                                        ? 'Passenger Marked as Boarded'
+                                        : 'Boarding Undone',
+                                  );
+                                }
                               }
                             } catch (e) {
+                              Navigator.pop(sheetContext);
                               if (mounted) {
-                                Navigator.pop(context);
                                 final errorMsg = e.toString().replaceFirst('Exception: ', '');
                                 SeatyNotifications.show(
                                   context,
