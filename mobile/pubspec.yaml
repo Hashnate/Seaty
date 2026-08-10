@@ -74,7 +74,8 @@ flutter:
   # via CocoaPods - and the CocoaPods side then could not find a `firebase_core`
   # podspec, failing `pod install`. Keeping every plugin on CocoaPods avoids the
   # split. Revisit once firebase_messaging adopts SPM.
-  disable-swift-package-manager: true
+  config:
+    enable-swift-package-manager: false
   uses-material-design: true
   assets:
     - assets/images/
