@@ -57,6 +57,7 @@ class ActiveTripsNotifier extends Notifier<ActiveTripsState> {
         for (final item in data) {
           if (item is! Map<String, dynamic>) continue;
           final vehicle = item['vehicle'] ?? {};
+          final conductor = item['conductor'] ?? {};
           loaded.add({
             'id': item['id'],
             'vehicle_id': vehicle['id'] ?? item['vehicle_id'],
@@ -69,6 +70,12 @@ class ActiveTripsNotifier extends Notifier<ActiveTripsState> {
             'reg': vehicle['registration_number'] ?? '',
             'total_seats': vehicle['total_seats'] ?? 40,
             'boarded_seats': List<String>.from(item['boarded_seats'] ?? []),
+            // Powers the tracker's Call button. Prefer the conductor actually
+            // running this trip; fall back to the bus's listed contact line.
+            'conductor_phone': (conductor['phone_number'] ??
+                    vehicle['contact_phone'] ??
+                    '')
+                .toString(),
           });
         }
         state = ActiveTripsState(trips: loaded, isLoading: false);

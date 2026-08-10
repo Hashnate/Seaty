@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:seaty/main.dart';
@@ -973,12 +974,37 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                     ),
                                     // Contact Conductor Quick Action Button
                                     GestureDetector(
-                                      onTap: () {
-                                        SeatyNotifications.show(
-                                          context,
-                                          'Connecting to Conductor of $_selectedBusId...',
-                                          isInfo: true,
+                                      onTap: () async {
+                                        // Was a toast that only *looked* like it
+                                        // dialled. Opens the real dialer now,
+                                        // using the conductor running this trip.
+                                        final selected =
+                                            dedupedTrackableTrips.firstWhere(
+                                          (t) => t['reg'] == _selectedBusId,
+                                          orElse: () => <String, dynamic>{},
                                         );
+                                        final phone = selected['conductor_phone']
+                                                ?.toString()
+                                                .trim() ??
+                                            '';
+                                        if (phone.isEmpty) {
+                                          SeatyNotifications.show(
+                                            context,
+                                            'No contact number available for this bus\'s conductor.',
+                                            isWarning: true,
+                                          );
+                                          return;
+                                        }
+                                        final uri = Uri.parse('tel:$phone');
+                                        if (await canLaunchUrl(uri)) {
+                                          await launchUrl(uri);
+                                        } else if (context.mounted) {
+                                          SeatyNotifications.show(
+                                            context,
+                                            'Could not open the dialer for $phone',
+                                            isError: true,
+                                          );
+                                        }
                                       },
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
