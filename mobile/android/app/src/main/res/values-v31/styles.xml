@@ -21,5 +21,12 @@
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <!-- See values/styles.xml — must not be ?android:colorBackground. -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- LaunchTheme already opts out; NormalTheme must too. It is applied
+             before Flutter's first frame, so without this the OS "force dark"
+             setting (MIUI et al. apply it app-wide) inverts the white launch
+             drawable and shows a dark logo screen before the real splash.
+             Flutter renders to its own surface and is never inverted, which is
+             why only this native gap looked dark. -->
+        <item name="android:forceDarkAllowed">false</item>
     </style>
 </resources>
