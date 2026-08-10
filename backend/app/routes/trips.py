@@ -217,10 +217,14 @@ def list_trips(
     # Preload nested structures and filter matching routes (including intermediate stops)
     filtered_trips = []
     now_sri_lanka = now_sl()
+    # The 30-minute cutoff is a passenger *booking* rule, not a visibility rule.
+    # Conductors/owners must keep seeing the trip once it enters the boarding
+    # window - that is exactly when they need the manifest and scanner.
+    is_staff = current_user is not None and current_user.role in ("conductor", "owner", "admin")
     for trip in trips:
         dep_time = to_sl(trip.departure_time)
-        # Exclude trips whose departure is within 30 minutes or already past
-        if dep_time <= (now_sri_lanka + datetime.timedelta(minutes=30)):
+        # Hide trips departing within 30 minutes from passengers only
+        if not is_staff and dep_time <= (now_sri_lanka + datetime.timedelta(minutes=30)):
             continue
 
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
