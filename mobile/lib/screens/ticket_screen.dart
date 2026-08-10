@@ -1275,7 +1275,11 @@ class _BoardingPassTicketCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Ticket #$ticketCode • Seat $seats',
+                            // Seats deliberately omitted here - the bottom row
+                            // already lists them in full beside the seat icon,
+                            // and repeating them only truncated the ticket
+                            // number on multi-seat bookings.
+                            'Ticket #$ticketCode',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFF94A3B8),
@@ -1447,20 +1451,30 @@ class _BoardingPassTicketCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
+                    // The seat list grows with every booked seat. Unbounded, a
+                    // 6-seat booking made this group wider than the card and
+                    // shoved the share + Ticket buttons off the right edge.
+                    // Expanded caps it; the Flexible text ellipsises instead.
+                    Expanded(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                         const Icon(
                           Icons.event_seat_rounded,
                           size: 15,
                           color: Color(0xFF64748B),
                         ),
                         const SizedBox(width: 5),
-                        Text(
-                          'Seat $seats',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF475569),
+                        Flexible(
+                          child: Text(
+                            'Seat $seats',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF475569),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1539,10 +1553,12 @@ class _BoardingPassTicketCard extends StatelessWidget {
                               ],
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
 
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           onPressed: onShare,
