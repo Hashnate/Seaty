@@ -25,13 +25,12 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
   }
 
   Future<void> _loadManifest() async {
-    final tripsState = ref.read(tripsProvider);
     final tripsNotifier = ref.read(tripsProvider.notifier);
     final bookingsNotifier = ref.read(bookingsProvider.notifier);
 
-    if (tripsState.trips.isEmpty) {
-      await tripsNotifier.loadTrips();
-    }
+    // Always refetch - see conductor_home_tab: a stale list from a previous
+    // session must never be reused for the newly signed-in conductor.
+    await tripsNotifier.loadTrips();
     final trips = ref.read(tripsProvider).trips;
     final activeTrip = pickActiveTrip(trips);
     if (activeTrip != null) {

@@ -30,13 +30,13 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
   }
 
   Future<void> _loadActiveManifest() async {
-    final tripsState = ref.read(tripsProvider);
     final tripsNotifier = ref.read(tripsProvider.notifier);
     final bookingsNotifier = ref.read(bookingsProvider.notifier);
 
-    if (tripsState.trips.isEmpty) {
-      await tripsNotifier.loadTrips();
-    }
+    // Always refetch. Guarding on `isEmpty` meant a list left behind by a
+    // previously signed-in conductor was treated as good enough, so the screen
+    // showed the wrong company's bus and manifest after an account switch.
+    await tripsNotifier.loadTrips();
     final trips = ref.read(tripsProvider).trips;
     final activeTrip = pickActiveTrip(trips);
     if (activeTrip != null) {
