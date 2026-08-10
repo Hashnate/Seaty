@@ -246,10 +246,42 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     'assets/images/bus_slider_3.png',
   ];
 
+  /// Remote banners are only adopted once every one of them is decoded and in
+  /// the image cache. Swapping the moment the URLs arrived meant the carousel
+  /// tore down the bundled asset and put up `Image.network`, which then showed
+  /// its placeholder for as long as the download took - the image -> grey ->
+  /// dark -> image flicker on a cold start.
+  List<String> _remoteHeroUrls = const [];
+  bool _remoteHeroReady = false;
+
   /// Admin-managed banners when available, otherwise the bundled assets.
-  List<String> get _heroImages {
-    final remote = ref.read(bannersProvider).imageUrls;
-    return remote.isNotEmpty ? remote : _bundledHeroImages;
+  List<String> get _heroImages =>
+      _remoteHeroReady && _remoteHeroUrls.isNotEmpty
+          ? _remoteHeroUrls
+          : _bundledHeroImages;
+
+  /// Downloads and decodes every banner, and only then swaps the carousel over,
+  /// so the change is a single clean cut with no loading state on screen.
+  Future<void> _adoptRemoteHeroBanners(List<String> urls) async {
+    if (urls.isEmpty) return;
+    if (urls.join('|') == _remoteHeroUrls.join('|') && _remoteHeroReady) return;
+
+    for (final url in urls) {
+      if (!mounted) return;
+      try {
+        await precacheImage(NetworkImage(url), context);
+      } catch (_) {
+        // A single unreachable banner shouldn't strand the carousel on the
+        // bundled assets forever - keep going and adopt whatever decoded.
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _remoteHeroUrls = urls;
+      _remoteHeroReady = true;
+      if (_heroImageIndex >= urls.length) _heroImageIndex = 0;
+    });
   }
 
   @override
@@ -264,6 +296,14 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     _toFocusNode.addListener(_onFocusChange);
     _heroPageController = PageController();
     _startHeroSliderTimer();
+    // ref.listen only fires on *change*, so banners already fetched before this
+    // tab mounted (e.g. returning to Home) would never be adopted. Pick up any
+    // existing value once the first frame has a context to precache against.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final existing = ref.read(bannersProvider).imageUrls;
+      if (existing.isNotEmpty) _adoptRemoteHeroBanners(existing);
+    });
   }
 
   void _startHeroSliderTimer() {
@@ -317,9 +357,13 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   @override
   Widget build(BuildContext context) {
     final tripsState = ref.watch(tripsProvider);
-    // Watched (not just read) so the hero carousel swaps from the bundled
-    // assets to the admin-managed banners as soon as they arrive.
-    ref.watch(bannersProvider);
+    // Listened to (not watched): adopting the banners is deferred until they
+    // are precached, so a plain rebuild here would only cause the flicker.
+    ref.listen<BannersState>(bannersProvider, (previous, next) {
+      if (next.imageUrls.isNotEmpty) {
+        _adoptRemoteHeroBanners(next.imageUrls);
+      }
+    });
 
     final allTrips = tripsState.trips;
     final Set<String> placesSet = {'All'};
@@ -491,6 +535,17 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             );
 
                         if (isRemote) {
+                          // Banners are precached before adoption, so this
+                          // normally paints immediately. If the cache was
+                          // evicted, show the bundled artwork rather than a
+                          // dark box - that dark frame was the visible flicker.
+                          Widget bundledStandIn() => Image.asset(
+                                _bundledHeroImages[index % _bundledHeroImages.length],
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (context, error, stackTrace) => placeholder(),
+                              );
                           return Image.network(
                             source,
                             fit: BoxFit.cover,
@@ -499,8 +554,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             // Hold the branded backdrop while bytes arrive
                             // rather than flashing white.
                             loadingBuilder: (context, child, progress) =>
-                                progress == null ? child : placeholder(),
-                            errorBuilder: (context, error, stackTrace) => placeholder(),
+                                progress == null ? child : bundledStandIn(),
+                            errorBuilder: (context, error, stackTrace) => bundledStandIn(),
                           );
                         }
 
