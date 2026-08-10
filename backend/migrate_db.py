@@ -152,6 +152,28 @@ try:
     except Exception as e:
         print(f"Error creating vehicle_location_history table: {e}")
 
+    # 12. Create hero_banners table (admin-managed passenger home carousel)
+    print("Creating hero_banners table if not exists...")
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS hero_banners (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                image_url TEXT NOT NULL,
+                title TEXT,
+                subtitle TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hero_banners_active_order
+            ON hero_banners(is_active, sort_order);
+        """)
+    except Exception as e:
+        print(f"Error creating hero_banners table: {e}")
+
     # NOTE: step 12 (a one-time -5:30 shift of existing trips.departure_time/
     # arrival_time) was removed here. It assumed the Postgres session timezone
     # defaulted to UTC, which was never confirmed against the live database and

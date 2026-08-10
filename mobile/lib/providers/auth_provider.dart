@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
+import 'package:seaty/utils/safe_text.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -299,7 +300,7 @@ class AuthNotifier extends Notifier<AuthState> {
             },
             body: json.encode({'fcm_token': fcmToken}),
           );
-          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: ${fcmToken.substring(0, 20)}...');
+          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: ${shortId(fcmToken, 20)}...');
           if (res.statusCode == 200) break;
         } else {
           debugPrint('FCM token is null/empty on syncFcmToken attempt ${attempt + 1}');

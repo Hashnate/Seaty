@@ -381,6 +381,34 @@ class PlatformSettingUpdate(BaseModel):
     value: str
 
 # ==========================================
+# Hero Banner Schemas
+# ==========================================
+class HeroBannerBase(BaseModel):
+    image_url: str
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+class HeroBannerCreate(HeroBannerBase):
+    pass
+
+class HeroBannerUpdate(BaseModel):
+    image_url: Optional[str] = None
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    sort_order: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class HeroBannerResponse(HeroBannerBase):
+    id: UUID
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+# ==========================================
 # Admin Dashboard Schemas
 # ==========================================
 class AdminDashboardStats(BaseModel):

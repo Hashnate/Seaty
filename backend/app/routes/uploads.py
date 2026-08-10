@@ -64,6 +64,46 @@ async def upload_vehicle_main_image(
     return {"url": public_url, "filename": filename}
 
 
+@router.post("/banner")
+async def upload_banner_image(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Upload a hero banner image for the passenger home carousel. Admin only."""
+    _ensure_upload_dir()
+
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file.content_type}. Only JPEG, PNG, and WebP images are allowed."
+        )
+
+    _, ext = os.path.splitext(file.filename or "")
+    ext = ext.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = ".jpg" if file.content_type == "image/jpeg" else ".png"
+
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds maximum allowed limit of 5MB."
+        )
+
+    filename = f"banner_{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    resolved_path = os.path.abspath(filepath)
+    resolved_dir = os.path.abspath(UPLOAD_DIR)
+    if not resolved_path.startswith(resolved_dir):
+        raise HTTPException(status_code=400, detail="Invalid target filename path.")
+
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    return {"url": f"/uploads/vehicles/{filename}", "filename": filename}
+
+
 @router.post("/vehicle-gallery")
 async def upload_vehicle_gallery_images(
     files: List[UploadFile] = File(...),

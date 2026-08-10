@@ -8,6 +8,7 @@ import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/owner/fleet_crew_screen.dart';
+import 'package:seaty/utils/safe_text.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -189,8 +190,7 @@ class NotificationsScreen extends ConsumerWidget {
   }
 
   void _showTicketDialog(BuildContext context, Map<String, dynamic> b) {
-    final ticketCode =
-        'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+    final ticketCode = 'TKT-${shortId(b['id'], 8).toUpperCase()}';
     final seats = (b['seats'] as List?)?.join(', ') ?? '';
     final formattedPrice =
         double.tryParse(b['price'].toString())?.toStringAsFixed(2) ??

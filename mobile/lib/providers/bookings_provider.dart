@@ -179,6 +179,31 @@ class BookingsNotifier extends Notifier<BookingsState> {
     );
   }
 
+  /// Detail of the most recent failed booking/payment call, so the UI can show
+  /// the server's actual reason (e.g. the 30-minute pre-departure cutoff)
+  /// instead of a generic message. Null when the last call succeeded.
+  String? lastErrorMessage;
+
+  /// Pulls FastAPI's `detail` out of an error body. Falls back to null so
+  /// callers keep their existing generic copy when the shape is unexpected.
+  String? _extractErrorDetail(String body) {
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map && decoded['detail'] != null) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.trim().isNotEmpty) return detail;
+        // Pydantic validation errors arrive as a list of maps.
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map && first['msg'] != null) return first['msg'].toString();
+        }
+      }
+    } catch (_) {
+      // Non-JSON body - nothing useful to surface.
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>?> initiateBooking(
     String tripId,
     Map<String, dynamic> passengerDetails,
@@ -202,9 +227,12 @@ class BookingsNotifier extends Notifier<BookingsState> {
       );
 
       if (response.statusCode == 201) {
+        lastErrorMessage = null;
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
         ref.read(authProvider.notifier).logout();
+      } else {
+        lastErrorMessage = _extractErrorDetail(response.body);
       }
     } catch (e) {
       debugPrint('Error initiating booking: $e');
@@ -227,7 +255,10 @@ class BookingsNotifier extends Notifier<BookingsState> {
       );
 
       if (response.statusCode == 201) {
+        lastErrorMessage = null;
         return json.decode(response.body);
+      } else {
+        lastErrorMessage = _extractErrorDetail(response.body);
       }
     } catch (e) {
       debugPrint('Error initiating payment: $e');

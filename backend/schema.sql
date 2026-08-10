@@ -233,6 +233,24 @@ CREATE TABLE public.vehicle_locations (
 ALTER TABLE public.vehicle_locations ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
+-- 10a. Hero Banners Table (admin-managed passenger home carousel)
+-- ==========================================
+CREATE TABLE public.hero_banners (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    image_url TEXT NOT NULL,
+    title TEXT,
+    subtitle TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_hero_banners_active_order ON public.hero_banners(is_active, sort_order);
+
+ALTER TABLE public.hero_banners ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
 -- 10b. Vehicle Location History Table (breadcrumb trail for live tracking)
 -- ==========================================
 CREATE TABLE public.vehicle_location_history (
@@ -408,6 +426,10 @@ CREATE POLICY "Owners can update their own vehicle locations" ON public.vehicle_
             WHERE vehicles.id = vehicle_id AND vehicles.owner_id = auth.uid()
         )
     );
+
+-- Hero Banner policies (public read, admin write)
+CREATE POLICY "Anyone can view hero banners" ON public.hero_banners
+    FOR SELECT USING (true);
 
 -- Vehicle Location History policies (breadcrumb trail)
 CREATE POLICY "Anyone can view vehicle location history" ON public.vehicle_location_history

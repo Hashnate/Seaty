@@ -274,6 +274,23 @@ class VehicleLocation(Base):
     vehicle = relationship("Vehicle", back_populates="location")
 
 
+class HeroBanner(Base):
+    """Hero carousel images shown on the passenger home screen.
+
+    Managed by admins so marketing imagery can change without an app release.
+    """
+    __tablename__ = "hero_banners"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    image_url = Column(String, nullable=False)
+    title = Column(String, nullable=True)
+    subtitle = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+
 class VehicleLocationHistory(Base):
     __tablename__ = "vehicle_location_history"
 

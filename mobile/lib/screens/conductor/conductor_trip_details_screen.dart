@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/utils/safe_text.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/widgets/seaty_bus_loading.dart';
 
@@ -210,8 +211,7 @@ class _ConductorTripDetailsScreenState
                         ),
                         _buildDetailRow(
                           'Booking ID',
-                          passenger['booking_id'].toString().substring(0, 8) +
-                              '...',
+                          '${shortId(passenger['booking_id'], 8)}...',
                         ),
                       ],
                     ),

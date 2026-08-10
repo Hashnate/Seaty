@@ -4,7 +4,7 @@ from app.config import settings
 from app.database import engine, Base
 import os
 from fastapi.staticfiles import StaticFiles
-from app.routes import auth, vehicles, trips, bookings, tracking, routes_router, companies, payments, seat_holds, admin, conductors, notifications, schedules, reviews, favourites, uploads
+from app.routes import auth, vehicles, trips, bookings, tracking, routes_router, companies, payments, seat_holds, admin, conductors, notifications, schedules, reviews, favourites, uploads, banners
 
 # Create database tables at startup (Convenient for initial setups)
 Base.metadata.create_all(bind=engine)
@@ -46,6 +46,7 @@ app.include_router(schedules.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(favourites.router, prefix="/api/v1")
 app.include_router(uploads.router, prefix="/api/v1")
+app.include_router(banners.router, prefix="/api/v1")
 
 @app.get("/")
 def read_root():

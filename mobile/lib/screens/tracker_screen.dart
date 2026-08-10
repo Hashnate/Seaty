@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/providers/active_trips_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -122,30 +123,35 @@ class PassengerTrackingTab extends ConsumerStatefulWidget {
 class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   String? _selectedBusId;
   Timer? _staleTicker;
+  Timer? _activeTripsRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     if (widget.trip != null) {
       _selectedBusId = widget.trip!['reg'] ?? widget.trip!['bus_reg'] ?? widget.trip!['bus_name'];
-      // The shared trips cache may hold a different date than this trip's
-      // (e.g. opened from a notification while the app last searched
-      // another day) - refresh it so the trip is actually trackable here
-      // instead of silently getting deselected.
-      final depDate = widget.trip!['departure']?.toString().split(' ').first;
-      if (depDate != null && depDate.isNotEmpty) {
-        Future.microtask(() => ref.read(tripsProvider.notifier).loadTrips(date: depDate));
-      }
+      // Arrived here from a ticket or notification - make sure the trackable
+      // list is current so the pre-selected bus isn't silently deselected.
+      Future.microtask(
+        () => ref.read(activeTripsProvider.notifier).loadActiveTrips(),
+      );
     }
     // Keeps the "last update Xs ago" / stale badge fresh without new GPS data arriving.
     _staleTicker = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) setState(() {});
+    });
+    // A trip only becomes trackable 30 minutes before departure. Without this
+    // the tab - built once and kept alive - would never notice that moment
+    // arriving while the passenger sits waiting on it.
+    _activeTripsRefreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted) ref.read(activeTripsProvider.notifier).loadActiveTrips();
     });
   }
 
   @override
   void dispose() {
     _staleTicker?.cancel();
+    _activeTripsRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -229,34 +235,15 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
 
   @override
   Widget build(BuildContext context) {
-    final tripsState = ref.watch(tripsProvider);
-    final bookingsState = ref.watch(bookingsProvider);
     final gpsState = ref.watch(gpsTrackingProvider);
 
-    final now = DateTime.now();
-    final trackableTrips = tripsState.trips.where((trip) {
-      final hasBooking = bookingsState.bookings.any((booking) =>
-          booking['trip_id'] == trip['id'] &&
-          booking['status'] == 'confirmed');
-      if (!hasBooking) return false;
-
-      final departureStr = trip['departure']?.toString() ?? '';
-      final arrivalStr = trip['arrival']?.toString() ?? '';
-
-      if (departureStr.isEmpty) return false;
-
-      final departureTime = DateTime.tryParse(departureStr);
-      if (departureTime == null) return false;
-
-      final startTime = departureTime.subtract(const Duration(minutes: 30));
-      final arrivalTime = (arrivalStr.isNotEmpty)
-          ? DateTime.tryParse(arrivalStr)
-          : departureTime.add(const Duration(hours: 4));
-
-      if (arrivalTime == null) return false;
-
-      return now.isAfter(startTime) && now.isBefore(arrivalTime);
-    }).toList();
+    // Sourced from `GET /trips/my-active`, not the home-search list. That list
+    // deliberately hides buses departing within 30 minutes (they can no longer
+    // be booked) - which is precisely the window tracking needs. The server
+    // already restricts this to the caller's own ticketed trips inside the
+    // boarding-to-arrival window, so no further filtering is needed here.
+    final activeTripsState = ref.watch(activeTripsProvider);
+    final trackableTrips = activeTripsState.trips;
 
     // A single bus can legitimately appear more than once in trackableTrips
     // (e.g. two different routes/trips scheduled on the same vehicle) but the
@@ -294,8 +281,10 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
 
     LatLng? busPosition;
     if (isTracking) {
-      final lat = gpsState.trackedBusLocation!['latitude'] as double?;
-      final lng = gpsState.trackedBusLocation!['longitude'] as double?;
+      // JSON numbers arrive as int when the value has no fractional part, so a
+      // hard `as double` cast would throw on a whole-number coordinate.
+      final lat = (gpsState.trackedBusLocation!['latitude'] as num?)?.toDouble();
+      final lng = (gpsState.trackedBusLocation!['longitude'] as num?)?.toDouble();
       if (lat != null && lng != null) {
         busPosition = LatLng(lat, lng);
       }
@@ -433,10 +422,15 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
             // ── Interactive OpenStreetMap Container ──
             Expanded(
               child: Padding(
+                // PassengerMainScreen uses extendBody:true, so Scaffold already
+                // reports the floating nav pill's height as bottom padding and
+                // the SafeArea above has consumed it. Only a small visual gap is
+                // needed here - adding the pill's height again (the old 110)
+                // stacked two clearances and left a large dead strip.
                 padding: const EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  bottom: 110,
+                  left: 16,
+                  right: 16,
+                  bottom: 12,
                 ),
                 child: Container(
                   decoration: BoxDecoration(
@@ -458,7 +452,11 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                         mapController: _mapController,
                         options: MapOptions(
                           initialCenter: busPosition ?? _sriLankaCenter,
-                          initialZoom: isTracking ? 14.0 : 8.0,
+                          initialZoom: isTracking ? 14.0 : 7.6,
+                          // Stop pinch-zoom from stranding the user in grey
+                          // space far outside the island's tile coverage.
+                          minZoom: 6.0,
+                          maxZoom: 18.0,
                           onTap: (tapPosition, point) {
                             setState(() => _activeTooltip = null);
                           },
@@ -472,6 +470,10 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                             subdomains: const ['a', 'b', 'c', 'd'],
                             userAgentPackageName: 'lk.seaty.app',
                             maxZoom: 19,
+                            // Render a ring of tiles beyond the viewport and
+                            // hold them while panning, so the map doesn't show
+                            // half-drawn blank edges as it loads.
+                            keepBuffer: 4,
                           ),
 
                           // Route Polyline Layer
