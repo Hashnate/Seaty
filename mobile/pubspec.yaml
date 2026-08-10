@@ -39,7 +39,9 @@ dependencies:
   geolocator: ^11.0.0
   http: ^1.2.1
   url_launcher: ^6.2.5
-  web_socket_channel: ^2.4.5
+  # 3.x moves to package:web ^1.0.0, which modern firebase_core_web also needs.
+  # Staying on 2.x pins firebase_core to <3.5 and blocks Crashlytics.
+  web_socket_channel: ^3.0.3
   flutter_riverpod: ^2.5.1
   shared_preferences: ^2.5.5
   firebase_core: ^3.4.0
