@@ -481,6 +481,38 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        // This card navigates to the trip manifest, but nothing
+                        // said so - it read as a static summary. An explicit
+                        // affordance makes the tap target discoverable.
+                        if (activeTrip != null) ...[
+                          const SizedBox(height: 14),
+                          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.event_seat_rounded,
+                                size: 15,
+                                color: Color(0xFF2563EB),
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'View seat map & passenger manifest',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                              const Spacer(),
+                              const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 13,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),

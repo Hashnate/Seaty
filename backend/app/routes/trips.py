@@ -264,7 +264,7 @@ def list_trips(
         # Compute confirmed booked seats
         confirmed_b = db.query(models.Booking).filter(
             models.Booking.trip_id == trip.id,
-            models.Booking.booking_status == "confirmed"
+            models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES)
         ).all()
         b_seats = set()
         for cb in confirmed_b:
@@ -388,7 +388,7 @@ def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
     
     confirmed_b = db.query(models.Booking).filter(
         models.Booking.trip_id == trip.id,
-        models.Booking.booking_status == "confirmed"
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES)
     ).all()
     b_seats = set()
     for cb in confirmed_b:
@@ -581,7 +581,7 @@ def get_trip_manifest(
 
     bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
-        models.Booking.booking_status == "confirmed"
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES)
     ).all()
     
     manifest = []

@@ -5,6 +5,12 @@ import datetime
 import uuid
 from app.database import Base
 
+# A seat stays taken once its ticket is scanned. `booking_status` flips from
+# "confirmed" to "completed" at boarding time, so treating only "confirmed" as
+# occupied made boarded passengers disappear from seat counts, the conductor's
+# manifest and the revenue total - and briefly freed their seat for rebooking.
+OCCUPIED_BOOKING_STATUSES = ("confirmed", "completed")
+
 
 class BusCompany(Base):
     __tablename__ = "bus_companies"

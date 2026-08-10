@@ -30,7 +30,7 @@ def get_unavailable_seats(db: Session, trip_id: UUID) -> dict:
     # Get confirmed/paid booking seats
     confirmed_bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
-        models.Booking.booking_status == "confirmed",
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES),
         models.Booking.payment_status == "paid"
     ).all()
 
@@ -154,7 +154,7 @@ def get_trip_seat_availability(
     # Find genders for the booked seats
     confirmed_bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
-        models.Booking.booking_status == "confirmed",
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES),
         models.Booking.payment_status == "paid"
     ).all()
 

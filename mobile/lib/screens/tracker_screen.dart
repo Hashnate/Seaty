@@ -123,6 +123,8 @@ class PassengerTrackingTab extends ConsumerStatefulWidget {
 class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   String? _selectedBusId;
   Timer? _staleTicker;
+  /// Guards the one-shot auto-start above from re-firing on every rebuild.
+  bool _autoTrackStarted = false;
   Timer? _activeTripsRefreshTimer;
 
   @override
@@ -272,6 +274,25 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       });
     }
 
+    // Opened from a ticket or notification: the bus is pre-selected but nothing
+    // has opened the socket, so the map would sit idle until the user re-picked
+    // it by hand. Start once the trackable list has arrived and confirms it.
+    if (hasSelected && !gpsState.isTracking && !_autoTrackStarted) {
+      final selected = dedupedTrackableTrips.firstWhere(
+        (t) => t['reg'] == _selectedBusId,
+        orElse: () => <String, dynamic>{},
+      );
+      final vehicleId = selected['vehicle_id']?.toString() ?? '';
+      if (vehicleId.isNotEmpty) {
+        _autoTrackStarted = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref.read(gpsTrackingProvider.notifier).startTracking(vehicleId);
+          }
+        });
+      }
+    }
+
     final isTracking = gpsState.isTracking && gpsState.trackedBusLocation != null && hasSelected;
 
     final secondsSinceUpdate = gpsState.lastUpdateAt == null
@@ -406,7 +427,23 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                             _activeTooltip = 'bus';
                           });
                           if (val != null) {
-                            ref.read(gpsTrackingProvider.notifier).startTracking(val);
+                            // The dropdown is keyed by registration number for
+                            // display, but the tracking socket is keyed by the
+                            // vehicle's UUID - the same channel the conductor
+                            // broadcasts on. Passing the reg here subscribed the
+                            // passenger to a channel no driver ever joins, so no
+                            // position could arrive.
+                            final selected = dedupedTrackableTrips.firstWhere(
+                              (t) => t['reg'] == val,
+                              orElse: () => <String, dynamic>{},
+                            );
+                            final vehicleId =
+                                selected['vehicle_id']?.toString() ?? '';
+                            if (vehicleId.isNotEmpty) {
+                              ref
+                                  .read(gpsTrackingProvider.notifier)
+                                  .startTracking(vehicleId);
+                            }
                           } else {
                             ref.read(gpsTrackingProvider.notifier).stopTracking();
                           }
