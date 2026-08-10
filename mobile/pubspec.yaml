@@ -69,6 +69,12 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # firebase_core now ships Swift Package Manager support but firebase_messaging
+  # does not, so Flutter resolved firebase_core via SPM and firebase_messaging
+  # via CocoaPods - and the CocoaPods side then could not find a `firebase_core`
+  # podspec, failing `pod install`. Keeping every plugin on CocoaPods avoids the
+  # split. Revisit once firebase_messaging adopts SPM.
+  disable-swift-package-manager: true
   uses-material-design: true
   assets:
     - assets/images/
