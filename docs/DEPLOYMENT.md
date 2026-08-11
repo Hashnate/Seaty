@@ -45,14 +45,13 @@ app. Backend and admin releases are manual: pull, `docker compose up -d --build`
 
 ## Environment
 
-`backend/.env` is loaded via `env_file` and must exist before `docker compose up`. Start from
-`backend/.env.example`.
+`backend/.env` is loaded via `env_file` and must exist before `docker compose up`.
 
 | Variable                | Purpose                                | Notes                                              |
 | ----------------------- | -------------------------------------- | -------------------------------------------------- |
-| `ENVIRONMENT`           | `development` or `production`           | **Must be `production`** — see below               |
-| `DATABASE_URL`          | Postgres DSN                            | Overridden by Compose to the internal `db` host    |
-| `SECRET_KEY`            | JWT signing key                         | Overridden by Compose — see the warning below      |
+| `ENVIRONMENT`           | `development` or `production`           | **Must be `production`** — also gates `PAYMENT_MODE=mock` |
+| `DATABASE_URL`          | Postgres DSN                            | **Required** — no default; absent config stops the app |
+| `SECRET_KEY`            | JWT signing key                         | **Required** — no default, for the same reason     |
 | `NOTIFYLK_USER_ID`      | Notify.lk account                       | SMS OTP + booking confirmations                    |
 | `NOTIFYLK_API_KEY`      | Notify.lk key                           | Sent as a **URL query parameter** — see Security   |
 | `TEST_OTP_ACCOUNTS`     | Fixed-OTP accounts for store review     | `phone:code,phone:code`. See below                 |
@@ -131,10 +130,10 @@ Rules worth keeping:
 > Left unset the two line up and images work. Set it to `/app/uploads` and every uploaded image
 > 404s, with no error at upload time.
 
-`ENVIRONMENT` defaults to `development` in `config.py`, and development mode makes OTP a no-op:
-every code is `123456`, it is returned in the API response, and `AUTO` is accepted for any
-number. If `.env` is missing or the variable is unset, **the deployment silently runs in that
-mode**. Verify it explicitly after every deploy:
+`ENVIRONMENT` defaults to `development` in `config.py`. Development mode fixes every OTP at
+`123456` and echoes it in the send response — verification itself is never skipped, in any
+environment, and the `AUTO` literal is gone. It also gates `PAYMENT_MODE=mock`, which refuses to
+load in production. Verify it explicitly after every deploy:
 
 ```bash
 docker compose exec backend python -c "from app.config import settings; print(settings.ENVIRONMENT)"
@@ -190,18 +189,27 @@ docker run --rm -v seaty_seaty-uploads:/data -v "$PWD":/backup alpine \
 
 ## Nginx
 
-`admin/nginx.conf` is the only ingress. Two of its defaults contradict the application, and
-neither directive is set anywhere (verify with `docker compose exec admin nginx -T`):
+`admin/nginx.conf` is the only ingress. Shared proxy directives live in `admin/nginx-proxy.conf`
+and are `include`d by every backend-facing location — both files are copied in by the admin
+Dockerfile, so a change to either needs an image rebuild, not just a restart.
 
-| Default | Consequence | Fix |
-| ------- | ----------- | --- |
-| `client_max_body_size 1m` | The upload endpoints accept 5 MB, so any image between 1 and 5 MB — a normal phone photo — is rejected by Nginx with a 413 that never reaches FastAPI | `client_max_body_size 6m;` |
-| `proxy_read_timeout 60s` | The notifications WebSocket is receive-only and sends no keepalive, so Nginx closes it after 60 s of quiet. The app never reconnects it, so **in-app live notifications stop about a minute after sign-in** (FCM push still works, which masks it) | `proxy_read_timeout 3600s;` on the proxied locations, plus an app-level ping and client reconnect |
+Verify what is actually in effect with `docker compose exec admin nginx -T`.
 
-Also note that the `api.seaty.hashnate.com` block proxies `/` wholesale, which publishes FastAPI's
-`/docs`, `/redoc`, and `/openapi.json` — a complete map of every endpoint, including the
-unauthenticated ones. No security headers (HSTS, CSP, `X-Frame-Options`,
-`X-Content-Type-Options`) are set in either config.
+| Setting | Value | Why |
+| ------- | ----- | --- |
+| `client_max_body_size` | `6m` | The default 1 MB rejected any image between 1 and 5 MB — a normal phone photo — with a 413 that never reached FastAPI |
+| `proxy_read_timeout` | `3600s` | The default 60 s silently closed the receive-only notifications WebSocket every minute of quiet |
+| `limit_req` on `/auth/login` | 10/min, burst 5 | Nothing capped login attempts; see [SECURITY.md](SECURITY.md) #32 |
+| `limit_req` on `/auth/otp/send` | 20/min, burst 10 | Each call costs an SMS |
+| `limit_req` on `/auth/phone/check` | 30/min, burst 20 | User-enumeration oracle |
+| Security headers | nosniff, `X-Frame-Options: DENY`, `Referrer-Policy` | On all three server blocks |
+
+Rate limits are **per source address**, and Sri Lankan carriers NAT heavily. If real users start
+seeing `429`s, raise the passenger-facing zones (`auth_check`, `auth_otp`) before the login zone.
+
+Still absent: HSTS (belongs at the TLS terminator in front of this container) and a CSP. The
+`api.seaty.hashnate.com` block also proxies `/` wholesale, which publishes FastAPI's `/docs`,
+`/redoc` and `/openapi.json`.
 
 ## Capacity and scaling
 
@@ -303,16 +311,15 @@ compromisable as it stands.
       docker compose exec backend python create_admin.py ops@example.com "Ops Team"
       ```
 - [ ] **Change the `admin@seaty.lk` password.** It is currently `password`, seeded deliberately
-      as a development credential. Combined with the absent login rate limiting below, that is a
-      one-guess compromise of the account that controls settings, refunds, and every company's
-      data. The script enforces 12 characters unless `--allow-weak-password` is passed.
-- [ ] **Rate-limit `/auth/login`** (#32). Nothing caps attempts and there is no lockout, so any
-      admin password is brute-forceable at line speed.
+      as a development credential. Rate limiting now caps guessing at 10/min, which buys time but
+      does not make `password` acceptable on the account that controls settings, refunds, and
+      every company's data. The script enforces 12 characters unless `--allow-weak-password`.
+- [x] ~~Rate-limit `/auth/login`~~ — done: 10/min per IP, verified (#32)
 - [ ] The remaining authentication gaps closed — the unauthenticated payment completion/fail
       endpoints
 - [ ] `ENVIRONMENT=production` confirmed on the running container (verified `production` today)
 - [ ] `users.fcm_token` present in `schema.sql` and `migrate_db.py`
-- [ ] `client_max_body_size` and `proxy_read_timeout` set in `admin/nginx.conf`
+- [x] ~~`client_max_body_size` and `proxy_read_timeout` set in `admin/nginx.conf`~~ — done
 - [ ] Connection pool raised and `pool_pre_ping` enabled, or sessions no longer held across
       WebSocket lifetimes
 - [ ] `CORS allow_origins` narrowed from `["*"]` to the real client origins

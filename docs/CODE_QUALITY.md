@@ -352,9 +352,17 @@ Verified against the live database:
 `notifications` is the one that will hurt first: 361 rows today, and every app foreground fetches
 the full list.
 
-### P8 — Nginx defaults contradict the application
+### P8 — Nginx defaults contradicted the application — **fixed**
 
-`admin/nginx.conf` sets neither directive; confirmed with `nginx -T` on the running container.
+Both directives are now set in [`admin/nginx.conf`](../admin/nginx.conf) —
+`client_max_body_size 6m` and `proxy_read_timeout 3600s` — with the shared proxy settings pulled
+into [`admin/nginx-proxy.conf`](../admin/nginx-proxy.conf) and `include`d, so a future timeout fix
+cannot land in three of the four locations and be missed in the fourth.
+
+Verified: a 2 MB upload now reaches FastAPI (was a 413 at Nginx), 8 MB is refused at the proxy as
+intended, and `nginx -T` shows both directives in effect.
+
+The original problem, for the record:
 
 - **`client_max_body_size` defaults to 1 MB.** The upload endpoints advertise and enforce a 5 MB
   limit ([`uploads.py:14`](../backend/app/routes/uploads.py#L14)). Anything between 1 and 5 MB —
@@ -375,9 +383,10 @@ the full list.
   Contrast `gps_tracking_provider.dart`, which has a proper 1/2/4/8/15/30 s backoff on both its
   sockets.
 
-**Fix**: `client_max_body_size 6m;` and `proxy_read_timeout 3600s;` on the proxied locations, an
-application-level ping, and reconnect-with-backoff on the notifications socket to match the GPS
-one.
+**Still open on the client side**: the notifications socket has no application-level ping and no
+reconnect-with-backoff. The proxy no longer cuts it at 60 s, but any other drop — carrier handover,
+backgrounding, a backend restart — still ends the feed for the rest of the session. It should
+match the GPS provider's 1/2/4/8/15/30 s backoff.
 
 ---
 

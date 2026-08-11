@@ -187,8 +187,13 @@ combined figure.
 | `gateway_response` | jsonb | yes | | Sandbox marker or raw gateway payload |
 | `created_at` | timestamptz | no | `now()` | |
 
-Indexes: `idx_payments_booking`, `idx_payments_status`. Refunds are bookkeeping only — no money
-moves, because no real gateway is wired up.
+Indexes: `idx_payments_booking`, `idx_payments_status`, and `uq_payments_gateway_txn` — a unique
+index on `gateway_transaction_id`, so a Bancstac `reqid` can never resolve to two payments and
+double-confirm a booking.
+
+`gateway_transaction_id` holds the gateway's `reqid`; `payment_gateway` records the mode it was
+created under (`bancstac:live`, `bancstac:mock`). Refunds are still bookkeeping only — Bancstac
+documents no refund operation, so nothing moves money. See [PAYMENTS.md](PAYMENTS.md).
 
 ### `seat_holds`
 

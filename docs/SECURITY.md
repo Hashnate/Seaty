@@ -551,24 +551,37 @@ a complete, accurate map of every endpoint, including the unauthenticated ones i
 **Fix**: `docs_url=None, redoc_url=None, openapi_url=None` in production, or deny those paths at
 the proxy.
 
-### 32. No rate limiting on login, and no security headers anywhere
+### 32. No rate limiting on login, and no security headers — **largely fixed**
 
-> [!CAUTION]
-> **This is now the most exposed thing on the platform.** The `admin@seaty.lk` password was
-> seeded as `password` at the team's request as a development credential. `/auth/login` has no
-> attempt cap and no lockout, so that account — which controls platform settings, refunds,
-> broadcasts, and every company's data — falls to the first guess of any credential-stuffing
-> list. Either change the password or add the rate limiting below before this host is public.
+Nothing capped login attempts, so any admin password was brute-forceable at line speed. That
+mattered acutely because `admin@seaty.lk` was seeded with the password `password` as a development
+credential.
 
-`/auth/otp/send` is now rate-limited (see #10), but nothing else is: not `/auth/login`, and not
-`/auth/phone/check` (a free user-enumeration oracle that also reveals the role). No `slowapi`, no
-Nginx `limit_req`, nothing.
+**What changed.** Per-IP `limit_req` zones in [`admin/nginx.conf`](../admin/nginx.conf):
 
-Neither Nginx config sets `Strict-Transport-Security`, `X-Content-Type-Options`,
-`X-Frame-Options`, `Referrer-Policy`, or a CSP. The admin SPA keeps its token in `localStorage`
-(#17), so the absent CSP is the layer that would matter most.
+| Endpoint | Rate | Burst | Why |
+| -------- | ---- | ----- | --- |
+| `/auth/login` | 10/min | 5 | Staff only, so a tight cap is safe |
+| `/auth/phone/login` | 10/min | 10 | |
+| `/auth/otp/send` | 20/min | 10 | Costs an SMS per call; complements the per-number cap in #10 |
+| `/auth/phone/check` | 30/min | 20 | User-enumeration oracle |
 
-**Fix**: `limit_req` zones on the auth paths at minimum, and a shared `add_header` block.
+Verified: twelve rapid login attempts returned `401 ×6` then `429 ×6`, and a genuine sign-in
+succeeded once the window reopened — throttled, not locked out.
+
+`X-Content-Type-Options`, `X-Frame-Options: DENY` and `Referrer-Policy` are now set on all three
+server blocks.
+
+> [!NOTE]
+> **Tuning caveat.** These are per source address, and Sri Lankan mobile carriers NAT heavily —
+> many real users can share one IP. The passenger-facing zones are deliberately looser than the
+> login zone for that reason. If legitimate users start seeing `429`s at scale, raise
+> `auth_check`/`auth_otp` before touching `auth_login`.
+
+**Still open**: no HSTS (belongs at the TLS terminator in front of this container, not here) and
+no CSP. The admin SPA keeps its token in `localStorage` (#17), so a CSP is the layer that would
+matter most. `admin@seaty.lk` should still be given a real password — rate limiting raises the
+cost of guessing it, it does not make `password` an acceptable credential.
 
 ### 33. Admin inputs are unvalidated in ways that break the platform
 

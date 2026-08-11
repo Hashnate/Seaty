@@ -35,25 +35,31 @@ fleets, recurring schedules, and staff. Conductors scan tickets and mark boardin
 | [Code quality](docs/CODE_QUALITY.md)       | Correctness bugs, data-loss paths, performance ceilings, dead code |
 
 > [!WARNING]
-> **Not ready for real money yet.** Payments can still be completed without authentication
-> (`/payments/sandbox/complete/{txn}`), `POST /auth/register` is unauthenticated and accepts any
-> `role`, and there is no real payment gateway. See [docs/SECURITY.md](docs/SECURITY.md),
-> findings #2, #3, #26, #27.
+> **Not taking money yet.** The Bancstac gateway is integrated but unproven — `PAYMENT_MODE` is
+> `off`, the live path has never processed a transaction, and there is nowhere to test it without
+> real money until a deployment exists with `ENVIRONMENT=development`. See
+> [docs/PAYMENTS.md](docs/PAYMENTS.md).
 >
-> Capacity is also limited to roughly **15 concurrent signed-in users** by the database
-> connection pool; see [docs/CODE_QUALITY.md](docs/CODE_QUALITY.md) P1.
+> Capacity is limited to roughly **15 concurrent signed-in users** by the database connection
+> pool — one busload. See [docs/CODE_QUALITY.md](docs/CODE_QUALITY.md) P1; it is the largest
+> remaining risk to a launch day.
 >
-> *Closed so far:* #22 shared password · #23/#5 secrets in the image and Compose (`SECRET_KEY` and
-> the DB password rotated) · #24 ungated trip edit · #1/#4/#25 phone login now requires a verified,
-> single-use OTP · #10 OTP rate limiting.
+> *Closed:* #22 shared password · #23/#5 secrets in the image, Compose and config fallbacks
+> (`SECRET_KEY` and DB password rotated) · #24 ungated trip edit · #1/#4/#25 phone login now
+> requires a verified, single-use OTP · #10 OTP rate limiting · #2 admin-only registration ·
+> #3/#26/#27 payment auth · #32 login rate limiting and security headers.
+>
+> *Open:* Notify.lk and Firebase credentials still hold their exposed values (deferred) · #6/#28
+> cross-company PII on trip manifests · #13/#29 `None == None` company scoping · P1 connection
+> pool · C3 deleting a trip or schedule destroys paid bookings.
 
 > [!IMPORTANT]
 > The mobile app must ship together with the current backend. `POST /auth/phone/login` now requires
 > an `otp_code`; older app builds send only `{phone_number, role}` and receive `422`.
 >
-> The console admin is `admin@seaty.lk` with the development password `password`. `/auth/login`
-> is not rate-limited, so **change it before this host is reachable publicly** —
-> `docker compose exec backend python create_admin.py admin@seaty.lk "Seaty Super Admin"`.
+> The console admin is `admin@seaty.lk` with the development password `password`. Login is now
+> rate-limited to 10/min per IP, but that is a delay, not a defence — **give it a real password
+> before launch**: `docker compose exec backend python create_admin.py admin@seaty.lk "Seaty Super Admin"`.
 
 ## Quick start
 
