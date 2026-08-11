@@ -31,13 +31,21 @@
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
   flex-shrink: 0;
+  text-decoration: none;
 }
 
-.nav-logo img {
-  height: 36px;
+.nav-logo img,
+.nav-logo-img {
+  height: 75px;
   width: auto;
+  object-fit: contain;
+  display: block;
+  transition: transform var(--dur-fast) var(--ease-out-back);
+}
+
+.nav-logo:hover img {
+  transform: scale(1.05);
 }
 
 .nav-links {
@@ -331,6 +339,51 @@
   margin-bottom: 0;
 }
 
+.contact-card {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  height: 100%;
+}
+
+.contact-card .feature-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-accent-soft);
+  margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-glow-blue);
+  flex-shrink: 0;
+}
+
+.contact-card .feature-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke: #fff;
+}
+
+.contact-card h3 {
+  font-size: 1.15rem;
+  margin-bottom: var(--space-2);
+}
+
+.contact-card p {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--space-3);
+  flex-grow: 1;
+}
+
+.contact-card .btn-ghost {
+  padding: 0;
+  font-size: 0.92rem;
+}
+
 .glass-card {
   background: rgba(248, 250, 252, 0.06);
   border: 1px solid var(--border-color-dark);
@@ -417,13 +470,13 @@
 
 .phone-screens-slider {
   display: flex;
-  width: 300%;
+  width: 500%;
   height: 100%;
-  animation: phoneScreenSlide 9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  animation: phoneScreenSlide 12s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 
 .phone-screens-slider img {
-  width: 33.3333%;
+  width: 20%;
   height: 100%;
   object-fit: cover;
   object-position: top center;
@@ -431,17 +484,20 @@
 }
 
 @keyframes phoneScreenSlide {
-  0%, 28% {
+  0%, 20% {
     transform: translateX(0%);
   }
-  33%, 61% {
-    transform: translateX(-33.3333%);
+  25%, 45% {
+    transform: translateX(-20%);
   }
-  66%, 94% {
-    transform: translateX(-66.6666%);
+  50%, 70% {
+    transform: translateX(-40%);
+  }
+  75%, 95% {
+    transform: translateX(-60%);
   }
   100% {
-    transform: translateX(0%);
+    transform: translateX(-80%);
   }
 }
 
@@ -682,6 +738,7 @@
   display: grid;
   grid-template-columns: 1.4fr repeat(3, 1fr);
   gap: var(--space-10);
+  align-items: start;
   padding-bottom: var(--space-12);
   border-bottom: 1px solid var(--border-color-dark);
 }
@@ -698,14 +755,38 @@
   }
 }
 
-.footer-brand img {
-  height: 32px;
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.footer-brand .footer-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  text-decoration: none;
   margin-bottom: var(--space-4);
+  margin-top: 0;
+  padding: 0;
+}
+
+.footer-brand img,
+.footer-logo img {
+  height: 72px;
+  width: auto;
+  object-fit: contain;
+  display: block;
+  filter: brightness(0) invert(1);
+  margin: 0;
+  margin-left: -4px;
 }
 
 .footer-brand p {
   color: var(--text-on-dark-muted);
   max-width: 32ch;
+  margin-top: 0;
 }
 
 .footer-col h4 {
@@ -713,7 +794,10 @@
   font-size: 0.85rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  margin-bottom: var(--space-5);
+  margin-top: 0;
+  padding-top: 16px;
+  margin-bottom: var(--space-4);
+  line-height: 1.2;
 }
 
 .footer-col li {
@@ -1424,11 +1508,499 @@
   }
 }
 
+/* ---------- Compact Version for Support FAQ & Modal Views ---------- */
+.seaty-seat-card-demo.compact-seat-demo {
+  width: min(290px, 100%);
+  padding: 12px;
+  border-radius: 14px;
+  margin: var(--space-4) 0 0 0;
+}
+
+.compact-seat-demo .seat-map-legend {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+}
+
+.compact-seat-demo .legend-item {
+  font-size: 0.7rem;
+  gap: 4px;
+}
+
+.compact-seat-demo .legend-pill {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.compact-seat-demo .driver-cabin-bar {
+  padding: 6px 10px;
+  font-size: 0.62rem;
+}
+
+.compact-seat-demo .driver-cabin-bar svg {
+  width: 11px;
+  height: 11px;
+}
+
+.compact-seat-demo .cabin-notch {
+  width: 24px;
+  height: 3px;
+}
+
+.compact-seat-demo .bus-seats-container {
+  padding: 8px 6px;
+  gap: 5px;
+}
+
+.compact-seat-demo .seat-pair {
+  gap: 4px;
+}
+
+.compact-seat-demo .aisle-indicator {
+  font-size: 0.65rem;
+}
+
+.compact-seat-demo .seat-item {
+  width: 26px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  border-width: 1px;
+}
+
+.compact-seat-demo .gender-badge {
+  top: -4px;
+  right: -4px;
+  width: 11px;
+  height: 11px;
+}
+
+.compact-seat-demo .gender-badge svg {
+  width: 7px;
+  height: 7px;
+}
+
 .seat-item:hover,
 .seat-item.is-hovered {
   transform: scale(1.16) !important;
   z-index: 10;
   box-shadow: 0 6px 16px rgba(15, 23, 42, 0.22) !important;
+}
+
+/* ---------- Feature Spotlight Wide Cards for Support & Landing Pages ---------- */
+.spotlight-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 24px);
+  padding: var(--space-10);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.05);
+  margin-bottom: var(--space-20);
+  transition: transform var(--dur-base), box-shadow var(--dur-base);
+}
+
+.spotlight-card:hover {
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.08);
+}
+
+/* ---------- Unique Card Patterns for Support Page (Seaty Brand Color Palette) ---------- */
+
+/* Pattern 1: Seat Selection Seaty Royal Blue Accent Card */
+.spotlight-card-seats {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid rgba(37, 99, 235, 0.18);
+  border-radius: 24px;
+  padding: var(--space-10);
+  box-shadow: 0 16px 40px rgba(37, 99, 235, 0.07);
+  margin-bottom: var(--space-16);
+}
+
+.spotlight-card-seats .spotlight-visual-col {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 20px;
+  padding: var(--space-6);
+}
+
+/* Pattern 2: GPS Telemetry Seaty Navy Deep Card (Reversed Layout) */
+.spotlight-card-gps {
+  background: linear-gradient(135deg, var(--c-navy-deep, #040d1a) 0%, var(--c-navy, #081a30) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(147, 197, 253, 0.18);
+  border-radius: 24px;
+  padding: var(--space-10);
+  box-shadow: 0 20px 50px rgba(4, 13, 26, 0.35);
+  margin-bottom: var(--space-16);
+}
+
+.spotlight-card-gps h3 {
+  color: #ffffff !important;
+  font-size: 1.65rem;
+  font-weight: 800;
+  line-height: 1.25;
+  margin-bottom: var(--space-4);
+}
+
+.spotlight-card-gps p {
+  color: rgba(248, 250, 252, 0.88) !important;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  font-weight: 450;
+  opacity: 0.88 !important;
+}
+
+.spotlight-card-gps .spotlight-checklist-item {
+  color: #ffffff !important;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.spotlight-card-gps .spotlight-checklist-item .check-icon {
+  background: rgba(6, 182, 212, 0.22);
+  color: var(--c-cyan-300, #22d3ee);
+}
+
+.spotlight-card-gps .spotlight-visual-col {
+  background: var(--bg-dark-surface, #0e2440);
+  border: 1px solid rgba(147, 197, 253, 0.15);
+  border-radius: 20px;
+  padding: var(--space-6);
+}
+
+.spotlight-card-gps-grid {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: var(--space-12);
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .spotlight-card-gps-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-8);
+  }
+}
+
+/* Pattern 3: Digital QR Ticket Seaty Coral Accent Card */
+.spotlight-card-qr {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-left: 6px solid var(--c-coral, #ff6b4a);
+  border-radius: 24px;
+  padding: var(--space-10);
+  box-shadow: 0 16px 40px rgba(255, 107, 74, 0.08);
+  margin-bottom: var(--space-16);
+}
+
+.spotlight-card-qr .spotlight-visual-col {
+  background: linear-gradient(135deg, #fff5f2 0%, #ffebe6 100%);
+  border: 1px solid rgba(255, 107, 74, 0.2);
+  border-radius: 20px;
+  padding: var(--space-6);
+}
+
+/* Pattern 4: Operator Onboarding Seaty Cyan Accent Card */
+.spotlight-card-operator {
+  background: linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%);
+  border: 1.5px solid rgba(6, 182, 212, 0.2);
+  border-radius: 24px;
+  padding: var(--space-10);
+  box-shadow: 0 16px 40px rgba(6, 182, 212, 0.07);
+  margin-bottom: var(--space-16);
+}
+
+.spotlight-card-operator .spotlight-visual-col {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.spotlight-card-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: var(--space-12);
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .spotlight-card-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-8);
+  }
+}
+
+.spotlight-content-col h3 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: var(--space-4);
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.spotlight-content-col p {
+  font-size: 1.02rem;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin-bottom: var(--space-6);
+}
+
+.spotlight-checklist {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.spotlight-checklist-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.spotlight-checklist-item .check-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--c-blue);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.spotlight-visual-col {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-6);
+  background: var(--bg-surface-alt);
+  border-radius: var(--radius-lg, 18px);
+  border: 1px solid var(--border-color);
+  width: 100%;
+}
+
+/* ---------- Interactive QR Scanner Animation UI ---------- */
+.qr-scanner-demo {
+  position: relative;
+  width: min(280px, 100%);
+  background: #0f172a;
+  border-radius: 24px;
+  padding: 12px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.qr-scanner-viewport {
+  position: relative;
+  width: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #000000;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.6);
+}
+
+.qr-scanner-img {
+  width: 100%;
+  height: 270px;
+  object-fit: cover;
+  display: block;
+  filter: brightness(0.95);
+}
+
+/* Corner Reticle Brackets */
+.scanner-corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border: 3.5px solid #10b981;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.corner-tl { top: 12px; left: 12px; border-right: none; border-bottom: none; border-top-left-radius: 8px; }
+.corner-tr { top: 12px; right: 12px; border-left: none; border-bottom: none; border-top-right-radius: 8px; }
+.corner-bl { bottom: 12px; left: 12px; border-right: none; border-top: none; border-bottom-left-radius: 8px; }
+.corner-br { bottom: 12px; right: 12px; border-left: none; border-top: none; border-bottom-right-radius: 8px; }
+
+/* Laser Scanner Beam */
+.scanner-laser-beam {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #10b981, #34d399, #10b981, transparent);
+  box-shadow: 0 0 14px #10b981, 0 0 24px #34d399;
+  z-index: 6;
+  animation: qrLaserScan 3.2s ease-in-out infinite;
+}
+
+@keyframes qrLaserScan {
+  0% { top: 10%; opacity: 0.2; }
+  15% { opacity: 1; }
+  50% { top: 82%; opacity: 1; }
+  65% { opacity: 1; }
+  100% { top: 10%; opacity: 0.2; }
+}
+
+/* Success Pop-up Banner */
+.scanner-success-toast {
+  position: absolute;
+  bottom: 12px;
+  left: 10px;
+  right: 10px;
+  background: rgba(15, 23, 42, 0.94);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(16, 185, 129, 0.6);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  z-index: 10;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: qrSuccessPulse 3.2s ease-in-out infinite;
+}
+
+@keyframes qrSuccessPulse {
+  0%, 42% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+  }
+  52%, 88% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+.success-badge-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #10b981;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1rem;
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.7);
+  flex-shrink: 0;
+}
+
+.success-toast-text h4 {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #10b981;
+  margin: 0 0 2px 0;
+}
+
+.success-toast-text p {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  margin: 0;
+  line-height: 1.2;
+}
+
+/* ---------- Interactive Operator Portal Visual Component ---------- */
+.operator-portal-demo {
+  width: min(320px, 100%);
+  background: #0f172a;
+  border-radius: 20px;
+  padding: 12px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.portal-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 10px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+}
+
+.portal-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-size: 0.8rem;
+}
+
+.portal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.6; }
+}
+
+.portal-status-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.portal-body {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.portal-preview-img {
+  width: 100%;
+  height: 185px;
+  object-fit: cover;
+  display: block;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.portal-metrics-overlay {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.portal-metric-card {
+  background: rgba(30, 41, 59, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.metric-label {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.metric-val {
+  font-size: 0.85rem;
+  color: #10b981;
+  font-weight: 800;
 }
 
 /* ---------- Seaty Live GPS Highway Map & Smartphone Frame Component ---------- */
