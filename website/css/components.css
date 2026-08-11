@@ -1312,6 +1312,34 @@
   margin: 0;
 }
 
+/* Route Status Badge */
+.route-badge {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 2;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.route-badge.active {
+  background: rgba(15, 23, 42, 0.9);
+  color: #22d3ee;
+  border: 1px solid rgba(6, 182, 212, 0.8);
+}
+
+.route-badge.upcoming {
+  background: rgba(15, 23, 42, 0.9);
+  color: #ff8a70;
+  border: 1px solid rgba(255, 107, 74, 0.8);
+}
+
 /* ---------- Realistic Seaty Luxury Bus Live Seat Map Component ---------- */
 .seaty-seat-card-demo {
   background: #ffffff;
