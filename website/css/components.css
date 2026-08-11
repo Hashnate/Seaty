@@ -159,6 +159,15 @@
 }
 
 @media (max-width: 860px) {
+  :root {
+    --header-h: 60px;
+  }
+
+  .nav-logo img,
+  .nav-logo-img {
+    height: 50px;
+  }
+
   .nav-links {
     display: none;
   }
@@ -169,6 +178,17 @@
 
   .nav-toggle {
     display: flex;
+    width: 36px;
+    height: 36px;
+    gap: 4px;
+  }
+
+  .nav-toggle[aria-expanded="true"] span:nth-child(1) {
+    transform: translateY(6px) rotate(45deg);
+  }
+
+  .nav-toggle[aria-expanded="true"] span:nth-child(3) {
+    transform: translateY(-6px) rotate(-45deg);
   }
 }
 
