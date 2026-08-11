@@ -55,7 +55,7 @@ app. Backend and admin releases are manual: pull, `docker compose up -d --build`
 | `NOTIFYLK_USER_ID`      | Notify.lk account                       | SMS OTP + booking confirmations                    |
 | `NOTIFYLK_API_KEY`      | Notify.lk key                           | Sent as a **URL query parameter** — see Security   |
 | `TEST_OTP_ACCOUNTS`     | Fixed-OTP accounts for store review     | `phone:code,phone:code`. See below                 |
-| `NOTIFYLK_SENDER_ID`    | Registered sender name                  | Defaults to `NotifyDEMO`                           |
+| `NOTIFYLK_SENDER_ID`    | Registered sender mask                  | Currently `NotifyDEMO` — **the shared demo sender**. See below |
 | `NOTIFYLK_API_URL`      | Gateway endpoint                        | Defaults to the live Notify.lk URL                 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Firebase service account path  | Mounted read-only at `/app/firebase-service-account.json` |
 | `UPLOAD_DIR`            | Where uploads are written               | **Do not set it** — see below                      |
@@ -101,6 +101,35 @@ docker compose restart admin                     # nginx re-resolves the backend
 
 Use an **alphanumeric** password — it is embedded in a URL, so `@ : / ? #` will break parsing.
 Rotating `SECRET_KEY` at the same time costs nothing extra, since both need the same restart.
+
+### SMS delivery latency
+
+If OTPs arrive late, check the sender ID before suspecting the application. Measured against the
+live gateway, Seaty's own side is not the bottleneck:
+
+```
+DNS resolve              4 ms
+TCP connect            116 ms
+TLS handshake          181 ms
+full API round trip    715 ms   ->  {"status":"success","data":"Sent"}
+```
+
+Notify.lk accepts the message in under a second. Everything after that — their queue, the carrier,
+the handset — is outside this system.
+
+**`NOTIFYLK_SENDER_ID` is `NotifyDEMO`, Notify.lk's shared demo mask.** Sri Lankan carriers
+deprioritise unregistered shared senders, which is the usual explanation for multi-minute OTP
+delays. Registering a branded mask with Notify.lk (and setting it here) is the fix, and it is an
+account action rather than a code change.
+
+Delivery is now observable — every send logs its outcome and timing:
+
+```
+docker compose logs backend | grep -i notify
+2026-08-11 10:13:36 INFO app.services.sms_service: SMS accepted by Notify.lk for 947XXXXXXXX in 739ms (Sent)
+```
+
+A rejection logs at ERROR and the endpoint returns `502` instead of falsely reporting success.
 
 ### App Store / Play review accounts
 

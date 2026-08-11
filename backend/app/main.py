@@ -1,3 +1,13 @@
+import logging
+
+# Uvicorn leaves the root logger at WARNING, so every logger.info in this
+# codebase was silently discarded - including the Notify.lk response, the only
+# record of whether an OTP was actually accepted for delivery.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings

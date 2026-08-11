@@ -438,12 +438,14 @@ changes, so what looks like a notification helper is load-bearing for unrelated 
 1,065; `MyTripsPage.tsx` 1,087 and `MyFleetPage.tsx` 948 on the admin side. Each mixes
 networking, state, and layout in one widget/component tree.
 
-**Logging.** 20 bare `print()` calls in the backend and 86 `debugPrint` in the app. Only
-`sms_service.py` uses the `logging` module — and because the root logger is left at its default
-level, its `logger.info` calls (including the Notify.lk response body, the only record of whether
-an SMS actually sent) are silently discarded, while `logger.error` gets through. Several prints
-leak data: FCM token prefixes and user names
-([`auth.py:316`](../backend/app/routes/auth.py#L316),
+**Logging.** 20 bare `print()` calls in the backend and 86 `debugPrint` in the app. `main.py` now
+calls `logging.basicConfig(level=INFO)`, so module loggers are actually emitted — previously
+uvicorn left the root logger at WARNING and every `logger.info` in the codebase was silently
+discarded, including the Notify.lk response, the only record of whether an OTP was accepted for
+delivery. The rest of the backend should move off `print()` onto module loggers to match.
+
+Several prints leak data: FCM token prefixes and user names
+([`auth.py`](../backend/app/routes/auth.py),
 [`notifications.py:295`](../backend/app/routes/notifications.py#L295)).
 
 **Duplicate route registration.** `/auth/fcm-token`, `/auth/me/fcm-token`, and

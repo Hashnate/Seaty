@@ -298,7 +298,17 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
     otp_send_log.setdefault(target_norm, []).append(now)
 
     message = f"Your Seaty verification code is {otp_code}. Valid for 5 minutes."
-    send_sms(payload.phone_number, message)
+    sent, detail = send_sms(payload.phone_number, message)
+
+    if not sent and not is_dev:
+        # The gateway's verdict used to be discarded and this always reported
+        # success, so a rejected SMS left the user waiting for a code that was
+        # never coming. The code stays in the store so a resend can still use
+        # it, but the client is told the truth.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="We could not send the verification code right now. Please try again.",
+        )
 
     return {
         "success": True,

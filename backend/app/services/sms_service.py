@@ -1,10 +1,14 @@
+import json
 import logging
+import time
 import urllib.parse
 import urllib.request
-import json
+from typing import Tuple
+
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
 
 def format_phone_number(raw_phone: str) -> str:
     """
@@ -25,17 +29,31 @@ def format_phone_number(raw_phone: str) -> str:
         return "94" + digits
     return digits
 
-def send_sms(to_phone: str, message: str) -> bool:
-    """
-    Send an SMS using the Notify.lk Gateway API.
-    API Specs:
-    Endpoint: https://app.notify.lk/api/v1/send
-    Params: user_id, api_key, sender_id, to, message
+
+def send_sms(to_phone: str, message: str) -> Tuple[bool, str]:
+    """Send an SMS through the Notify.lk gateway.
+
+    Returns ``(ok, detail)``. `detail` is safe to log but not to show a user
+    verbatim - it can carry gateway wording.
+
+    Two things this deliberately does that the previous version did not:
+
+    * **Reads the response body.** Notify.lk answers HTTP 200 with
+      ``{"status": "error", ...}`` for a rejected send - out of credit, bad
+      number, unapproved sender. Treating HTTP 200 as success meant a failed
+      SMS was reported as sent and the user waited for a code that was never
+      going to arrive.
+    * **Logs at a level that is actually emitted, with timing.** These calls
+      used to log at INFO while the root logger sat at WARNING, so the gateway's
+      reply - the only record of whether a message was accepted - was discarded.
+
+    Credentials go in the query string because that is what the vendor's API
+    requires; they will appear in any intermediary's access log.
     """
     formatted_to = format_phone_number(to_phone)
     if not formatted_to:
-        logger.error(f"Cannot send SMS: invalid phone number '{to_phone}'")
-        return False
+        logger.error("SMS not sent: could not parse phone number %r", to_phone)
+        return False, "invalid phone number"
 
     params = {
         "user_id": settings.NOTIFYLK_USER_ID,
@@ -44,10 +62,9 @@ def send_sms(to_phone: str, message: str) -> bool:
         "to": formatted_to,
         "message": message,
     }
-
     url = f"{settings.NOTIFYLK_API_URL}?{urllib.parse.urlencode(params)}"
-    logger.info(f"Sending SMS to {formatted_to} via Notify.lk Gateway...")
 
+    started = time.perf_counter()
     try:
         req = urllib.request.Request(
             url,
@@ -55,9 +72,29 @@ def send_sms(to_phone: str, message: str) -> bool:
             method="GET",
         )
         with urllib.request.urlopen(req, timeout=10) as response:
-            res_body = response.read().decode("utf-8")
-            logger.info(f"Notify.lk response ({response.status}): {res_body}")
-            return response.status == 200
+            body = response.read().decode("utf-8")
+            status = response.status
     except Exception as e:
-        logger.error(f"Failed to send SMS via Notify.lk to {formatted_to}: {e}")
-        return False
+        elapsed = (time.perf_counter() - started) * 1000
+        logger.error("SMS to %s failed after %.0fms: %s", formatted_to, elapsed, e)
+        return False, str(e)
+
+    elapsed = (time.perf_counter() - started) * 1000
+
+    ok, detail = False, body[:200]
+    if status == 200:
+        try:
+            parsed = json.loads(body)
+            ok = str(parsed.get("status", "")).lower() == "success"
+            detail = str(parsed.get("data") or parsed.get("message") or body)[:200]
+        except ValueError:
+            detail = f"unparseable response: {body[:200]}"
+
+    if ok:
+        logger.info("SMS accepted by Notify.lk for %s in %.0fms (%s)",
+                    formatted_to, elapsed, detail)
+    else:
+        logger.error("SMS REJECTED by Notify.lk for %s after %.0fms (HTTP %s): %s",
+                     formatted_to, elapsed, status, detail)
+
+    return ok, detail
