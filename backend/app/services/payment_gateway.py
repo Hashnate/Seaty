@@ -158,12 +158,16 @@ class MockGateway:
     # untested in mock, which is exactly the check most worth exercising.
     _sessions: dict[str, dict] = {}
 
-    def __init__(self) -> None:
-        if settings.ENVIRONMENT.lower() in ("prod", "production"):
-            # Mock marks bookings paid without charging anyone. In production
-            # that is a free-bookings switch, so refuse rather than warn.
+    def __init__(self, allow_in_production: bool = False) -> None:
+        # PAYMENT_MODE=mock is a platform-wide free-bookings switch, so it stays
+        # barred in production. `allow_in_production` is only ever set for a
+        # phone number explicitly listed in PAYMENT_MOCK_ACCOUNTS - bounded to
+        # named test and store-review accounts rather than everybody.
+        if not allow_in_production and settings.ENVIRONMENT.lower() in ("prod", "production"):
             raise RuntimeError(
-                "PAYMENT_MODE=mock is not permitted when ENVIRONMENT=production."
+                "PAYMENT_MODE=mock is not permitted when ENVIRONMENT=production. "
+                "To simulate payments for specific test accounts, list their phone "
+                "numbers in PAYMENT_MOCK_ACCOUNTS instead."
             )
         logger.warning("Payment gateway running in MOCK mode - no real payments are processed.")
 
@@ -387,17 +391,57 @@ class BancstacGateway:
 _GATEWAYS = {"off": DisabledGateway, "mock": MockGateway, "live": BancstacGateway}
 
 
-def get_gateway():
-    """Build the gateway for the configured PAYMENT_MODE.
+def _normalise_phone(raw: str) -> str:
+    """Last 9 digits, matching routes/auth.normalize_phone_digits.
 
-    Constructed per call rather than cached at import so a misconfiguration
-    surfaces as a failed request with a clear message, not a container that
-    will not boot.
+    Duplicated rather than imported: routes import services, and the reverse
+    would be a cycle.
     """
-    mode = (settings.PAYMENT_MODE or "off").strip().lower()
+    digits = "".join(c for c in (raw or "") if c.isdigit())
+    return digits[-9:] if len(digits) >= 9 else digits
+
+
+def is_mock_account(phone: Optional[str]) -> bool:
+    """Is this number on the simulated-payment allowlist?"""
+    if not phone:
+        return False
+    allow = {
+        _normalise_phone(p)
+        for p in (settings.PAYMENT_MOCK_ACCOUNTS or "").split(",")
+        if _normalise_phone(p)
+    }
+    return _normalise_phone(phone) in allow
+
+
+def get_gateway(for_user: Any = None, force_mode: Optional[str] = None):
+    """Pick the gateway for this request.
+
+    `for_user` opts a listed test or store-review account into the simulated
+    gateway without changing anything for real customers. `force_mode` is used
+    when completing a payment, so it resolves against the gateway that created
+    it - a mock payment must never be completed against the live gateway, or
+    vice versa.
+
+    Constructed per call rather than cached at import, so a misconfiguration
+    surfaces as one failed request with a clear message rather than a container
+    that will not boot.
+    """
+    if force_mode is None and for_user is not None and is_mock_account(
+        getattr(for_user, "phone_number", None)
+    ):
+        logger.warning(
+            "Simulated payment for allowlisted account %s - no real charge.",
+            getattr(for_user, "phone_number", "?"),
+        )
+        return MockGateway(allow_in_production=True)
+
+    mode = (force_mode or settings.PAYMENT_MODE or "off").strip().lower()
     impl = _GATEWAYS.get(mode)
     if impl is None:
         raise RuntimeError(
             f"Unknown PAYMENT_MODE '{mode}'. Expected one of: {', '.join(_GATEWAYS)}"
         )
+    if impl is MockGateway and force_mode == "mock":
+        # Completing a payment that a listed account created.
+        return MockGateway(allow_in_production=True)
     return impl()

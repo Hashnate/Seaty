@@ -38,6 +38,19 @@ class Settings(BaseSettings):
     PAYMENT_PROVIDER: str = os.getenv("PAYMENT_PROVIDER", "bancstac")
     PAYMENT_MODE: str = os.getenv("PAYMENT_MODE", "off")
 
+    # Phone numbers that always get the simulated gateway, whatever PAYMENT_MODE
+    # says. Comma-separated, e.g. "0771234567,0756371472".
+    #
+    # Two things need this. App Store and Play reviewers have to complete a
+    # booking to review the app and cannot be charged; and with Bancstac issuing
+    # only live credentials there is otherwise nowhere to exercise the payment
+    # flow without real money.
+    #
+    # Deliberately separate from TEST_OTP_ACCOUNTS - a fixed OTP and a simulated
+    # payment are different privileges and should be grantable apart. Everyone
+    # not listed here goes to the real gateway. Clear it after review.
+    PAYMENT_MOCK_ACCOUNTS: str = os.getenv("PAYMENT_MOCK_ACCOUNTS", "")
+
     BANCSTAC_ENDPOINT: str = os.getenv("BANCSTAC_ENDPOINT", "")
     BANCSTAC_CLIENT_ID: str = os.getenv("BANCSTAC_CLIENT_ID", "")
     BANCSTAC_AUTH_TOKEN: str = os.getenv("BANCSTAC_AUTH_TOKEN", "")

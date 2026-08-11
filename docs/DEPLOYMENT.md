@@ -55,6 +55,7 @@ app. Backend and admin releases are manual: pull, `docker compose up -d --build`
 | `NOTIFYLK_USER_ID`      | Notify.lk account                       | SMS OTP + booking confirmations                    |
 | `NOTIFYLK_API_KEY`      | Notify.lk key                           | Sent as a **URL query parameter** — see Security   |
 | `TEST_OTP_ACCOUNTS`     | Fixed-OTP accounts for store review     | `phone:code,phone:code`. See below                 |
+| `PAYMENT_MOCK_ACCOUNTS` | Numbers that get simulated payments     | Comma-separated. Free bookings — clear before launch |
 | `NOTIFYLK_SENDER_ID`    | Registered sender mask                  | Currently `NotifyDEMO` — **the shared demo sender**. See below |
 | `NOTIFYLK_API_URL`      | Gateway endpoint                        | Defaults to the live Notify.lk URL                 |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Firebase service account path  | Mounted read-only at `/app/firebase-service-account.json` |
@@ -322,6 +323,8 @@ compromisable as it stands.
 - [x] ~~`.dockerignore` added to `backend/` and `admin/`~~ — done; rebuilt image verified clean (#23)
 - [x] ~~`SECRET_KEY` and the database password moved out of `docker-compose.yml`~~ — done (#5)
 - [x] ~~Rotate `SECRET_KEY` and the database password~~ — done and verified
+- [ ] **Clear `PAYMENT_MOCK_ACCOUNTS`** — every listed number books for free
+- [ ] **Register a branded Notify.lk sender mask** — `NotifyDEMO` is the shared demo sender and the likely cause of slow OTP delivery
 - [ ] **Reissue the Notify.lk API key and the Firebase service account** — the remaining two of
       the four exposed credentials. Both need their vendor console; revoke the old Firebase key
       after swapping the file.

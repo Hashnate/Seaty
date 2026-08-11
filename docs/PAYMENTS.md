@@ -29,8 +29,40 @@ So `mock` replaces the vendor sandbox. It is not a second code path: the routers
 exercises everything except the network hop — holds, confirmation, SMS, push, reconciliation,
 declines, and the app's WebView hand-off.
 
+### Simulating payments for specific accounts
+
+`PAYMENT_MODE=mock` is platform-wide and barred in production, which left no way to exercise the
+payment flow at all on the only deployment there is. Two things need one:
+
+- **App Store and Play reviewers must complete a booking to review the app**, and cannot be charged.
+- Internal testing, while Bancstac issues live-only credentials.
+
+`PAYMENT_MOCK_ACCOUNTS` in `backend/.env` is a comma-separated list of phone numbers that always
+get the simulated gateway, whatever `PAYMENT_MODE` says:
+
+```
+PAYMENT_MOCK_ACCOUNTS=0756371472,0771234567,0777140803
+```
+
+| Caller | Gateway |
+| ------ | ------- |
+| listed number | simulated — no charge, `payment_gateway = bancstac:mock` |
+| anyone else | whatever `PAYMENT_MODE` is set to |
+
+Deliberately separate from `TEST_OTP_ACCOUNTS`: a fixed OTP and a free payment are different
+privileges and should be grantable apart.
+
+A payment is always completed against the gateway that opened it —
+`payments.payment_gateway` records `bancstac:mock` or `bancstac:live`, and `finalise_payment`
+resolves from that. A simulated payment can never be completed against the real gateway, or the
+reverse.
+
+> [!WARNING]
+> A listed number books for free. Keep the list to throwaway passenger accounts and **clear it
+> before public launch** — it is on the [pre-launch checklist](DEPLOYMENT.md#pre-launch-checklist).
+
 > [!IMPORTANT]
-> The production host runs `ENVIRONMENT=production`, so **`mock` cannot run there** — by design,
+> The production host runs `ENVIRONMENT=production`, so platform-wide **`mock` cannot run there** — by design,
 > since mock marks bookings paid without charging. Testing the payment flow needs a separate
 > deployment with `ENVIRONMENT=development`, or the flow is only ever exercised against live.
 

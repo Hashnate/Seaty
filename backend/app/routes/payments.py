@@ -206,7 +206,7 @@ async def initiate_payment(
     # clientRef is prefixed because this merchant account is shared with another
     # product; it is how Seaty's transactions are told apart in Bancstac's
     # portal. 50 char limit.
-    gateway = get_gateway()
+    gateway = get_gateway(for_user=current_user)
     client_ref = f"SEATY-{booking.id}"[:50]
     amount_cents = to_cents(total_with_fee)
 
@@ -285,8 +285,14 @@ async def finalise_payment(db: Session, payment: models.Payment) -> bool:
 
     booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
 
+    # Resolve against the gateway that opened the session. payment_gateway
+    # holds "bancstac:mock" or "bancstac:live"; completing a simulated payment
+    # against the real gateway (or the reverse) would never match.
+    created_mode = (payment.payment_gateway or "").split(":")[-1] or None
     try:
-        result = await get_gateway().complete_payment(payment.gateway_transaction_id)
+        result = await get_gateway(force_mode=created_mode).complete_payment(
+            payment.gateway_transaction_id
+        )
     except PaymentGatewayError as e:
         # Leave it pending - the sweeper will try again. Never fail a payment
         # because we could not reach the gateway; the customer may well have paid.
@@ -412,8 +418,9 @@ def mock_payment_page(reqid: str, db: Session = Depends(get_db)):
     production. Lets the whole flow - including the WebView hand-off and the
     return redirect - be exercised without a gateway or a card.
     """
-    gateway = get_gateway()
-    if gateway.mode != "mock":
+    # Reachable whenever the session itself is simulated - either global mock
+    # mode or an allowlisted account. The reqid prefix is the authority.
+    if not reqid.startswith("MOCK-"):
         raise HTTPException(status_code=404, detail="Not found")
 
     payment = db.query(models.Payment).filter(
@@ -447,8 +454,7 @@ margin-bottom:16px">MOCK GATEWAY — no real payment</div>
 def mock_decline(reqid: str):
     """Mark a mock session declined, then follow the normal return path."""
     from app.services.payment_gateway import MockGateway
-    gateway = get_gateway()
-    if gateway.mode != "mock":
+    if not reqid.startswith("MOCK-"):
         raise HTTPException(status_code=404, detail="Not found")
     MockGateway.set_outcome(reqid, "decline")
 
