@@ -197,35 +197,15 @@ async def initiate_payment(
     platform_fee = _calculate_platform_fee(db, float(booking.total_price))
     total_with_fee = float(booking.total_price) + platform_fee
 
-    # Update booking with platform fee
-    booking.platform_fee = platform_fee
-    booking.payment_status = "awaiting_payment"
-
-    # Hold seats (create/refresh seat hold)
-    hold_minutes = int(_get_platform_setting(db, "seat_hold_duration_minutes", "10"))
-    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=hold_minutes)
-
-    # Release any existing holds by this user for this trip
-    db.query(models.SeatHold).filter(
-        models.SeatHold.trip_id == booking.trip_id,
-        models.SeatHold.user_id == current_user.id,
-        models.SeatHold.is_released == False
-    ).update({"is_released": True})
-
-    seat_hold = models.SeatHold(
-        id=uuid.uuid4(),
-        trip_id=booking.trip_id,
-        user_id=current_user.id,
-        seat_labels=booking.selected_seats,
-        expires_at=expires_at,
-        is_released=False
-    )
-    db.add(seat_hold)
-    db.commit()
-
-    # Open a session with the gateway. clientRef is prefixed because this
-    # merchant account is shared with another product - it is how Seaty's
-    # transactions are told apart in Bancstac's portal. 50 char limit.
+    # Ask the gateway for a session BEFORE writing anything. Committing the
+    # hold and the awaiting_payment status first meant a gateway that refused -
+    # payments switched off, network down - left the seats locked for the hold
+    # window and the booking parked in awaiting_payment with no payment row to
+    # resolve it. Nothing is persisted unless there is a session to pay into.
+    #
+    # clientRef is prefixed because this merchant account is shared with another
+    # product; it is how Seaty's transactions are told apart in Bancstac's
+    # portal. 50 char limit.
     gateway = get_gateway()
     client_ref = f"SEATY-{booking.id}"[:50]
     amount_cents = to_cents(total_with_fee)
@@ -240,9 +220,34 @@ async def initiate_payment(
             extra_data={"booking_id": str(booking.id)},
         )
     except PaymentGatewayUnavailable as e:
+        db.rollback()
         raise HTTPException(status_code=503, detail=str(e))
     except PaymentGatewayError as e:
+        db.rollback()
         raise HTTPException(status_code=502, detail=str(e))
+
+    # Session is open, so now commit the local side in one go.
+    booking.platform_fee = platform_fee
+    booking.payment_status = "awaiting_payment"
+
+    hold_minutes = int(_get_platform_setting(db, "seat_hold_duration_minutes", "10"))
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=hold_minutes)
+
+    # Release any existing holds by this user for this trip
+    db.query(models.SeatHold).filter(
+        models.SeatHold.trip_id == booking.trip_id,
+        models.SeatHold.user_id == current_user.id,
+        models.SeatHold.is_released == False
+    ).update({"is_released": True})
+
+    db.add(models.SeatHold(
+        id=uuid.uuid4(),
+        trip_id=booking.trip_id,
+        user_id=current_user.id,
+        seat_labels=booking.selected_seats,
+        expires_at=expires_at,
+        is_released=False
+    ))
 
     db_payment = models.Payment(
         id=uuid.uuid4(),
