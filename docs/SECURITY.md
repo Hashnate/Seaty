@@ -61,9 +61,33 @@ Verified against the running stack:
 | login with a guessed code | `400 OTP code has expired or was not requested.` |
 | correct code | `200` + token, then the same code replayed → `400` |
 
-**Client impact**: the mobile app now sends the code on login
-([`auth_provider.dart`](../mobile/lib/providers/auth_provider.dart)). Backend and app must ship
-together — an older app build cannot sign in.
+**Client impact and the compatibility path.** Requiring `otp_code` broke every installed app
+build, which verifies and signs in as two separate requests — login returned `422 Field required`,
+and because the old build ignores a failed login and marks the session authenticated with an empty
+token, users landed on a working-looking home screen where every request 401'd.
+
+Rather than reopen the hole while a new build ships, `otp_code` is optional **but a proven OTP is
+still required**:
+
+| Client | Path |
+| ------ | ---- |
+| New build | sends `otp_code` → verified and consumed in the login handler |
+| Old build | verified `/auth/otp/verify` first → `_consume_verified_otp` requires that entry's `verified` flag, then consumes it |
+
+The client cannot set `verified` — only a correct code can, and it is single-use. An attacker who
+skips `/auth/otp/verify` still gets nothing:
+
+| Request | Result |
+| ------- | ------ |
+| verify, then login without `otp_code` | `200` + token |
+| login with `otp_code` | `200` + token |
+| login with **no prior verify** | `400 Please verify your mobile number before signing in.` |
+| login with a wrong code | `400` |
+
+It is weaker than the single-request form — the proof is split across two requests held in server
+memory, so a restart between them forces a retry. **Make `otp_code` mandatory again once the new
+build is everywhere**; `_consume_verified_otp` and the `Optional` on `PhoneLoginRequest.otp_code`
+are the two things to remove.
 
 ### 2. Anyone could register themselves as an admin — **fixed**
 

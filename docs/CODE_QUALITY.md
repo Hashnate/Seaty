@@ -161,6 +161,25 @@ table order.
 **Fix**: normalise on both paths; better, store the normalised form in a generated column and
 put a unique index on `(normalised_phone, role)`.
 
+### C13 — The GPS socket retries forever on an authentication failure
+
+`gps_tracking_provider.dart` reconnects on any drop with 1/2/4/8/15/30 s backoff and no attempt
+cap. That is right for a flaky connection and wrong for `403 Authentication failed`, which will
+never succeed on retry.
+
+Observed after the `SECRET_KEY` rotation: a conductor's app held an unexpired token signed with the
+old key, and hammered `/ws/tracking/{id}?role=driver` indefinitely — dozens of rejected
+connections in the logs, no GPS reaching passengers, and nothing in the UI saying why. Every
+rejected socket also costs a connection-pool checkout (see P1).
+
+```
+INFO: connection rejected (403 Forbidden)     ×N, indefinitely
+```
+
+**Fix**: treat a close code of `1008`/`403` as terminal — stop retrying, clear the session, and
+send the user to sign-in. Same applies to the notifications socket, which has the opposite bug
+(never reconnects at all).
+
 ### C9 — Mobile registration reports success on network failure
 
 [`auth_provider.dart:229`](../mobile/lib/providers/auth_provider.dart#L229):

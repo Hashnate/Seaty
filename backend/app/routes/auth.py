@@ -187,6 +187,12 @@ def _verify_otp_code(norm: str, submitted: str, consume: bool) -> None:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid verification code. Please check your SMS and try again.",
             )
+        # Mark the stored entry verified so the two-request compatibility path
+        # works for review accounts too, but never consume it - a reviewer
+        # signs in repeatedly with the same fixed code.
+        entry = otp_store.get(norm)
+        if entry:
+            entry["verified"] = True
         return
 
     entry = otp_store.get(norm)
@@ -214,6 +220,38 @@ def _verify_otp_code(norm: str, submitted: str, consume: bool) -> None:
 
     if consume:
         otp_store.pop(norm, None)
+    else:
+        # Record that this number cleared verification. Read by
+        # _consume_verified_otp for clients that verify and sign in as two
+        # separate requests.
+        entry["verified"] = True
+
+
+def _consume_verified_otp(norm: str) -> None:
+    """Accept a sign-in whose OTP was proven by a prior /auth/otp/verify call.
+
+    Compatibility path for app builds that predate `otp_code` on
+    /auth/phone/login. Those clients verify the code and then sign in as two
+    requests, so the code itself never reaches this endpoint.
+
+    This is weaker than sending the code - the proof is split across two
+    requests, held in server memory - but it is not the original hole: the
+    client cannot set `verified`, only a correct code can, and it is consumed
+    here so it works exactly once. An attacker who skips /auth/otp/verify still
+    gets nothing.
+
+    Remove once the build that sends `otp_code` is everywhere; see
+    docs/SECURITY.md #1.
+    """
+    entry = otp_store.get(norm)
+    if not entry or time.time() > entry["expires_at"] or not entry.get("verified"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please verify your mobile number before signing in.",
+        )
+    # Review accounts keep their entry: a reviewer signs in more than once.
+    if norm not in _test_otp_accounts():
+        otp_store.pop(norm, None)
 
 @router.post("/otp/send", response_model=schemas.SendOTPResponse)
 def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
@@ -230,7 +268,16 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
     # Review accounts have a fixed code the reviewer already holds. Nothing to
     # generate, nothing to send - and crucially the code is not echoed back, or
     # the "credential" would be self-service for anyone who knows the number.
-    if target_norm in _test_otp_accounts():
+    fixed_code = _test_otp_accounts().get(target_norm)
+    if fixed_code is not None:
+        # An entry is stored so /auth/otp/verify behaves identically for review
+        # accounts, which the two-request compatibility path depends on. No SMS
+        # is sent and the code is never echoed - the reviewer already has it.
+        otp_store[target_norm] = {
+            "code": fixed_code,
+            "expires_at": now + OTP_TTL_SECONDS,
+            "attempts": 0,
+        }
         return {
             "success": True,
             "message": f"Verification code sent via SMS to {payload.phone_number}",
@@ -356,7 +403,12 @@ def login_phone(payload: schemas.PhoneLoginRequest, db: Session = Depends(get_db
 
     # Before the user lookup, so a wrong code cannot be used to probe which
     # numbers exist (the lookup 404s on an unknown number).
-    _verify_otp_code(target_norm, payload.otp_code, consume=True)
+    if payload.otp_code:
+        _verify_otp_code(target_norm, payload.otp_code, consume=True)
+    else:
+        # Older app builds verify and sign in as two requests. See
+        # _consume_verified_otp - still requires a real OTP, just proven earlier.
+        _consume_verified_otp(target_norm)
 
     users = db.query(models.User).all()
 

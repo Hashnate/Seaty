@@ -484,10 +484,16 @@ class PhoneRegisterRequest(BaseModel):
 
 
 class PhoneLoginRequest(BaseModel):
-    """Phone sign-in. `otp_code` is mandatory and verified server-side."""
+    """Phone sign-in.
+
+    `otp_code` is optional only to keep app builds working that verify the code
+    in a separate request; the backend still requires a proven OTP either way
+    (routes/auth.py: _consume_verified_otp). Make it mandatory once the build
+    that sends it is everywhere.
+    """
     phone_number: str
     role: str
-    otp_code: str
+    otp_code: Optional[str] = None
 
 class SendOTPRequest(BaseModel):
     phone_number: str
