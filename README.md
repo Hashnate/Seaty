@@ -30,6 +30,7 @@ fleets, recurring schedules, and staff. Conductors scan tickets and mark boardin
 | [Development](docs/DEVELOPMENT.md)         | Running backend, admin, and mobile locally                         |
 | [Deployment](docs/DEPLOYMENT.md)           | Docker Compose stack, CI/CD, environment variables, capacity limits |
 | [Website](docs/WEBSITE.md)                 | Marketing site structure, editing content, deploying to its domain |
+| [Payments](docs/PAYMENTS.md)               | Bancstac integration, test/live modes, the missing-webhook gap     |
 | [Security](docs/SECURITY.md)               | **Known auth gaps and unauthenticated endpoints — read before launch** |
 | [Code quality](docs/CODE_QUALITY.md)       | Correctness bugs, data-loss paths, performance ceilings, dead code |
 
@@ -90,6 +91,7 @@ screen (see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#pointing-the-app-at-a-loca
 - Auth is JWT (HS256, 7 days) issued by the backend; the mobile app authenticates by phone + OTP,
   the admin dashboard by email + password.
 - Real-time seat availability, GPS tracking, and notifications each run over their own WebSocket.
-- Payments currently run through a **sandbox gateway only** — no real gateway is wired up.
+- Payments go through **Bancstac Paycenter Web 4.0**. `PAYMENT_MODE` (`off` / `mock` / `live`)
+  defaults to `off`; the live path is not finished. See [docs/PAYMENTS.md](docs/PAYMENTS.md).
 - SMS (OTP and booking confirmations) goes through [Notify.lk](https://notify.lk).
 - Push notifications go through Firebase Cloud Messaging (APNs on iOS).

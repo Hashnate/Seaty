@@ -1,15 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from uuid import UUID
+import html
+import logging
 import uuid
 import datetime
 
+from app.config import settings
 from app.database import get_db
 from app import models, schemas, auth
+from app.services.payment_gateway import (
+    PaymentGatewayError,
+    PaymentGatewayUnavailable,
+    get_gateway,
+    to_cents,
+)
 from app.timezone_utils import now_sl, to_sl
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/payments", tags=["Payments"])
+
+CURRENCY = "LKR"
+
+# The WebView in the mobile app watches for these paths to know the flow is
+# over. Keep them stable - changing one silently strands users on a blank page
+# inside the app. Mirrored in mobile/lib/screens/payment_webview_screen.dart.
+RESULT_SUCCESS_PATH = "/api/v1/payments/result/success"
+RESULT_FAILED_PATH = "/api/v1/payments/result/failed"
 
 
 def _get_platform_setting(db: Session, key: str, default: str = "0") -> str:
@@ -123,22 +143,31 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
 
 
 @router.post("/initiate", response_model=schemas.PaymentResponse, status_code=status.HTTP_201_CREATED)
-def initiate_payment(
+async def initiate_payment(
     payload: schemas.PaymentInitiateRequest,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["passenger", "admin"]))
 ):
-    """
-    Initiate a payment for a booking.
-    1. Validates the booking belongs to the current user
-    2. Holds the seats temporarily
-    3. Creates a payment record with sandbox payment URL
-    4. Returns payment details for the client to redirect
+    """Open a payment session for a booking.
+
+    1. Verifies the booking belongs to the caller
+    2. Recomputes the amount server-side
+    3. Refreshes the seat hold
+    4. Asks the gateway for a session and returns its payment page URL
+
+    Nothing here marks anything paid. Only `/bancstac/return` and the
+    reconciliation sweeper can do that, and only on the gateway's word.
     """
     # Fetch booking
     booking = db.query(models.Booking).filter(models.Booking.id == payload.booking_id).first()
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
+
+    # This check used to be missing entirely, while the docstring claimed it
+    # was here: any passenger could pass any booking_id and take actions on a
+    # stranger's booking - see docs/SECURITY.md #26.
+    if booking.passenger_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Unauthorized to pay for this booking")
 
     if booking.booking_status in ["expired", "cancelled"]:
         raise HTTPException(
@@ -192,30 +221,235 @@ def initiate_payment(
         is_released=False
     )
     db.add(seat_hold)
+    db.commit()
 
-    # Generate sandbox payment (mock gateway)
-    gateway = _get_platform_setting(db, "payment_gateway", "sandbox")
-    transaction_id = f"SB-{uuid.uuid4().hex[:12].upper()}"
+    # Open a session with the gateway. clientRef is prefixed because this
+    # merchant account is shared with another product - it is how Seaty's
+    # transactions are told apart in Bancstac's portal. 50 char limit.
+    gateway = get_gateway()
+    client_ref = f"SEATY-{booking.id}"[:50]
+    amount_cents = to_cents(total_with_fee)
 
-    # In sandbox mode, generate a simulated payment URL
-    payment_url = f"/api/v1/payments/sandbox/complete/{transaction_id}"
+    try:
+        session = await gateway.init_payment(
+            amount_cents=amount_cents,
+            currency=CURRENCY,
+            client_ref=client_ref,
+            return_url=settings.BANCSTAC_RETURN_URL,
+            comment=f"Seaty booking {str(booking.id)[:8]}",
+            extra_data={"booking_id": str(booking.id)},
+        )
+    except PaymentGatewayUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except PaymentGatewayError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
     db_payment = models.Payment(
         id=uuid.uuid4(),
         booking_id=booking.id,
-        payment_gateway=gateway,
-        gateway_transaction_id=transaction_id,
+        payment_gateway=f"bancstac:{gateway.mode}",
+        # The gateway's reqid IS our transaction id. The return handler and the
+        # sweeper both look the booking up by it, so it is never taken from the
+        # client.
+        gateway_transaction_id=session.reqid,
         amount=total_with_fee,
         platform_fee=platform_fee,
-        currency="LKR",
+        currency=CURRENCY,
         status="pending",
-        payment_url=payment_url
+        payment_url=session.payment_page_url,
     )
     db.add(db_payment)
     db.commit()
     db.refresh(db_payment)
 
     return db_payment
+
+
+async def finalise_payment(db: Session, payment: models.Payment) -> bool:
+    """Ask the gateway what happened to a payment and record the outcome.
+
+    The single place a booking can become paid. Called by the return handler
+    and by the reconciliation sweeper; safe to call repeatedly.
+
+    Returns True if the booking ended up confirmed.
+    """
+    if payment.status == "completed":
+        return True                      # idempotent: browser refresh, retry, sweeper overlap
+    if payment.status in ("failed", "refunded"):
+        return False
+
+    booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
+
+    try:
+        result = await get_gateway().complete_payment(payment.gateway_transaction_id)
+    except PaymentGatewayError as e:
+        # Leave it pending - the sweeper will try again. Never fail a payment
+        # because we could not reach the gateway; the customer may well have paid.
+        logger.warning("PAYMENT_COMPLETE unavailable for %s: %s", payment.gateway_transaction_id, e)
+        return False
+
+    expected_cents = to_cents(payment.amount)
+    expected_ref = f"SEATY-{payment.booking_id}"[:50]
+
+    # Verify before trusting. An approval for the wrong amount, or for another
+    # merchant reference, is not an approval for this booking.
+    if result.approved and result.amount_cents and result.amount_cents != expected_cents:
+        logger.error(
+            "Payment %s AMOUNT MISMATCH: gateway=%s expected=%s - refusing to confirm",
+            payment.id, result.amount_cents, expected_cents,
+        )
+        result.approved = False
+        result.response_text = f"Amount mismatch ({result.amount_cents} vs {expected_cents})"
+    if result.approved and result.client_ref and result.client_ref != expected_ref:
+        logger.error(
+            "Payment %s CLIENTREF MISMATCH: gateway=%s expected=%s - refusing to confirm",
+            payment.id, result.client_ref, expected_ref,
+        )
+        result.approved = False
+        result.response_text = "Client reference mismatch"
+
+    payment.gateway_response = {
+        "response_code": result.response_code,
+        "response_text": result.response_text,
+        "txn_reference": result.txn_reference,
+        "auth_code": result.auth_code,
+        "card_type": result.card_type,
+        "card_masked": result.card_masked,
+        "amount_cents": result.amount_cents,
+        "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+
+    if result.approved:
+        payment.status = "completed"
+        payment.paid_at = datetime.datetime.now(datetime.timezone.utc)
+        if booking:
+            booking.payment_status = "paid"
+            booking.booking_status = "confirmed"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+        db.commit()
+
+        if booking:
+            # After the commit: a failure here must not undo a real payment.
+            await _send_booking_notifications(db, booking)
+        return True
+
+    payment.status = "failed"
+    if booking:
+        booking.payment_status = "failed"
+        booking.booking_status = "cancelled"
+        db.query(models.SeatHold).filter(
+            models.SeatHold.trip_id == booking.trip_id,
+            models.SeatHold.user_id == booking.passenger_id,
+            models.SeatHold.is_released == False
+        ).update({"is_released": True})
+    db.commit()
+    return False
+
+
+def _result_page(title: str, message: str, ok: bool) -> HTMLResponse:
+    colour = "#0f9d58" if ok else "#d93025"
+    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(title)}</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;
+justify-content:center;height:100vh;margin:0;background:#f6f8fa">
+<div style="text-align:center;padding:32px">
+<div style="font-size:56px;color:{colour}">{'&#10003;' if ok else '&#10007;'}</div>
+<h2 style="margin:12px 0;color:#0A2540">{html.escape(title)}</h2>
+<p style="color:#5f6368;max-width:320px">{html.escape(message)}</p>
+</div></body></html>""")
+
+
+@router.get("/bancstac/return", include_in_schema=False)
+async def bancstac_return(reqid: str = Query(...), db: Session = Depends(get_db)):
+    """Where Bancstac sends the payer's browser after card entry.
+
+    Unauthenticated by necessity - the gateway performs this redirect, not our
+    client, and it carries no session. That is safe because the redirect
+    contains no payment result: it only names a `reqid`, and the booking is
+    looked up by the reqid *we stored at initiation*. The outcome comes from
+    asking Bancstac directly in finalise_payment().
+    """
+    payment = db.query(models.Payment).filter(
+        models.Payment.gateway_transaction_id == reqid
+    ).first()
+
+    if not payment:
+        logger.warning("Bancstac return for unknown reqid %r", reqid[:64])
+        return RedirectResponse(RESULT_FAILED_PATH, status_code=303)
+
+    ok = await finalise_payment(db, payment)
+    return RedirectResponse(RESULT_SUCCESS_PATH if ok else RESULT_FAILED_PATH, status_code=303)
+
+
+@router.get("/result/success", include_in_schema=False)
+def payment_result_success():
+    return _result_page("Payment successful", "Your booking is confirmed. You can close this window.", True)
+
+
+@router.get("/result/failed", include_in_schema=False)
+def payment_result_failed():
+    return _result_page("Payment not completed", "No charge was made. Please try again.", False)
+
+
+# =====================================================================
+# Mock gateway pages - PAYMENT_MODE=mock only
+# =====================================================================
+@router.get("/mock/pay/{reqid}", include_in_schema=False)
+def mock_payment_page(reqid: str, db: Session = Depends(get_db)):
+    """Stand-in for Bancstac's hosted card page.
+
+    Only reachable when PAYMENT_MODE=mock, which itself cannot be set in
+    production. Lets the whole flow - including the WebView hand-off and the
+    return redirect - be exercised without a gateway or a card.
+    """
+    gateway = get_gateway()
+    if gateway.mode != "mock":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    payment = db.query(models.Payment).filter(
+        models.Payment.gateway_transaction_id == reqid
+    ).first()
+    amount = f"{float(payment.amount):,.2f}" if payment else "?"
+    ret = settings.BANCSTAC_RETURN_URL or "/api/v1/payments/bancstac/return"
+    sep = "&" if "?" in ret else "?"
+    safe_reqid = html.escape(reqid)
+
+    return HTMLResponse(f"""<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Mock payment</title></head>
+<body style="font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;
+justify-content:center;height:100vh;margin:0;background:#f6f8fa">
+<div style="background:#fff;padding:28px;border-radius:14px;box-shadow:0 2px 16px #0001;
+max-width:340px;width:90%;text-align:center">
+<div style="background:#fff3cd;color:#7a5b00;padding:8px;border-radius:8px;font-size:13px;
+margin-bottom:16px">MOCK GATEWAY — no real payment</div>
+<h2 style="margin:0 0 4px;color:#0A2540">LKR {amount}</h2>
+<p style="color:#5f6368;font-size:12px;margin:0 0 20px">{safe_reqid}</p>
+<a href="{html.escape(ret)}{sep}reqid={safe_reqid}"
+   style="display:block;background:#0A2540;color:#fff;padding:13px;border-radius:9px;
+   text-decoration:none;font-weight:600;margin-bottom:10px">Approve payment</a>
+<a href="/api/v1/payments/mock/decline/{safe_reqid}"
+   style="display:block;background:#eee;color:#d93025;padding:13px;border-radius:9px;
+   text-decoration:none;font-weight:600">Decline payment</a>
+</div></body></html>""")
+
+
+@router.get("/mock/decline/{reqid}", include_in_schema=False)
+def mock_decline(reqid: str):
+    """Mark a mock session declined, then follow the normal return path."""
+    from app.services.payment_gateway import MockGateway
+    gateway = get_gateway()
+    if gateway.mode != "mock":
+        raise HTTPException(status_code=404, detail="Not found")
+    MockGateway.set_outcome(reqid, "decline")
+
+    ret = settings.BANCSTAC_RETURN_URL or "/api/v1/payments/bancstac/return"
+    sep = "&" if "?" in ret else "?"
+    return RedirectResponse(f"{ret}{sep}reqid={reqid}", status_code=303)
 
 
 @router.get("/{payment_id}", response_model=schemas.PaymentResponse)
@@ -252,186 +486,6 @@ def get_payments_for_booking(
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     return db.query(models.Payment).filter(models.Payment.booking_id == booking_id).all()
-
-
-@router.post("/sandbox/complete/{transaction_id}", response_model=schemas.PaymentResponse)
-async def sandbox_complete_payment(
-    transaction_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    Sandbox payment completion endpoint.
-    In production, this would be replaced by the actual payment gateway webhook.
-    Simulates a successful payment completion.
-    """
-    payment = db.query(models.Payment).filter(
-        models.Payment.gateway_transaction_id == transaction_id
-    ).first()
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment transaction not found")
-
-    if payment.status == "completed":
-        return payment
-
-    booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
-    trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first() if booking else None
-
-    if _is_past_booking_cutoff(trip):
-        # Booking closed while this payment was in flight - fail it instead of
-        # confirming a seat on a bus that's already boarding or gone.
-        payment.status = "failed"
-        payment.gateway_response = {
-            "sandbox": True,
-            "message": "Payment could not be completed - booking closed 30 minutes before departure",
-            "failed_at": datetime.datetime.utcnow().isoformat()
-        }
-        if booking:
-            booking.payment_status = "failed"
-            booking.booking_status = "cancelled"
-            db.query(models.SeatHold).filter(
-                models.SeatHold.trip_id == booking.trip_id,
-                models.SeatHold.user_id == booking.passenger_id,
-                models.SeatHold.is_released == False
-            ).update({"is_released": True})
-        db.commit()
-        db.refresh(payment)
-        return payment
-
-    # Mark payment as completed
-    payment.status = "completed"
-    payment.paid_at = datetime.datetime.utcnow()
-    payment.gateway_response = {
-        "sandbox": True,
-        "message": "Sandbox payment completed successfully",
-        "completed_at": datetime.datetime.utcnow().isoformat()
-    }
-
-    # Update booking status
-    if booking:
-        booking.payment_status = "paid"
-        booking.booking_status = "confirmed"
-
-        # Release the seat hold (seats are now permanently booked)
-        db.query(models.SeatHold).filter(
-            models.SeatHold.trip_id == booking.trip_id,
-            models.SeatHold.user_id == booking.passenger_id,
-            models.SeatHold.is_released == False
-        ).update({"is_released": True})
-
-        # Trigger notifications
-        await _send_booking_notifications(db, booking)
-
-    db.commit()
-    db.refresh(payment)
-    return payment
-
-
-@router.post("/sandbox/fail/{transaction_id}", response_model=schemas.PaymentResponse)
-def sandbox_fail_payment(
-    transaction_id: str,
-    db: Session = Depends(get_db)
-):
-    """
-    Sandbox payment failure endpoint.
-    Simulates a failed payment — releases seat holds.
-    """
-    payment = db.query(models.Payment).filter(
-        models.Payment.gateway_transaction_id == transaction_id
-    ).first()
-    if not payment:
-        raise HTTPException(status_code=404, detail="Payment transaction not found")
-
-    payment.status = "failed"
-    payment.gateway_response = {
-        "sandbox": True,
-        "message": "Sandbox payment failed",
-        "failed_at": datetime.datetime.utcnow().isoformat()
-    }
-
-    # Revert booking status
-    booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
-    if booking:
-        booking.payment_status = "failed"
-        booking.booking_status = "cancelled"
-
-        # Release seat holds
-        db.query(models.SeatHold).filter(
-            models.SeatHold.trip_id == booking.trip_id,
-            models.SeatHold.user_id == booking.passenger_id,
-            models.SeatHold.is_released == False
-        ).update({"is_released": True})
-
-    db.commit()
-    db.refresh(payment)
-    return payment
-
-
-@router.post("/webhook", status_code=status.HTTP_200_OK)
-async def payment_webhook(
-    payload: schemas.PaymentWebhookPayload,
-    db: Session = Depends(get_db)
-):
-    """
-    Generic payment gateway webhook endpoint.
-    In production, this would validate signatures from PayHere/Stripe.
-    """
-    payment = db.query(models.Payment).filter(
-        models.Payment.gateway_transaction_id == payload.transaction_id
-    ).first()
-    if not payment:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-
-    if payload.status == "completed":
-        booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
-        trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first() if booking else None
-
-        if _is_past_booking_cutoff(trip):
-            payment.status = "failed"
-            payment.gateway_response = payload.gateway_data
-            if booking:
-                booking.payment_status = "failed"
-                booking.booking_status = "cancelled"
-                db.query(models.SeatHold).filter(
-                    models.SeatHold.trip_id == booking.trip_id,
-                    models.SeatHold.user_id == booking.passenger_id,
-                    models.SeatHold.is_released == False
-                ).update({"is_released": True})
-            db.commit()
-            return {"status": "ok", "payment_id": str(payment.id)}
-
-        payment.status = "completed"
-        payment.paid_at = datetime.datetime.utcnow()
-        payment.gateway_response = payload.gateway_data
-
-        if booking:
-            booking.payment_status = "paid"
-            booking.booking_status = "confirmed"
-            # Release hold — seats permanently frozen
-            db.query(models.SeatHold).filter(
-                models.SeatHold.trip_id == booking.trip_id,
-                models.SeatHold.user_id == booking.passenger_id,
-                models.SeatHold.is_released == False
-            ).update({"is_released": True})
-
-            # Trigger notifications
-            await _send_booking_notifications(db, booking)
-
-    elif payload.status == "failed":
-        payment.status = "failed"
-        payment.gateway_response = payload.gateway_data
-
-        booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()
-        if booking:
-            booking.payment_status = "failed"
-            booking.booking_status = "cancelled"
-            db.query(models.SeatHold).filter(
-                models.SeatHold.trip_id == booking.trip_id,
-                models.SeatHold.user_id == booking.passenger_id,
-                models.SeatHold.is_released == False
-            ).update({"is_released": True})
-
-    db.commit()
-    return {"status": "ok", "payment_id": str(payment.id)}
 
 
 @router.post("/{payment_id}/refund", response_model=schemas.PaymentResponse)

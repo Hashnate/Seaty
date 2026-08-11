@@ -156,7 +156,59 @@ async def auto_expire_bookings_scheduler():
         await asyncio.sleep(60)
 
 
+async def payment_reconciliation_sweeper():
+    """Resolve payments whose customer never made it back to us.
+
+    Bancstac has no server-to-server callback: we only learn a payment
+    succeeded because the payer's browser is redirected to our return URL. If
+    the app is backgrounded, the connection drops, or the phone dies between
+    paying and redirecting, that redirect never arrives - card charged, booking
+    unconfirmed, seat released. On mobile data that is routine.
+
+    This is the replacement for the webhook. Every pending payment gets
+    re-asked until the gateway gives a verdict or its 30-minute session
+    expires. See docs/PAYMENTS.md.
+    """
+    from app.services.payment_gateway import get_gateway, PaymentGatewayUnavailable
+
+    while True:
+        await asyncio.sleep(60)
+        try:
+            get_gateway()
+        except PaymentGatewayUnavailable:
+            continue
+        except Exception:
+            continue  # misconfigured; initiate_payment reports it properly
+
+        db = SessionLocal()
+        try:
+            now = datetime.datetime.now(datetime.timezone.utc)
+            # Give the normal return path a couple of minutes before stepping
+            # in, and stop once Bancstac's session has expired.
+            candidates = db.query(models.Payment).filter(
+                models.Payment.status == "pending",
+                models.Payment.gateway_transaction_id.isnot(None),
+                models.Payment.created_at <= now - datetime.timedelta(minutes=2),
+                models.Payment.created_at >= now - datetime.timedelta(minutes=35),
+            ).all()
+
+            if candidates:
+                from app.routes.payments import finalise_payment
+                print(f"[payment-sweeper] re-checking {len(candidates)} pending payment(s)")
+                for payment in candidates:
+                    try:
+                        if await finalise_payment(db, payment):
+                            print(f"[payment-sweeper] recovered payment {payment.id}")
+                    except Exception as e:
+                        print(f"[payment-sweeper] {payment.id}: {e}")
+        except Exception as e:
+            print(f"Error in payment_reconciliation_sweeper: {e}")
+        finally:
+            db.close()
+
+
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(trip_reminder_scheduler())
     asyncio.create_task(auto_expire_bookings_scheduler())
+    asyncio.create_task(payment_reconciliation_sweeper())

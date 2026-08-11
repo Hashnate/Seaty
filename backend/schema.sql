@@ -305,6 +305,7 @@ CREATE INDEX idx_bookings_trip ON public.bookings(trip_id);
 CREATE INDEX idx_bookings_passenger ON public.bookings(passenger_id);
 CREATE INDEX idx_bookings_status ON public.bookings(booking_status);
 CREATE INDEX idx_payments_booking ON public.payments(booking_id);
+CREATE UNIQUE INDEX uq_payments_gateway_txn ON public.payments(gateway_transaction_id) WHERE gateway_transaction_id IS NOT NULL;
 CREATE INDEX idx_payments_status ON public.payments(status);
 CREATE INDEX idx_seat_holds_trip ON public.seat_holds(trip_id);
 CREATE INDEX idx_seat_holds_expires ON public.seat_holds(expires_at);

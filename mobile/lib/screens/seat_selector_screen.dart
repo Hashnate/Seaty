@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
+import 'package:seaty/screens/payment_webview_screen.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/widgets/animated_3d_seat.dart';
 import 'package:seaty/theme/app_theme.dart';
-import 'package:seaty/screens/sandbox_payment_screen.dart';
 import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 // Seat Selector Screen
@@ -139,19 +139,25 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
       return;
     }
 
-    if (mounted) {
-      setState(() => _isBookingInProgress = false);
-      // Navigate to sandbox payment screen
-      Navigator.pushReplacement(
-        context,
-        SeatyPageRoute(
-          page: SandboxPaymentScreen(
-            payment: payment,
-            trip: widget.trip,
-            booking: booking,
-          ),
-        ),
-      );
+    if (!mounted) return;
+    setState(() => _isBookingInProgress = false);
+
+    // Hand off to the gateway's hosted page. The backend has already verified
+    // the transaction by the time this returns, so the outcome is a cue to
+    // refresh - not proof of payment.
+    final outcome = await startPaymentFlow(
+      context,
+      ref,
+      paymentUrl: payment['payment_url']?.toString() ?? '',
+      bookingId: booking['id'].toString(),
+      amount: (payment['amount'] as num?)?.toDouble() ?? 0,
+    );
+
+    if (!mounted) return;
+    showPaymentOutcome(context, outcome);
+
+    if (outcome == PaymentOutcome.success) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 

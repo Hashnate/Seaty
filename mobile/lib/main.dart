@@ -25,7 +25,6 @@ export 'package:seaty/screens/auth_screen.dart';
 export 'package:seaty/screens/passenger_main_screen.dart';
 export 'package:seaty/screens/seat_selector_screen.dart';
 export 'package:seaty/screens/conductor/conductor_trip_details_screen.dart';
-export 'package:seaty/screens/sandbox_payment_screen.dart';
 export 'package:seaty/screens/notifications_screen.dart';
 
 // =====================================================================

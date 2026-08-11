@@ -174,6 +174,26 @@ try:
     except Exception as e:
         print(f"Error creating hero_banners table: {e}")
 
+    # 13. Idempotency guard for the payment gateway reference. The return
+    # handler and the reconciliation sweeper both look a payment up by
+    # gateway_transaction_id; two rows sharing one reqid would make that
+    # lookup ambiguous and could double-confirm a booking.
+    print("Adding unique constraint on payments.gateway_transaction_id...")
+    try:
+        cur.execute("""
+            DELETE FROM payments a USING payments b
+            WHERE a.ctid < b.ctid
+              AND a.gateway_transaction_id = b.gateway_transaction_id
+              AND a.gateway_transaction_id IS NOT NULL
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_gateway_txn
+            ON payments(gateway_transaction_id)
+            WHERE gateway_transaction_id IS NOT NULL
+        """)
+    except Exception as e:
+        print(f"Error adding unique index on payments.gateway_transaction_id: {e}")
+
     # NOTE: step 12 (a one-time -5:30 shift of existing trips.departure_time/
     # arrival_time) was removed here. It assumed the Postgres session timezone
     # defaulted to UTC, which was never confirmed against the live database and

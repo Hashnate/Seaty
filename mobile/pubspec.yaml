@@ -39,6 +39,9 @@ dependencies:
   geolocator: ^11.0.0
   http: ^1.2.1
   url_launcher: ^6.2.5
+  # Hosts the Bancstac payment page in-app. The gateway is a hosted/iframe
+  # page, so there is no card-entry UI on our side and no PCI scope.
+  webview_flutter: ^4.10.0
   # 3.x moves to package:web ^1.0.0, which modern firebase_core_web also needs.
   # Staying on 2.x pins firebase_core to <3.5 and blocks Crashlytics.
   web_socket_channel: ^3.0.3

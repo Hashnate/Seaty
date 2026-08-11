@@ -266,39 +266,6 @@ class BookingsNotifier extends Notifier<BookingsState> {
     return null;
   }
 
-  Future<bool> completeSandboxPayment(String transactionId) async {
-    final settings = ref.read(settingsProvider);
-    try {
-      final response = await http.post(
-        Uri.parse('${settings.apiBaseUrl}/payments/sandbox/complete/$transactionId'),
-      );
-      if (response.statusCode == 200) {
-        state = state.copyWith(selectedSeats: [], selectedSeatGenders: {});
-        await loadBookings();
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Error completing sandbox payment: $e');
-    }
-    return false;
-  }
-
-  Future<bool> failSandboxPayment(String transactionId) async {
-    final settings = ref.read(settingsProvider);
-    try {
-      final response = await http.post(
-        Uri.parse('${settings.apiBaseUrl}/payments/sandbox/fail/$transactionId'),
-      );
-      if (response.statusCode == 200) {
-        state = state.copyWith(selectedSeats: [], selectedSeatGenders: {});
-        await loadBookings();
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Error failing sandbox payment: $e');
-    }
-    return false;
-  }
 
   Future<List<String>?> toggleBoarding(String tripId, String seat, {String? action}) async {
     final settings = ref.read(settingsProvider);
