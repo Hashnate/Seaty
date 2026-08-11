@@ -9,7 +9,9 @@ a FastAPI backend (`backend/`), a Flutter app for passengers/owners/conductors (
 React admin dashboard (`admin/`), and a Postgres image that ships the schema (`database/`).
 
 Deeper background lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); endpoints in
-[docs/API.md](docs/API.md).
+[docs/API.md](docs/API.md); tables, state machines and schema drift in
+[docs/DATA_MODEL.md](docs/DATA_MODEL.md); known non-security defects in
+[docs/CODE_QUALITY.md](docs/CODE_QUALITY.md).
 
 ## Commands
 
@@ -47,8 +49,22 @@ a change is verified by tests — verify by reading the affected paths, or by ru
   breaks fresh deploys.
 - **The backend must run single-process.** All three WebSocket managers and the OTP store are
   module-level dicts. Never suggest `--workers > 1` or replicas without a shared broker.
-- **`ENVIRONMENT=development` disables OTP** — always returns `123456` and accepts `AUTO`. It is
-  the default in `config.py`.
+- **Each authenticated WebSocket pins a DB connection for its whole lifetime**
+  (`tracking.py`, `notifications.py` both hold a `SessionLocal()`), and the engine uses
+  SQLAlchemy's defaults — 15 connections total. That caps the platform at ~15 concurrent
+  signed-in users. Don't add another long-lived-session socket without fixing this.
+- **`ENVIRONMENT=development` makes every OTP `123456`** and echoes it in the send response. It is
+  the default in `config.py`. Verification itself is never skipped, in any environment.
+- **`TEST_OTP_ACCOUNTS` holds fixed-OTP accounts for App Store / Play review** (`phone:code,…`,
+  in `backend/.env`). Reviewers cannot receive SMS, so these must keep working and must match the
+  Sign-In Information submitted to the stores. Passenger accounts only; never hard-code them.
+- **`migrate_db.py` step 4 renumbers every vehicle's seat labels on every boot**, unguarded.
+  Seat labels are the join key for bookings, holds, and boarding, so changing the order of
+  `seat_layout.seats` silently reassigns seats under existing bookings.
+- **`UPLOAD_DIR` means two different things** — the served directory in `main.py:28`, the write
+  directory in `routes/uploads.py:13`, with defaults one level apart. Leave it unset.
+- **Deleting a trip or a schedule cascades to bookings and payments.** No endpoint warns or
+  checks for paid bookings first.
 - **Cross-router imports happen inside functions** to avoid circular imports (e.g.
   `from app.routes.notifications import create_and_send_notification`). Keep that pattern.
 - **`mobile/lib/main.dart` re-exports everything** for legacy `import 'main.dart'` call sites.
@@ -58,19 +74,38 @@ a change is verified by tests — verify by reading the affected paths, or by ru
 
 ## Security posture
 
-[docs/SECURITY.md](docs/SECURITY.md) documents known gaps, several of them critical
-(unauthenticated payment completion, phone login without OTP, open admin registration). They are
-**known and recorded, not undiscovered** — don't re-report them as new findings on every task,
-and don't treat the surrounding code as a template for new endpoints.
+[docs/SECURITY.md](docs/SECURITY.md) documents 33 known gaps, several of them critical (secrets
+baked into the Docker image, an ungated `PUT /trips/{id}`, unauthenticated payment completion,
+phone login without OTP, open admin registration). They are **known and recorded, not
+undiscovered** — don't re-report them as new findings on every task, and don't treat the
+surrounding code as a template for new endpoints.
+
+**Login is split by role and the split is load-bearing.** `POST /auth/login` (password, admin
+console) accepts only `auth.PASSWORD_LOGIN_ROLES = ("admin", "owner")`; passengers and conductors
+are phone + OTP only. Don't widen it without reading SECURITY.md #22 first — a disallowed role
+must keep returning the same 401 as a wrong password, or the endpoint becomes an
+account-enumeration oracle.
+
+**Account creation is one-directional and no API path may create an admin.**
+`create_admin.py` (out of band) → admin → owner (`POST /auth/register`, admin-only,
+`Literal["owner"]`) → conductor (`POST /conductors`, owner-only). Passengers self-register by
+phone + OTP, `Literal["passenger"]`. Every role field is a `Literal`, not a `str` — keep it that
+way; a plain string here is what made SECURITY.md #2 an unauthenticated admin factory.
 
 When adding an endpoint:
 
-- Gate it with `auth.RoleChecker([...])` as a dependency, never with an inline role check.
+- Gate it with `auth.RoleChecker([...])` as a dependency, never with an inline role check, and
+  never with `get_current_user` plus an `if role in [...]` block — that pattern is exactly how
+  `update_trip` ended up open to passengers.
 - Role gating is not enough — also scope by `company_id` for owner/conductor routes. Several
   existing endpoints forget this; `update_trip_status` in `routes/trips.py:331` shows the pattern.
 - Compare `company_id` in a way that treats `None` as never matching (`None != None` is `False`,
   which currently grants access in a few places).
 - Never trust a client-supplied price, role, or total — recompute server-side.
+- Check ownership, not just role, before mutating a booking or payment (`initiate_payment` is the
+  cautionary example — its docstring claims it does; it doesn't).
+- Don't call blocking I/O (`send_sms`, `messaging.send`) from an `async def` — one event loop
+  serves every WebSocket in the process.
 
 ## Conventions
 

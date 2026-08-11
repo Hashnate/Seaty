@@ -1,0 +1,24 @@
+# The Dockerfile ends with `COPY . .`, so anything not listed here is baked into
+# an image layer and recoverable with `docker save` or a plain `docker run`.
+# Gitignoring a file does nothing about that - see docs/SECURITY.md #23.
+
+# Secrets. Supplied at runtime instead: env vars via docker-compose `env_file`,
+# and the Firebase key via the read-only bind mount.
+.env
+.env.*
+!.env.example
+firebase-service-account.json
+*.pem
+*.key
+*.cer
+*.p12
+*.p8
+
+# Build noise and one-off scripts that have no business in a release image.
+__pycache__/
+*.py[cod]
+scratch/
+scratch_db.py
+
+.git
+.gitignore

@@ -8,12 +8,19 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 
 import bcrypt
+import secrets
 from app.config import settings
 from app.database import get_db
 from app import models, schemas
 
 # Setup oauth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
+# Roles permitted to use the email + password path (POST /auth/login), i.e. the
+# admin console. Passengers and conductors authenticate by phone + OTP in the
+# mobile app; owners use both. Enforced in routes/auth.py:login - the console's
+# own role guards are UI only and stop nothing at the API.
+PASSWORD_LOGIN_ROLES = ("admin", "owner")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
@@ -24,6 +31,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     salt = bcrypt.gensalt()
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+
+def unusable_password_hash() -> str:
+    """Hash of a random secret that is discarded immediately.
+
+    OTP-only accounts still need a non-null `hashed_password`. This used to be a
+    shared string literal, which made that literal a working credential for
+    every phone account through POST /auth/login - the email is derivable from
+    the phone number, so knowing a number was enough to sign in as that user.
+    Randomising it makes the password path structurally unusable for these
+    accounts rather than relying on the role check alone.
+    """
+    return get_password_hash(secrets.token_urlsafe(32))
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()

@@ -8,7 +8,7 @@ Interactive OpenAPI docs are served at `/docs` and the raw schema at `/openapi.j
 ## Conventions
 
 - **Auth**: `Authorization: Bearer <jwt>` on every endpoint marked with a role. Tokens come from
-  `POST /auth/login` or `POST /auth/phone/login` and last 24 hours.
+  `POST /auth/login` or `POST /auth/phone/login` and last 7 days.
 - **IDs** are UUIDs. **Money** is `NUMERIC(10,2)` in LKR. **Timestamps** are ISO-8601.
 - **Errors** are FastAPI's `{"detail": "..."}` with the usual 400/401/403/404/409 codes.
 - The **Roles** column lists who may call the endpoint. "Any" means any authenticated user;
@@ -24,14 +24,14 @@ Interactive OpenAPI docs are served at `/docs` and the raw schema at `/openapi.j
 
 | Method | Path                | Roles  | Notes                                                        |
 | ------ | ------------------- | ------ | ------------------------------------------------------------ |
-| POST   | `/auth/register`    | Public | 🔓 Accepts an arbitrary `role` **and** `company_id`           |
+| POST   | `/auth/register`    | Admin  | Creates an **owner**. `role` is pinned to `"owner"`; any other value is a 422 |
 | POST   | `/auth/login`       | Public | OAuth2 password form (`username` = email). Returns JWT        |
 | GET    | `/auth/me`          | Any    | Current user profile                                          |
 | POST   | `/auth/otp/send`    | Public | 🔓 Unrated-limited. Dev environment always uses code `123456` |
 | POST   | `/auth/otp/verify`  | Public | Verifies against an in-memory store; grants no token          |
 | POST   | `/auth/phone/check` | Public | Does this phone exist, and under what role                    |
 | POST   | `/auth/phone/register` | Public | 🔓 `otp_code` is optional — omit it and no OTP is checked  |
-| POST   | `/auth/phone/login` | Public | 🔓 **Returns a JWT for any phone number, no secret required** |
+| POST   | `/auth/phone/login` | Public | Phone + role + `otp_code`. The code is verified server-side and consumed on success |
 | PUT    | `/auth/profile`     | Any    | Update name, NIC, gender, phone                               |
 | POST   | `/auth/change-password` | Any | Requires the current password                              |
 | POST\|PUT | `/auth/fcm-token`, `/auth/me/fcm-token` | Any | Compatibility aliases for FCM registration |

@@ -62,7 +62,7 @@ def create_conductor(
     db_conductor = models.User(
         id=uuid.uuid4(),
         email=email,
-        hashed_password=auth.get_password_hash("seaty_phone_auth_dummy_pass"),
+        hashed_password=auth.unusable_password_hash(),
         full_name=payload.full_name,
         phone_number=payload.phone_number,
         role="conductor",

@@ -473,7 +473,11 @@ async def update_trip(
     trip_id: UUID,
     trip_in: schemas.TripCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    # Every ownership check below is nested under `if role in ["owner", "conductor"]`,
+    # so with a bare get_current_user a passenger fell through to the mutations and
+    # could rewrite any trip - including price_per_seat, which is what create_booking
+    # then charges. Gated to match create_trip. See docs/SECURITY.md #24.
+    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
     if not trip:

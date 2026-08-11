@@ -392,14 +392,27 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   _currentUserName = name;
                   await _generateAndSendOtp(context, name, phone);
                   setState(() => _authState = PhoneAuthState.verifyOtp);
-                } else {
+                } else if (widget.initialRole == 'passenger') {
                   FocusScope.of(context).unfocus();
                   setState(() {
                     _isNewUser = true;
-                    _dynamicRole = widget.initialRole ?? 'passenger';
+                    _dynamicRole = 'passenger';
                     _nameController.clear();
                     _authState = PhoneAuthState.register;
                   });
+                } else {
+                  // Staff entrance: sign-in only. Operator and conductor
+                  // accounts are created by an admin (Companies page) or by the
+                  // owner (Fleet & Crew), never self-registered - the backend
+                  // now rejects any phone signup that is not a passenger.
+                  FocusScope.of(context).unfocus();
+                  if (!context.mounted) return;
+                  SeatyNotifications.show(
+                    context,
+                    'This number is not registered as staff. Ask your operator to add you first.',
+                    isWarning: true,
+                    duration: const Duration(seconds: 5),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -673,11 +686,33 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                 }
 
                 final name = _currentUserName.isNotEmpty ? _currentUserName : 'User';
-                if (_isNewUser) {
-                  await ref.read(authProvider.notifier).registerPhoneDB(name, phone, _dynamicRole, otpCode: otp);
+                try {
+                  if (_isNewUser) {
+                    final created = await ref
+                        .read(authProvider.notifier)
+                        .registerPhoneDB(name, phone, _dynamicRole, otpCode: otp);
+                    if (!created) {
+                      if (!context.mounted) return;
+                      SeatyNotifications.show(
+                        context,
+                        'Could not create your account. Please try again.',
+                        isError: true,
+                      );
+                      return;
+                    }
+                  }
+                  // The backend verifies and consumes the OTP here, so a wrong
+                  // or expired code fails at this step rather than silently
+                  // producing a tokenless "signed in" state.
+                  await ref
+                      .read(authProvider.notifier)
+                      .login(name, _dynamicRole, phone, otpCode: otp);
+                  _otpController.clear();
+                } on AuthException catch (e) {
+                  if (!context.mounted) return;
+                  _otpController.clear();
+                  SeatyNotifications.show(context, e.message, isError: true);
                 }
-                await ref.read(authProvider.notifier).login(name, _dynamicRole, phone);
-                _otpController.clear();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0A2540),

@@ -1,0 +1,14 @@
+# The Dockerfile installs dependencies from package*.json and *then* runs
+# `COPY . .`, so without this a local node_modules is copied straight over the
+# freshly installed one - platform-specific binaries and all. dist/ is likewise
+# rebuilt inside the image and only ever arrives stale.
+node_modules
+dist
+
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+*.log

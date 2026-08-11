@@ -10,7 +10,22 @@ from app.config import settings
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
+def register(
+    user_in: schemas.UserRegister,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"])),
+):
+    """Create an operator (owner) account. Admin only.
+
+    Account creation is deliberately one-directional:
+
+        admin    -> created out of band only (backend/create_admin.py)
+        owner    -> created here, by an admin
+        conductor-> created by their owner (POST /conductors)
+        passenger-> self-service, phone + OTP (POST /auth/phone/register)
+
+    Nothing in the API can create an admin. See docs/SECURITY.md #2.
+    """
     # Check if user already exists
     existing_user = db.query(models.User).filter(models.User.email == user_in.email).first()
     if existing_user:
@@ -36,9 +51,23 @@ def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=schemas.Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Authenticate user
+    """Email + password sign-in for the admin console.
+
+    Restricted to the roles in `auth.PASSWORD_LOGIN_ROLES`. Passengers and
+    conductors are phone + OTP only and must not be able to reach the API
+    through a password, whichever client is calling.
+    """
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
-    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+
+    # Evaluated before either is acted on, and a disallowed role returns the
+    # same 401 as a wrong password. A distinct error here would confirm which
+    # phone numbers exist and what role they hold.
+    password_ok = user is not None and auth.verify_password(
+        form_data.password, user.hashed_password
+    )
+    role_ok = user is not None and user.role in auth.PASSWORD_LOGIN_ROLES
+
+    if not (password_ok and role_ok):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -56,17 +85,135 @@ def get_current_user_profile(current_user: models.User = Depends(auth.get_curren
     return current_user
 
 import random
+import secrets
 import time
 from app.services.sms_service import send_sms
 
-# In-memory OTP store: normalized_phone -> {"code": str, "expires_at": float, "verified": bool}
+# In-memory OTP store:
+#   normalized_phone -> {"code": str, "expires_at": float, "attempts": int}
+# Module-level, so it is lost on restart and not shared between processes - the
+# backend must stay single-process (see docs/DEPLOYMENT.md#capacity-and-scaling).
 otp_store = {}
+
+# normalized_phone -> [timestamps of recent sends], for send-rate limiting.
+otp_send_log = {}
+
+OTP_TTL_SECONDS = 300           # 5 minutes
+MAX_VERIFY_ATTEMPTS = 5         # per issued code, then it is burned
+RESEND_COOLDOWN_SECONDS = 60    # minimum gap between codes for one number
+MAX_SENDS_PER_WINDOW = 5
+SEND_WINDOW_SECONDS = 3600
+
 
 def normalize_phone_digits(raw: str) -> str:
     if not raw:
         return ""
     digits = "".join(c for c in raw if c.isdigit())
     return digits[-9:] if len(digits) >= 9 else digits
+
+
+def _test_otp_accounts() -> dict:
+    """Fixed-code accounts, parsed from the TEST_OTP_ACCOUNTS setting.
+
+    App Store and Play reviewers cannot receive our SMS, so they need a number
+    whose code never changes. These are real credentials: they live in the
+    environment, never in source, and should be removed once review is done.
+    Format: "0771234567:123456,0777140803:123456".
+    """
+    accounts = {}
+    for pair in (settings.TEST_OTP_ACCOUNTS or "").split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
+            continue
+        phone, code = pair.split(":", 1)
+        norm, code = normalize_phone_digits(phone), code.strip()
+        if norm and code:
+            accounts[norm] = code
+    return accounts
+
+
+def _prune_otp_state(now: float) -> None:
+    """Drop expired codes and stale send history so the dicts stay bounded."""
+    for phone in [p for p, e in otp_store.items() if now > e["expires_at"]]:
+        otp_store.pop(phone, None)
+    for phone in list(otp_send_log):
+        recent = [t for t in otp_send_log[phone] if now - t < SEND_WINDOW_SECONDS]
+        if recent:
+            otp_send_log[phone] = recent
+        else:
+            otp_send_log.pop(phone, None)
+
+
+def _enforce_send_rate(norm: str, now: float) -> None:
+    """Cap how often a code can be requested for one number.
+
+    Without this, /auth/otp/send is an open tap on the Notify.lk balance and a
+    way to flood someone's phone.
+    """
+    sends = otp_send_log.get(norm, [])
+    if sends and now - sends[-1] < RESEND_COOLDOWN_SECONDS:
+        wait = int(RESEND_COOLDOWN_SECONDS - (now - sends[-1])) + 1
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {wait} seconds before requesting another code.",
+        )
+    if len(sends) >= MAX_SENDS_PER_WINDOW:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification codes requested. Please try again later.",
+        )
+
+
+def _verify_otp_code(norm: str, submitted: str, consume: bool) -> None:
+    """Check a submitted OTP for a phone number, raising on any failure.
+
+    `consume=True` deletes the code on success, making it single-use. Login
+    consumes; the interactive /otp/verify check does not, so the client can give
+    immediate feedback and still complete the login with the same code.
+
+    Fixed-code review accounts never consume - a reviewer may sign in repeatedly.
+    """
+    submitted = (submitted or "").strip()
+    if not submitted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code is required.",
+        )
+
+    fixed = _test_otp_accounts().get(norm)
+    if fixed is not None:
+        if not secrets.compare_digest(submitted, fixed):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code. Please check your SMS and try again.",
+            )
+        return
+
+    entry = otp_store.get(norm)
+    if not entry or time.time() > entry["expires_at"]:
+        otp_store.pop(norm, None)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OTP code has expired or was not requested. Please request a new code.",
+        )
+
+    entry["attempts"] += 1
+    if entry["attempts"] > MAX_VERIFY_ATTEMPTS:
+        # Burn the code rather than let a 6-digit space be walked at leisure.
+        otp_store.pop(norm, None)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many incorrect attempts. Please request a new code.",
+        )
+
+    if not secrets.compare_digest(entry["code"], submitted):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification code. Please check your SMS and try again.",
+        )
+
+    if consume:
+        otp_store.pop(norm, None)
 
 @router.post("/otp/send", response_model=schemas.SendOTPResponse)
 def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
@@ -77,73 +224,54 @@ def send_otp(payload: schemas.SendOTPRequest, db: Session = Depends(get_db)):
             detail="Invalid mobile number provided."
         )
 
+    now = time.time()
+    _prune_otp_state(now)
+
+    # Review accounts have a fixed code the reviewer already holds. Nothing to
+    # generate, nothing to send - and crucially the code is not echoed back, or
+    # the "credential" would be self-service for anyone who knows the number.
+    if target_norm in _test_otp_accounts():
+        return {
+            "success": True,
+            "message": f"Verification code sent via SMS to {payload.phone_number}",
+            "phone_number": payload.phone_number,
+            "otp_code": None,
+        }
+
+    _enforce_send_rate(target_norm, now)
+
     is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
-    is_test_phone = target_norm in [
-        normalize_phone_digits("0771234567"),
-        normalize_phone_digits("+94771234567"),
-        normalize_phone_digits("0777140803"),
-        normalize_phone_digits("+94777140803"),
-    ]
-    # Generate dynamic 6-digit OTP code (or 123456 in dev mode or for test accounts)
-    otp_code = "123456" if (is_dev or is_test_phone) else str(random.randint(100000, 999999))
-    expires_at = time.time() + 300  # Valid for 5 minutes
+    otp_code = "123456" if is_dev else f"{secrets.randbelow(1000000):06d}"
 
     otp_store[target_norm] = {
         "code": otp_code,
-        "expires_at": expires_at,
-        "verified": False
+        "expires_at": now + OTP_TTL_SECONDS,
+        "attempts": 0,
     }
+    otp_send_log.setdefault(target_norm, []).append(now)
 
     message = f"Your Seaty verification code is {otp_code}. Valid for 5 minutes."
     send_sms(payload.phone_number, message)
 
-    res = {
+    return {
         "success": True,
         "message": f"Verification code sent via SMS to {payload.phone_number}",
         "phone_number": payload.phone_number,
+        # Echoed only in development, where there is no real SMS to read.
+        "otp_code": otp_code if is_dev else None,
     }
-    # Return otp_code only in development environment or for test accounts
-    if is_dev or is_test_phone:
-        res["otp_code"] = otp_code
-    else:
-        res["otp_code"] = None
-
-    return res
 
 @router.post("/otp/verify", response_model=schemas.VerifyOTPResponse)
 def verify_otp(payload: schemas.VerifyOTPRequest):
+    """Interactive check so the client can flag a wrong code immediately.
+
+    Deliberately does **not** consume the code - the client calls this and then
+    completes sign-in with the same code, which is where it is consumed. This
+    endpoint is not an authorisation step on its own; nothing downstream trusts
+    the fact that it was called. Attempts still count towards the per-code cap.
+    """
     target_norm = normalize_phone_digits(payload.phone_number)
-    is_dev = settings.ENVIRONMENT.lower() in ["dev", "development"]
-    is_test_phone = target_norm in [
-        normalize_phone_digits("0771234567"),
-        normalize_phone_digits("+94771234567"),
-        normalize_phone_digits("0777140803"),
-        normalize_phone_digits("+94777140803"),
-    ]
-
-    # Auto-approve if code is '123456' or 'AUTO' for test accounts or dev environment
-    if payload.otp_code.strip() in ["123456", "AUTO"] and (is_dev or is_test_phone):
-        if target_norm in otp_store:
-            otp_store[target_norm]["verified"] = True
-        return {
-            "success": True,
-            "message": "OTP verification successful."
-        }
-
-    entry = otp_store.get(target_norm)
-    if not entry or time.time() > entry["expires_at"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OTP code has expired or was not requested. Please request a new code."
-        )
-
-    if entry["code"] != payload.otp_code.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid verification code. Please check your SMS and try again."
-        )
-
-    entry["verified"] = True
+    _verify_otp_code(target_norm, payload.otp_code, consume=False)
     return {
         "success": True,
         "message": "OTP verification successful."
@@ -179,22 +307,13 @@ def check_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db
 def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(get_db)):
     email = f"{payload.phone_number}@seaty.lk"
     target_norm = normalize_phone_digits(payload.phone_number)
-    
-    # OTP Validation check if OTP code provided
-    if payload.otp_code:
-        entry = otp_store.get(target_norm)
-        if not entry or time.time() > entry["expires_at"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="OTP code has expired or was not requested."
-            )
-        if entry["code"] != payload.otp_code.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid OTP verification code."
-            )
-        # Clear used OTP
-        otp_store.pop(target_norm, None)
+
+    # Unconditional. This used to be `if payload.otp_code:`, so omitting the
+    # field entirely skipped verification and let anyone register an account
+    # against a number they did not control - see docs/SECURITY.md #4.
+    # Not consumed here: the client registers and then immediately signs in with
+    # the same code, and it is sign-in that burns it.
+    _verify_otp_code(target_norm, payload.otp_code, consume=False)
 
     users = db.query(models.User).all()
     for u in users:
@@ -214,7 +333,7 @@ def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(
     db_user = models.User(
         id=uuid.uuid4(),
         email=email,
-        hashed_password=auth.get_password_hash("seaty_phone_auth_dummy_pass"),
+        hashed_password=auth.unusable_password_hash(),
         full_name=payload.full_name,
         phone_number=payload.phone_number,
         role=payload.role
@@ -225,10 +344,22 @@ def register_phone(payload: schemas.PhoneRegisterRequest, db: Session = Depends(
     return db_user
 
 @router.post("/phone/login", response_model=schemas.Token)
-def login_phone(payload: schemas.PhoneCheckRequest, db: Session = Depends(get_db)):
+def login_phone(payload: schemas.PhoneLoginRequest, db: Session = Depends(get_db)):
+    """Phone + OTP sign-in for the mobile app.
+
+    The OTP is verified **here**, server-side, and consumed on success. It used
+    to be checked only by a separate /otp/verify call whose result was written
+    to a flag nothing ever read - so a client that skipped that call got a token
+    for any phone number. See docs/SECURITY.md #1.
+    """
     target_norm = normalize_phone_digits(payload.phone_number)
+
+    # Before the user lookup, so a wrong code cannot be used to probe which
+    # numbers exist (the lookup 404s on an unknown number).
+    _verify_otp_code(target_norm, payload.otp_code, consume=True)
+
     users = db.query(models.User).all()
-    
+
     matching_user = None
     roles = ["owner", "conductor"] if payload.role in ["owner", "conductor"] else [payload.role]
     

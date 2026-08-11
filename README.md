@@ -24,16 +24,35 @@ fleets, recurring schedules, and staff. Conductors scan tickets and mark boardin
 
 | Doc                                        | Read it for                                                        |
 | ------------------------------------------ | ------------------------------------------------------------------ |
-| [Architecture](docs/ARCHITECTURE.md)       | Services, data model, booking/payment/tracking flows, known drift  |
+| [Architecture](docs/ARCHITECTURE.md)       | Services, booking/payment/tracking flows, real-time channels       |
+| [Data model](docs/DATA_MODEL.md)           | Every table and column, state machines, JSONB shapes, schema drift |
 | [API reference](docs/API.md)               | Every endpoint, role requirements, WebSocket protocols             |
 | [Development](docs/DEVELOPMENT.md)         | Running backend, admin, and mobile locally                         |
-| [Deployment](docs/DEPLOYMENT.md)           | Docker Compose stack, CI/CD, environment variables                 |
+| [Deployment](docs/DEPLOYMENT.md)           | Docker Compose stack, CI/CD, environment variables, capacity limits |
 | [Website](docs/WEBSITE.md)                 | Marketing site structure, editing content, deploying to its domain |
-| [Security](docs/SECURITY.md)               | **Known unauthenticated endpoints and auth gaps — read before launch** |
+| [Security](docs/SECURITY.md)               | **Known auth gaps and unauthenticated endpoints — read before launch** |
+| [Code quality](docs/CODE_QUALITY.md)       | Correctness bugs, data-loss paths, performance ceilings, dead code |
 
 > [!WARNING]
-> The authentication and payment flows have open gaps that allow account takeover and free
-> bookings. See [docs/SECURITY.md](docs/SECURITY.md) before exposing this to real users or money.
+> **Not ready for real money yet.** Payments can still be completed without authentication
+> (`/payments/sandbox/complete/{txn}`), `POST /auth/register` is unauthenticated and accepts any
+> `role`, and there is no real payment gateway. See [docs/SECURITY.md](docs/SECURITY.md),
+> findings #2, #3, #26, #27.
+>
+> Capacity is also limited to roughly **15 concurrent signed-in users** by the database
+> connection pool; see [docs/CODE_QUALITY.md](docs/CODE_QUALITY.md) P1.
+>
+> *Closed so far:* #22 shared password · #23/#5 secrets in the image and Compose (`SECRET_KEY` and
+> the DB password rotated) · #24 ungated trip edit · #1/#4/#25 phone login now requires a verified,
+> single-use OTP · #10 OTP rate limiting.
+
+> [!IMPORTANT]
+> The mobile app must ship together with the current backend. `POST /auth/phone/login` now requires
+> an `otp_code`; older app builds send only `{phone_number, role}` and receive `422`.
+>
+> The console admin is `admin@seaty.lk` with the development password `password`. `/auth/login`
+> is not rate-limited, so **change it before this host is reachable publicly** —
+> `docker compose exec backend python create_admin.py admin@seaty.lk "Seaty Super Admin"`.
 
 ## Quick start
 
@@ -68,7 +87,7 @@ screen (see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#pointing-the-app-at-a-loca
 
 ## Tech notes
 
-- Auth is JWT (HS256, 24 h) issued by the backend; the mobile app authenticates by phone + OTP,
+- Auth is JWT (HS256, 7 days) issued by the backend; the mobile app authenticates by phone + OTP,
   the admin dashboard by email + password.
 - Real-time seat availability, GPS tracking, and notifications each run over their own WebSocket.
 - Payments currently run through a **sandbox gateway only** — no real gateway is wired up.

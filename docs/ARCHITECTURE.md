@@ -61,7 +61,7 @@ backend/app/
 - `RoleChecker([...])` — wraps `get_current_user` and 403s if `user.role` is not in the list.
 
 Tokens are HS256 JWTs with `sub` (email) and `role` claims, expiring after
-`ACCESS_TOKEN_EXPIRE_MINUTES` (1440 = 24 h). **The `role` claim is decorative** — every
+`ACCESS_TOKEN_EXPIRE_MINUTES` (10080 = 7 days). **The `role` claim is decorative** — every
 authorisation check re-reads `role` from the database row, so a stale token cannot escalate.
 
 There are two parallel login paths:
@@ -69,17 +69,67 @@ There are two parallel login paths:
 | Path                     | Used by       | Credential                                          |
 | ------------------------ | ------------- | --------------------------------------------------- |
 | `POST /auth/login`       | Admin SPA     | email + password (OAuth2 password form)             |
-| `POST /auth/phone/login` | Mobile app    | phone number + role — **no secret is verified**     |
+| `POST /auth/phone/login` | Mobile app    | phone number + role + **OTP code, verified and consumed server-side** |
 
-Phone-only users get a synthetic email `{phone}@seaty.lk` and a fixed dummy password hash, so
-they can never log in through the password path. See [SECURITY.md](SECURITY.md) for why the
-phone path is a critical gap.
+Phone-only users get a synthetic email `{phone}@seaty.lk` and a password hash of a random secret
+that is generated and immediately discarded (`auth.unusable_password_hash()`).
+
+The two paths are separated by role, enforced in the backend:
+
+| Role | `POST /auth/login` (console) | `POST /auth/phone/login` (app) |
+| ---- | :--------------------------: | :----------------------------: |
+| `admin` | ✅ | — |
+| `owner` | ✅ | ✅ |
+| `conductor` | ❌ 401 | ✅ |
+| `passenger` | ❌ 401 | ✅ |
+
+`auth.PASSWORD_LOGIN_ROLES` drives the left column, and a disallowed role returns the same 401 as
+a wrong password so the endpoint cannot be used to enumerate accounts or roles. The admin SPA's
+`RoleProtectedRoute` guards mirror this, but they are UI only — the check that matters is the one
+in `routes/auth.py`.
+
+### Who can create whom
+
+Account creation is one-directional, and enforced server-side at every step:
+
+```
+   create_admin.py  ──▶  admin  ──▶  owner  ──▶  conductor
+   (out of band,                    (POST        (POST
+    no API path)                  /auth/register) /conductors)
+
+                        passenger  ◀── self-service, phone + OTP
+                                       (POST /auth/phone/register)
+```
+
+| Role | Created by | Enforced how |
+| ---- | ---------- | ------------ |
+| `admin` | nobody, via the API | there is no endpoint; `backend/create_admin.py` only |
+| `owner` | an admin | `RoleChecker(["admin"])` + `role: Literal["owner"]` |
+| `conductor` | their owner | `RoleChecker(["owner"])`, role hardcoded, inherits the owner's `company_id` |
+| `passenger` | anyone | `role: Literal["passenger"]` + a verified OTP |
+
+Two consequences worth remembering: the app's staff entrance is **sign-in only** (an unrecognised
+number is told to contact its operator), and **losing the last admin account means losing console
+access** — `create_admin.py` is the only way back in.
+
+> [!NOTE]
+> Until commit `3b43d6a` both creation paths hashed the string literal
+> `seaty_phone_auth_dummy_pass`, and `/auth/login` had no role check — so knowing a phone number
+> was enough to sign in as that user. An earlier version of this document claimed the opposite.
+> See [SECURITY.md](SECURITY.md) #22 for the full history; 18 legacy hashes still need rotating.
 
 ### Background work
 
-`main.py` starts one asyncio task on startup: `trip_reminder_scheduler`, which wakes every
-30 seconds, finds confirmed bookings whose trip departs in the next 30 minutes, and sends a
-reminder — de-duplicating by `LIKE '%Booking ID: {id}%'` against the notifications table.
+`main.py` starts **two** asyncio tasks on startup:
+
+| Task | Interval | What it does |
+| ---- | -------- | ------------ |
+| `trip_reminder_scheduler` | 30 s | Finds confirmed bookings whose trip departs within 30 minutes and sends a reminder, de-duplicating by `LIKE '%Booking ID: {id}%'` against the notifications table |
+| `auto_expire_bookings_scheduler` | 60 s | Marks confirmed bookings on departed trips `completed` (all seats scanned) or `expired` (otherwise) |
+
+The second one duplicates logic that `GET /bookings` also performs inline via
+`_auto_update_booking_statuses` — two implementations of the same transition, with different
+rules. See [CODE_QUALITY.md](CODE_QUALITY.md) C5.
 
 There is **no scheduled seat-hold cleanup**, despite the docstring on
 `POST /seat-holds/cleanup` claiming it runs "on app startup and periodically". That endpoint is
@@ -89,8 +139,9 @@ availability read filters on `expires_at > now`; what leaks is bookings stuck in
 
 ## Data model
 
-Eleven core tables plus two added later. UUID primary keys throughout, `NUMERIC(10,2)` for money,
-`TIMESTAMPTZ` for time.
+Seventeen tables. UUID primary keys throughout, `NUMERIC(10,2)` for money, `TIMESTAMPTZ` for time.
+Field-level reference, state machines, JSONB shapes, and the full DDL-drift matrix are in
+[DATA_MODEL.md](DATA_MODEL.md); what follows is the shape and the rationale.
 
 ```
 bus_companies ─┬─< users ─┬─< bookings >─── payments
@@ -184,9 +235,24 @@ All three keep connection state in a module-level dict, which means **the backen
 scaled beyond one process** — a second worker would hold a disjoint set of sockets. Any move to
 multiple replicas needs a shared broker (Redis pub/sub or similar) first.
 
+> [!WARNING]
+> **Each authenticated socket also pins a database connection for its entire lifetime.** Both
+> `tracking.py` and `notifications.py` open a `SessionLocal()` and close it only on disconnect,
+> and the engine is created with SQLAlchemy's defaults — `pool_size=5, max_overflow=10`, so
+> **15 connections total**. Every signed-in app holds the notifications socket open, so the
+> ceiling is roughly 15 concurrent users before the pool is exhausted and *all* REST traffic
+> starts timing out. This is the binding capacity limit today, ahead of CPU, memory, or the
+> single-process constraint above. See [CODE_QUALITY.md](CODE_QUALITY.md) P1.
+
 Tracking authorises drivers as: vehicle owner, a conductor in the same company, or an admin.
 Passenger listeners are authenticated but not restricted — any logged-in user can watch any
 vehicle's location.
+
+Nginx sets no `proxy_read_timeout`, so its 60-second default closes any socket quiet for a minute
+— which the receive-only notifications socket always is. The GPS provider reconnects with backoff;
+the notifications provider does not reconnect at all, so **in-app live notifications stop working
+about a minute after sign-in** and only FCM push keeps arriving. See
+[CODE_QUALITY.md](CODE_QUALITY.md) P8.
 
 ### Notification fan-out
 
@@ -238,3 +304,15 @@ These are **UI guards only** — the backend enforces the real boundary.
 
 Because `API_BASE` is the relative path `/api/v1`, the SPA only works when served from the same
 origin as the API — i.e. behind its own Nginx. `npm run dev` needs a Vite proxy or a rebuild.
+Two files break that rule and hard-code `wss://api.seaty.hashnate.com`:
+`components/NotificationDrawer.tsx` and `pages/SettingsPage.tsx`, so the dashboard's live
+notification feed always points at production, including from a dev server.
+
+Two things about this dashboard are easy to misread:
+
+- **Live Map is a mock.** `pages/LiveMapPage.tsx` animates three hard-coded buses on a canvas.
+  It is not connected to the GPS WebSocket and shows nothing about real vehicles, but it is routed
+  and linked in the sidebar with no indication of that.
+- **Operator accounts are created from the Companies page.** `CompaniesPage.tsx` calls
+  `POST /auth/register` with `role: 'owner'`, a `company_id`, and the admin's bearer token. The
+  endpoint is admin-only and can only ever create owners.

@@ -1,4 +1,7 @@
-version: '3.8'
+# Secrets are NOT defined in this file. Compose-level values come from `.env`
+# (see .env.example); application settings come from backend/.env via env_file.
+# An `environment:` entry here silently overrides env_file, which is how the
+# committed placeholder SECRET_KEY used to win over the real one.
 
 services:
   db:
@@ -7,9 +10,9 @@ services:
       dockerfile: ./database/Dockerfile
     container_name: seaty-db
     environment:
-      POSTGRES_DB: seaty
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: seaty_secure_password_987
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - seaty-postgres-data:/var/lib/postgresql/data
     restart: always
@@ -22,8 +25,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://postgres:seaty_secure_password_987@db:5432/seaty
-      SECRET_KEY: SUPER_SECRET_KEY_SEATY_1234567890_CHANGEME_IN_PRODUCTION
+      # A path, not a secret. DATABASE_URL and SECRET_KEY deliberately live in
+      # backend/.env only — do not reintroduce them here.
       GOOGLE_APPLICATION_CREDENTIALS: /app/firebase-service-account.json
     volumes:
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json:ro

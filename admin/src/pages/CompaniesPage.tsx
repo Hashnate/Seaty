@@ -89,7 +89,7 @@ export default function CompaniesPage() {
 
     setOwnerSubmitting(true);
     try {
-      await registerUser({
+      await registerUser(token, {
         email: ownerForm.email.trim(),
         password: ownerForm.password.trim(),
         full_name: ownerForm.full_name.trim(),

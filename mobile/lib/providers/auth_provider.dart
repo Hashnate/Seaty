@@ -15,6 +15,16 @@ import 'package:seaty/providers/notifications_provider.dart';
 import 'package:seaty/providers/trips_provider.dart';
 import 'package:seaty/utils/safe_text.dart';
 
+/// A sign-in failure with a message already fit to show the user — typically
+/// the backend's `detail` for a wrong, expired, or rate-limited OTP.
+class AuthException implements Exception {
+  final String message;
+  AuthException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 class AuthState {
   final bool isAuthenticated;
   final String role;
@@ -206,7 +216,9 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<bool> registerPhoneDB(String name, String phone, String role, {String? otpCode}) async {
+  /// Creates a passenger account. [otpCode] is required — the backend verifies
+  /// it before creating anything, so a caller without one cannot register.
+  Future<bool> registerPhoneDB(String name, String phone, String role, {required String otpCode}) async {
     final settings = ref.read(settingsProvider);
     final assignedRole = role.isNotEmpty ? role : 'passenger';
     try {
@@ -218,19 +230,31 @@ class AuthNotifier extends Notifier<AuthState> {
               'phone_number': phone,
               'full_name': name,
               'role': assignedRole,
-              'otp_code': ?otpCode,
+              'otp_code': otpCode,
             }),
           )
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 15));
 
       return response.statusCode == 201;
     } catch (e) {
+      // Was `return true`: a timeout or dropped connection was reported to the
+      // caller as a successful registration, so sign-up appeared to work and
+      // the following sign-in then failed for no visible reason.
       debugPrint('API Registration Error: $e');
-      return true;
+      return false;
     }
   }
 
-  Future<void> login(String name, String roleSelected, String phoneNumber) async {
+  /// Signs in with phone + OTP.
+  ///
+  /// [otpCode] is mandatory: the backend verifies it here and consumes it, so a
+  /// prior `/auth/otp/verify` call is a UX nicety, not the security check.
+  Future<void> login(
+    String name,
+    String roleSelected,
+    String phoneNumber, {
+    required String otpCode,
+  }) async {
     final settings = ref.read(settingsProvider);
     String token = '';
     String finalRole = roleSelected;
@@ -243,20 +267,39 @@ class AuthNotifier extends Notifier<AuthState> {
             body: json.encode({
               'phone_number': phoneNumber,
               'role': roleSelected,
+              'otp_code': otpCode,
             }),
           )
-          .timeout(const Duration(seconds: 2));
+          // 2s was too tight for a mobile network, and a timeout here now costs
+          // the user their one-shot code.
+          .timeout(const Duration(seconds: 15));
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        token = data['access_token'] ?? '';
-        if (data['role'] != null && data['role'].toString().isNotEmpty) {
-          finalRole = data['role'].toString();
-        }
+      if (response.statusCode != 200) {
+        // Previously any non-200 fell through and the session was still marked
+        // authenticated with an empty token, leaving the app "signed in" but
+        // 401ing on every request. Now that a wrong or expired OTP is a normal
+        // outcome, that has to surface.
+        String detail = 'Sign-in failed. Please try again.';
+        try {
+          final body = json.decode(response.body);
+          if (body is Map && body['detail'] is String) detail = body['detail'];
+        } catch (_) {}
+        throw AuthException(detail);
       }
+
+      final data = json.decode(response.body);
+      token = data['access_token'] ?? '';
+      if (data['role'] != null && data['role'].toString().isNotEmpty) {
+        finalRole = data['role'].toString();
+      }
+      if (token.isEmpty) {
+        throw AuthException('Sign-in failed. Please try again.');
+      }
+    } on AuthException {
+      rethrow;
     } catch (e) {
       debugPrint('API Login error: $e.');
-      rethrow;
+      throw AuthException('Could not reach Seaty. Check your connection and try again.');
     }
 
     final newState = AuthState(

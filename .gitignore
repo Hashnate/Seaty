@@ -7,6 +7,12 @@
 *.crt
 firebase-service-account.json
 
+# Database dumps and pre-change env snapshots. These contain live passenger
+# data and credentials in plaintext — never commit them.
+backups/
+*.sql.gz
+seaty-*.sql
+
 # Python
 __pycache__/
 *.py[cod]

@@ -65,10 +65,15 @@ export async function getCurrentUser(token: string) {
   return request('/auth/me', { token });
 }
 
-export async function registerUser(data: Record<string, unknown>) {
+/** Creates an operator (owner) account. Admin only — the endpoint rejects any
+ *  other role, and pins the created account to "owner". */
+export async function registerUser(token: string, data: Record<string, unknown>) {
   const response = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(data),
   });
   if (!response.ok) {

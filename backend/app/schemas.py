@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional, Any
+from typing import List, Literal, Optional, Any
 from uuid import UUID
 import datetime
 
@@ -15,11 +15,18 @@ class TokenData(BaseModel):
     role: Optional[str] = None
 
 class UserRegister(BaseModel):
+    """Admin-only creation of an operator account.
+
+    `role` is pinned to "owner" on purpose. This endpoint used to be
+    unauthenticated with a free-text role, so one request created an admin
+    (docs/SECURITY.md #2). No API path can mint an admin any more - use
+    `backend/create_admin.py` out of band.
+    """
     email: EmailStr
     password: str
     full_name: str
     phone_number: Optional[str] = None
-    role: str = Field(default="passenger", description="passenger, owner, or admin")
+    role: Literal["owner"] = "owner"
     company_id: Optional[UUID] = None
 
 class UserLogin(BaseModel):
@@ -466,8 +473,21 @@ class PhoneCheckResponse(BaseModel):
 class PhoneRegisterRequest(BaseModel):
     phone_number: str
     full_name: str
+    # Self-service phone signup creates passengers only. Owners are created by
+    # an admin in the console (POST /auth/register, which sets a real password);
+    # conductors by their owner (POST /conductors). Allowing "owner" here let
+    # any phone number mint an operator account that could then sign in to the
+    # admin console - see docs/SECURITY.md #22.
+    role: Literal["passenger"] = "passenger"
+    # Required. Optional-and-only-checked-if-present was docs/SECURITY.md #4.
+    otp_code: str
+
+
+class PhoneLoginRequest(BaseModel):
+    """Phone sign-in. `otp_code` is mandatory and verified server-side."""
+    phone_number: str
     role: str
-    otp_code: Optional[str] = None
+    otp_code: str
 
 class SendOTPRequest(BaseModel):
     phone_number: str
