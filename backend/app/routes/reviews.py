@@ -5,6 +5,7 @@ import uuid
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import now_sl, to_sl
 
 router = APIRouter(prefix="/vehicles", tags=["Reviews"])
 
@@ -68,7 +69,7 @@ def create_vehicle_review(
         if target_b:
             user_bookings = [target_b]
 
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    now_sri_lanka = now_sl()
     valid_booking = None
 
     # 2 & 3. Condition 2 & 3: Ticket scanned by conductor & departure time commenced
@@ -77,12 +78,10 @@ def create_vehicle_review(
         if not trip:
             continue
 
-        dep_time = trip.departure_time
-        if dep_time and dep_time.tzinfo is None:
-            dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+        dep_time = to_sl(trip.departure_time)
 
         # Condition 3: Departure time must have commenced
-        if dep_time and dep_time > now_utc:
+        if dep_time and dep_time > now_sri_lanka:
             continue
 
         # Condition 2: Scanned by conductor or completed

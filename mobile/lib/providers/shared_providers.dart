@@ -8,7 +8,9 @@ import 'package:http/http.dart' as http;
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:seaty/utils/crash_reporting.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/utils/safe_text.dart';
 
 late final SharedPreferences globalPrefs;
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -93,7 +95,7 @@ Future<void> _syncFcmTokenToBackend(String token) async {
       },
       body: json.encode({'fcm_token': token}),
     );
-    debugPrint('FCM token synced from onTokenRefresh [${res.statusCode}]: ${token.substring(0, 20)}...');
+    debugPrint('FCM token synced from onTokenRefresh [${res.statusCode}]: ${shortId(token, 20)}...');
   } catch (e) {
     debugPrint('Error syncing FCM token from onTokenRefresh: $e');
   }
@@ -221,6 +223,8 @@ Future<void> _initFirebaseMessaging() async {
     // Only initialize FCM on platforms that support it natively (Android, iOS, Web, macOS)
     if (kIsWeb || (!Platform.isWindows && !Platform.isLinux)) {
       await Firebase.initializeApp();
+      // Firebase is up, so buffered startup errors can now be delivered.
+      await CrashReporting.enableCrashReporting();
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       setupPushNotifications();
     } else {

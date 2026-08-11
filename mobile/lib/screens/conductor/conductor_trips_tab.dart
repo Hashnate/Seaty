@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/utils/active_trip.dart';
 import 'package:seaty/widgets/shimmer_loading.dart';
 
 class ConductorTripsTab extends ConsumerStatefulWidget {
@@ -24,16 +25,15 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
   }
 
   Future<void> _loadManifest() async {
-    final tripsState = ref.read(tripsProvider);
     final tripsNotifier = ref.read(tripsProvider.notifier);
     final bookingsNotifier = ref.read(bookingsProvider.notifier);
 
-    if (tripsState.trips.isEmpty) {
-      await tripsNotifier.loadTrips();
-    }
+    // Always refetch - see conductor_home_tab: a stale list from a previous
+    // session must never be reused for the newly signed-in conductor.
+    await tripsNotifier.loadTrips();
     final trips = ref.read(tripsProvider).trips;
-    if (trips.isNotEmpty) {
-      final activeTrip = trips.first;
+    final activeTrip = pickActiveTrip(trips);
+    if (activeTrip != null) {
       final tripId = activeTrip['id'].toString();
       setState(() => _isLoading = true);
       final manifest = await bookingsNotifier.fetchTripManifest(tripId);
@@ -59,9 +59,10 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
   Future<void> _toggleSeatBoarding(String seat) async {
     final tripsState = ref.read(tripsProvider);
     final bookingsNotifier = ref.read(bookingsProvider.notifier);
-    if (tripsState.trips.isEmpty) return;
-    final tripId = tripsState.trips.first['id'].toString();
-    
+    final activeTrip = pickActiveTrip(tripsState.trips);
+    if (activeTrip == null) return;
+    final tripId = activeTrip['id'].toString();
+
     try {
       final updatedBoarded = await bookingsNotifier.toggleBoarding(tripId, seat);
       if (updatedBoarded != null && mounted) {
@@ -92,7 +93,7 @@ class _ConductorTripsTabState extends ConsumerState<ConductorTripsTab> {
   @override
   Widget build(BuildContext context) {
     final tripsState = ref.watch(tripsProvider);
-    final activeTrip = tripsState.trips.isNotEmpty ? tripsState.trips.first : null;
+    final activeTrip = pickActiveTrip(tripsState.trips);
 
     final String routeTitle = activeTrip != null
         ? '${activeTrip['origin']} → ${activeTrip['destination']}'

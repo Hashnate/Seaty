@@ -7,6 +7,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/screens/splash_screen.dart';
+import 'package:seaty/utils/crash_reporting.dart';
 
 
 // Re-exports for backward compatibility with conductor/owner modules
@@ -33,6 +34,11 @@ export 'package:seaty/screens/notifications_screen.dart';
 void main() async {
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+  // Installed before anything else can throw. Only observes errors - Flutter's
+  // normal error presentation is preserved, so app behaviour is unchanged.
+  // Delivery switches on later, once Firebase is up (see initFirebaseMessaging).
+  CrashReporting.installHandlers();
 
   // Providers read globalPrefs synchronously, so this one genuinely has to
   // finish before the first build.

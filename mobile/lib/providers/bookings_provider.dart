@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
+import 'package:seaty/utils/sri_lanka_time.dart';
 
 class BookingsState {
   final List<Map<String, dynamic>> bookings;
@@ -88,17 +89,9 @@ class BookingsNotifier extends Notifier<BookingsState> {
             'origin': trip['route']?['origin'] ?? 'Colombo Fort',
             'destination': trip['route']?['destination'] ?? 'Galle',
             'departure':
-                trip['departure_time']
-                    ?.toString()
-                    .replaceAll('T', ' ')
-                    .substring(0, 16) ??
+                isoToSriLankaWallClock(trip['departure_time']) ??
                 '2026-07-13 14:00',
-            'arrival':
-                trip['arrival_time']
-                    ?.toString()
-                    .replaceAll('T', ' ')
-                    .substring(0, 16) ??
-                '',
+            'arrival': isoToSriLankaWallClock(trip['arrival_time']) ?? '',
             'stops': trip['route']?['stops'] ?? [],
             'bus_name': vehicle['name'] ?? 'Luxury Express',
             'reg': vehicle['registration_number'] ?? 'WP-ND-0000',
@@ -186,6 +179,31 @@ class BookingsNotifier extends Notifier<BookingsState> {
     );
   }
 
+  /// Detail of the most recent failed booking/payment call, so the UI can show
+  /// the server's actual reason (e.g. the 30-minute pre-departure cutoff)
+  /// instead of a generic message. Null when the last call succeeded.
+  String? lastErrorMessage;
+
+  /// Pulls FastAPI's `detail` out of an error body. Falls back to null so
+  /// callers keep their existing generic copy when the shape is unexpected.
+  String? _extractErrorDetail(String body) {
+    try {
+      final decoded = json.decode(body);
+      if (decoded is Map && decoded['detail'] != null) {
+        final detail = decoded['detail'];
+        if (detail is String && detail.trim().isNotEmpty) return detail;
+        // Pydantic validation errors arrive as a list of maps.
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map && first['msg'] != null) return first['msg'].toString();
+        }
+      }
+    } catch (_) {
+      // Non-JSON body - nothing useful to surface.
+    }
+    return null;
+  }
+
   Future<Map<String, dynamic>?> initiateBooking(
     String tripId,
     Map<String, dynamic> passengerDetails,
@@ -209,9 +227,12 @@ class BookingsNotifier extends Notifier<BookingsState> {
       );
 
       if (response.statusCode == 201) {
+        lastErrorMessage = null;
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
         ref.read(authProvider.notifier).logout();
+      } else {
+        lastErrorMessage = _extractErrorDetail(response.body);
       }
     } catch (e) {
       debugPrint('Error initiating booking: $e');
@@ -234,7 +255,10 @@ class BookingsNotifier extends Notifier<BookingsState> {
       );
 
       if (response.statusCode == 201) {
+        lastErrorMessage = null;
         return json.decode(response.body);
+      } else {
+        lastErrorMessage = _extractErrorDetail(response.body);
       }
     } catch (e) {
       debugPrint('Error initiating payment: $e');
@@ -356,10 +380,7 @@ class BookingsNotifier extends Notifier<BookingsState> {
           'origin': trip['route']?['origin'] ?? 'Colombo Fort',
           'destination': trip['route']?['destination'] ?? 'Galle',
           'departure':
-              trip['departure_time']
-                  ?.toString()
-                  .replaceAll('T', ' ')
-                  .substring(0, 16) ??
+              isoToSriLankaWallClock(trip['departure_time']) ??
               '2026-07-13 14:00',
           'bus_name': vehicle['name'] ?? 'Luxury Express',
           'reg': vehicle['registration_number'] ?? 'WP-ND-0000',

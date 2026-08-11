@@ -131,6 +131,57 @@ try:
     except Exception as e:
         print(f"Error upserting support_phone: {e}")
 
+    # 11. Create vehicle_location_history table (breadcrumb trail for live tracking)
+    print("Creating vehicle_location_history table if not exists...")
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS vehicle_location_history (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                vehicle_id UUID NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+                latitude DOUBLE PRECISION NOT NULL,
+                longitude DOUBLE PRECISION NOT NULL,
+                speed NUMERIC(5, 2),
+                heading NUMERIC(5, 2),
+                recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vehicle_location_history_vehicle_time
+            ON vehicle_location_history(vehicle_id, recorded_at);
+        """)
+    except Exception as e:
+        print(f"Error creating vehicle_location_history table: {e}")
+
+    # 12. Create hero_banners table (admin-managed passenger home carousel)
+    print("Creating hero_banners table if not exists...")
+    try:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS hero_banners (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                image_url TEXT NOT NULL,
+                title TEXT,
+                subtitle TEXT,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_hero_banners_active_order
+            ON hero_banners(is_active, sort_order);
+        """)
+    except Exception as e:
+        print(f"Error creating hero_banners table: {e}")
+
+    # NOTE: step 12 (a one-time -5:30 shift of existing trips.departure_time/
+    # arrival_time) was removed here. It assumed the Postgres session timezone
+    # defaulted to UTC, which was never confirmed against the live database and
+    # turned out to be wrong - existing trip times were already correct.
+    # See app/timezone_utils.py for the (still valid) going-forward write/read
+    # helpers; do not reintroduce a blind historical-data shift without first
+    # confirming `SHOW timezone;` against production and getting explicit sign-off.
+
     cur.close()
     conn.close()
     print("Database migration completed successfully!")

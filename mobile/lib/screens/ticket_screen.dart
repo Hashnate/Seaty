@@ -12,6 +12,7 @@ import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/utils/safe_text.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 
 String _formatTicketDate(String? dep) {
@@ -114,6 +115,36 @@ bool _isTicketPending(Map<String, dynamic> b) {
   return (bookingStatus == 'pending' || paymentStatus == 'pending' || paymentStatus == 'awaiting_payment') && !_isTicketExpired(b) && !_isTicketCompleted(b);
 }
 
+DateTime? _parseBookingTime(dynamic value) {
+  final raw = value?.toString();
+  if (raw == null || raw.isEmpty) return null;
+  return DateTime.tryParse(raw.replaceAll(' ', 'T'));
+}
+
+/// The journey has finished, so there is nothing left to follow on the map.
+bool _hasTicketJourneyEnded(Map<String, dynamic> b) {
+  final departure = _parseBookingTime(b['departure']);
+  if (departure == null) return false;
+  final arrival =
+      _parseBookingTime(b['arrival']) ?? departure.add(const Duration(hours: 4));
+  return DateTime.now().isAfter(arrival);
+}
+
+/// Whether live tracking can actually show something right now.
+///
+/// Mirrors the tracker's own `trackableTrips` window - GPS broadcasting only
+/// starts 30 minutes before departure and ends on arrival. Outside it the
+/// tracker would deselect the bus and show an idle map, so the button is
+/// disabled rather than misleading.
+bool _canTrackTicketNow(Map<String, dynamic> b) {
+  if (_isTicketExpired(b) || _hasTicketJourneyEnded(b)) return false;
+  final departure = _parseBookingTime(b['departure']);
+  if (departure == null) return false;
+  return !DateTime.now().isBefore(
+    departure.subtract(const Duration(minutes: 30)),
+  );
+}
+
 String _formatCurrency(dynamic val, {bool showDecimals = false}) {
   if (val == null) return '0';
   final double numVal = double.tryParse(val.toString()) ?? 0.0;
@@ -147,8 +178,8 @@ Future<void> _generateAndSavePDF(
     );
 
     final rawTicketId = b['id'].toString().replaceAll('-', '').toUpperCase();
-    final ticketCode = 'TQ${rawTicketId.substring(0, 10)}';
-    final pnrCode = 'TS${rawTicketId.substring(0, 16)}/SRILANKA';
+    final ticketCode = 'TQ${shortId(rawTicketId, 10)}';
+    final pnrCode = 'TS${shortId(rawTicketId, 16)}/SRILANKA';
     final seatsList = (b['seats'] as List?)?.join(', ') ?? '1';
     final numPassengers = (b['seats'] as List?)?.length ?? 1;
     
@@ -617,9 +648,23 @@ Future<void> _generateAndSavePDF(
     // 2. Safely trigger native share / save to files modal with bounds calculation
     Rect? shareBounds;
     if (context.mounted) {
-      final box = context.findRenderObject() as RenderBox?;
-      if (box != null && box.hasSize) {
-        shareBounds = box.localToGlobal(Offset.zero) & box.size;
+      // These bounds only anchor the iPad share popover. The context here often
+      // belongs to a ListView item, whose render object is the enclosing
+      // RenderSliverList - casting that straight to RenderBox throws. Probe the
+      // type instead, and fall back to the screen centre so the popover still
+      // has a valid anchor rather than losing the share sheet entirely.
+      final renderObject = context.findRenderObject();
+      if (renderObject is RenderBox && renderObject.hasSize) {
+        shareBounds = renderObject.localToGlobal(Offset.zero) & renderObject.size;
+      } else {
+        final screenSize = MediaQuery.maybeOf(context)?.size;
+        if (screenSize != null) {
+          shareBounds = Rect.fromCenter(
+            center: Offset(screenSize.width / 2, screenSize.height / 2),
+            width: 1,
+            height: 1,
+          );
+        }
       }
     }
 
@@ -1230,7 +1275,11 @@ class _BoardingPassTicketCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            'Ticket #$ticketCode • Seat $seats',
+                            // Seats deliberately omitted here - the bottom row
+                            // already lists them in full beside the seat icon,
+                            // and repeating them only truncated the ticket
+                            // number on multi-seat bookings.
+                            'Ticket #$ticketCode',
                             style: const TextStyle(
                               fontSize: 12,
                               color: Color(0xFF94A3B8),
@@ -1402,20 +1451,30 @@ class _BoardingPassTicketCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
+                    // The seat list grows with every booked seat. Unbounded, a
+                    // 6-seat booking made this group wider than the card and
+                    // shoved the share + Ticket buttons off the right edge.
+                    // Expanded caps it; the Flexible text ellipsises instead.
+                    Expanded(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                         const Icon(
                           Icons.event_seat_rounded,
                           size: 15,
                           color: Color(0xFF64748B),
                         ),
                         const SizedBox(width: 5),
-                        Text(
-                          'Seat $seats',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF475569),
+                        Flexible(
+                          child: Text(
+                            'Seat $seats',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF475569),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -1494,10 +1553,12 @@ class _BoardingPassTicketCard extends StatelessWidget {
                               ],
                             ),
                           ),
-                      ],
+                        ],
+                      ),
                     ),
 
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           onPressed: onShare,
@@ -1556,7 +1617,7 @@ class TicketDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = booking;
-    final ticketCode = 'TKT-${b['id'].toString().substring(0, 8).toUpperCase()}';
+    final ticketCode = 'TKT-${shortId(b['id'], 8).toUpperCase()}';
     final seats = (b['seats'] as List?)?.join(', ') ?? '';
     final formattedPrice = _formatCurrency(b['price'], showDecimals: true);
 
@@ -2048,6 +2109,82 @@ class TicketDetailsScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 24),
+
+            // ── Live Tracking Shortcut ──
+            // Shown for any ticket whose journey hasn't finished (including a
+            // boarded/"completed" one still en route), but only tappable once
+            // the driver's GPS window has opened - see _canTrackTicketNow.
+            if (!isExpired && !_hasTicketJourneyEnded(b)) ...[
+              Builder(
+                builder: (context) {
+                  final canTrack = _canTrackTicketNow(b);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: canTrack
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PassengerTrackingTab(trip: b),
+                                    ),
+                                  );
+                                }
+                              : null,
+                          icon: Icon(
+                            Icons.near_me_rounded,
+                            size: 18,
+                            color: canTrack ? Colors.white : const Color(0xFF94A3B8),
+                          ),
+                          label: Text(
+                            canTrack ? 'Track this bus' : 'Live tracking not started',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: canTrack ? Colors.white : const Color(0xFF94A3B8),
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F172A),
+                            disabledBackgroundColor: const Color(0xFFE2E8F0),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                          ),
+                        ),
+                      ),
+                      if (!canTrack) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded,
+                                size: 14, color: Color(0xFF94A3B8)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Live tracking opens 30 minutes before departure.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  color: const Color(0xFF64748B),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                },
+              ),
+            ],
 
             // ── Download & Share Action Buttons (Hidden for Past / Expired / Completed Tickets) ──
             if (!isExpired && !isCompleted)

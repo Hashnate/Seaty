@@ -5,6 +5,12 @@ import datetime
 import uuid
 from app.database import Base
 
+# A seat stays taken once its ticket is scanned. `booking_status` flips from
+# "confirmed" to "completed" at boarding time, so treating only "confirmed" as
+# occupied made boarded passengers disappear from seat counts, the conductor's
+# manifest and the revenue total - and briefly freed their seat for rebooking.
+OCCUPIED_BOOKING_STATUSES = ("confirmed", "completed")
+
 
 class BusCompany(Base):
     __tablename__ = "bus_companies"
@@ -272,6 +278,35 @@ class VehicleLocation(Base):
 
     # Relationships
     vehicle = relationship("Vehicle", back_populates="location")
+
+
+class HeroBanner(Base):
+    """Hero carousel images shown on the passenger home screen.
+
+    Managed by admins so marketing imagery can change without an app release.
+    """
+    __tablename__ = "hero_banners"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    image_url = Column(String, nullable=False)
+    title = Column(String, nullable=True)
+    subtitle = Column(String, nullable=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
+
+
+class VehicleLocationHistory(Base):
+    __tablename__ = "vehicle_location_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=lambda: uuid.uuid4())
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id", ondelete="CASCADE"), nullable=False, index=True)
+    latitude = Column(Numeric, nullable=False)
+    longitude = Column(Numeric, nullable=False)
+    speed = Column(Numeric(5, 2), nullable=True)
+    heading = Column(Numeric(5, 2), nullable=True)
+    recorded_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow, index=True)
 
 
 class Review(Base):

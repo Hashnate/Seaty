@@ -10,6 +10,7 @@ import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
 import 'package:seaty/providers/bookings_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/utils/safe_text.dart';
 
 const Set<String> _kBookingAffectingNotificationTypes = {
   'booking',
@@ -104,7 +105,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
             },
             body: json.encode({'fcm_token': fcmToken}),
           );
-          debugPrint('FCM token registered with backend [${response.statusCode}]: ${fcmToken.substring(0, 20)}...');
+          debugPrint('FCM token registered with backend [${response.statusCode}]: ${shortId(fcmToken, 20)}...');
           if (response.statusCode == 200) break;
         } else {
           debugPrint('FCM token is null/empty on attempt ${attempt + 1}');

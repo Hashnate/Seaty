@@ -1,7 +1,10 @@
 import os
 import uuid
+from io import BytesIO
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
-from typing import List
+from typing import List, Optional, Tuple
+
+from PIL import Image, ImageOps
 
 from app import models, auth
 
@@ -12,9 +15,46 @@ MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024  # 5MB
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
+# Uploads are served straight to the mobile app, which re-downloads them on a
+# cold start. A phone photo or an unoptimised PNG can be several MB; capping the
+# width and re-encoding to WebP typically cuts that by ~90% with no visible
+# quality loss at the sizes these are displayed.
+MAX_IMAGE_WIDTH = 1600
+WEBP_QUALITY = 80
+
 
 def _ensure_upload_dir():
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+def _optimise_image(contents: bytes) -> Tuple[bytes, Optional[str]]:
+    """Downscale and re-encode an upload to WebP.
+
+    Returns ``(bytes, extension)``. On any failure the original bytes are
+    returned with ``None`` for the extension, so a file the encoder cannot
+    handle still uploads successfully rather than erroring the admin out.
+    """
+    try:
+        with Image.open(BytesIO(contents)) as img:
+            # Phone photos carry rotation in EXIF; bake it in before stripping
+            # metadata, otherwise portrait shots come out sideways.
+            img = ImageOps.exif_transpose(img)
+
+            has_alpha = img.mode in ("RGBA", "LA") or (
+                img.mode == "P" and "transparency" in img.info
+            )
+            img = img.convert("RGBA" if has_alpha else "RGB")
+
+            if img.width > MAX_IMAGE_WIDTH:
+                new_height = round(img.height * (MAX_IMAGE_WIDTH / img.width))
+                img = img.resize((MAX_IMAGE_WIDTH, new_height), Image.LANCZOS)
+
+            buffer = BytesIO()
+            img.save(buffer, format="WEBP", quality=WEBP_QUALITY, method=6)
+            return buffer.getvalue(), ".webp"
+    except Exception as e:
+        print(f"Image optimisation skipped, storing original: {e}")
+        return contents, None
 
 
 @router.post("/vehicle-main-image")
@@ -46,7 +86,11 @@ async def upload_vehicle_main_image(
             detail="File size exceeds maximum allowed limit of 5MB."
         )
 
-    # 4. Generate unguessable UUID filename
+    # 4. Normalise to a web-friendly size/format before storing
+    contents, optimised_ext = _optimise_image(contents)
+    ext = optimised_ext or ext
+
+    # 5. Generate unguessable UUID filename
     filename = f"main_{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(UPLOAD_DIR, filename)
 
@@ -56,12 +100,55 @@ async def upload_vehicle_main_image(
     if not resolved_path.startswith(resolved_dir):
         raise HTTPException(status_code=400, detail="Invalid target filename path.")
 
-    # 5. Write file to disk
+    # 6. Write file to disk
     with open(filepath, "wb") as f:
         f.write(contents)
 
     public_url = f"/uploads/vehicles/{filename}"
     return {"url": public_url, "filename": filename}
+
+
+@router.post("/banner")
+async def upload_banner_image(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Upload a hero banner image for the passenger home carousel. Admin only."""
+    _ensure_upload_dir()
+
+    if file.content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type: {file.content_type}. Only JPEG, PNG, and WebP images are allowed."
+        )
+
+    _, ext = os.path.splitext(file.filename or "")
+    ext = ext.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = ".jpg" if file.content_type == "image/jpeg" else ".png"
+
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds maximum allowed limit of 5MB."
+        )
+
+    contents, optimised_ext = _optimise_image(contents)
+    ext = optimised_ext or ext
+
+    filename = f"banner_{uuid.uuid4().hex}{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    resolved_path = os.path.abspath(filepath)
+    resolved_dir = os.path.abspath(UPLOAD_DIR)
+    if not resolved_path.startswith(resolved_dir):
+        raise HTTPException(status_code=400, detail="Invalid target filename path.")
+
+    with open(filepath, "wb") as f:
+        f.write(contents)
+
+    return {"url": f"/uploads/vehicles/{filename}", "filename": filename}
 
 
 @router.post("/vehicle-gallery")
@@ -91,6 +178,9 @@ async def upload_vehicle_gallery_images(
         contents = await file.read()
         if len(contents) > MAX_FILE_SIZE_BYTES:
             continue
+
+        contents, optimised_ext = _optimise_image(contents)
+        ext = optimised_ext or ext
 
         filename = f"gallery_{uuid.uuid4().hex}{ext}"
         filepath = os.path.join(UPLOAD_DIR, filename)

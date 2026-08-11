@@ -6,6 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
+import 'package:seaty/providers/active_trips_provider.dart';
+import 'package:seaty/providers/bookings_provider.dart';
+import 'package:seaty/providers/favourites_provider.dart';
+import 'package:seaty/providers/fleet_provider.dart';
+import 'package:seaty/providers/gps_tracking_provider.dart';
+import 'package:seaty/providers/notifications_provider.dart';
+import 'package:seaty/providers/trips_provider.dart';
+import 'package:seaty/utils/safe_text.dart';
 
 class AuthState {
   final bool isAuthenticated;
@@ -299,7 +307,7 @@ class AuthNotifier extends Notifier<AuthState> {
             },
             body: json.encode({'fcm_token': fcmToken}),
           );
-          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: ${fcmToken.substring(0, 20)}...');
+          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: ${shortId(fcmToken, 20)}...');
           if (res.statusCode == 200) break;
         } else {
           debugPrint('FCM token is null/empty on syncFcmToken attempt ${attempt + 1}');
@@ -409,6 +417,24 @@ class AuthNotifier extends Notifier<AuthState> {
     );
     state = newState;
     _saveSession(newState);
+    clearSessionScopedCaches();
+  }
+
+  /// Drops every provider holding data belonging to the signed-out account.
+  ///
+  /// These providers live for the lifetime of the app, so without this the next
+  /// account to sign in inherits the previous user's trips, bookings and
+  /// notifications - a conductor could be shown another company's bus and
+  /// passenger manifest. Invalidating also disposes the GPS notifier, closing
+  /// its websockets so the old session stops broadcasting.
+  void clearSessionScopedCaches() {
+    ref.invalidate(tripsProvider);
+    ref.invalidate(activeTripsProvider);
+    ref.invalidate(bookingsProvider);
+    ref.invalidate(notificationsProvider);
+    ref.invalidate(favouritesProvider);
+    ref.invalidate(fleetProvider);
+    ref.invalidate(gpsTrackingProvider);
   }
 }
 

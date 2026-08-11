@@ -117,7 +117,10 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) {
+        // Named `dialogContext` so it can't be used for anything that outlives
+        // the dialog - popping it kills it, and toasts shown afterwards must
+        // use this tab's own context instead.
+        builder: (dialogContext) {
           return AlertDialog(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
@@ -234,7 +237,7 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                   child: ElevatedButton(
                     onPressed: (isBoardingAvailable && !isAlreadyFullyBoarded)
                         ? () async {
-                            Navigator.pop(context);
+                            Navigator.pop(dialogContext);
                             setState(() => _isProcessing = true);
                             
                             bool allSucceeded = true;
@@ -293,7 +296,7 @@ class _ConductorScanTabState extends ConsumerState<ConductorScanTab> {
                   width: double.infinity,
                   child: OutlinedButton(
                     onPressed: () {
-                      Navigator.pop(context);
+                      Navigator.pop(dialogContext);
                       Future.delayed(const Duration(milliseconds: 1000), () {
                         if (mounted) {
                           setState(() => _isProcessing = false);

@@ -23,7 +23,9 @@ class SandboxPaymentScreen extends ConsumerStatefulWidget {
 }
 
 class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
-  late Timer _timer;
+  // Nullable + cancelled defensively: `late` threw a LateInitializationError
+  // if the screen was torn down before the timer was ever assigned.
+  Timer? _timer;
   int _secondsRemaining = 600; // 10 minutes hold timer
   bool _isProcessing = false;
 
@@ -54,10 +56,16 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      // Without this guard the tick can fire against a disposed screen and
+      // crash - every other periodic timer in the app already checks.
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
       if (_secondsRemaining > 0) {
         setState(() => _secondsRemaining--);
       } else {
-        _timer.cancel();
+        timer.cancel();
         _handleTimeout();
       }
     });
@@ -103,7 +111,7 @@ class _SandboxPaymentScreenState extends ConsumerState<SandboxPaymentScreen> {
 
   @override
   void dispose() {
-    _timer.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 

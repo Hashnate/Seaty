@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
+import sqlalchemy
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from uuid import UUID
@@ -8,6 +9,7 @@ import asyncio
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import SRI_LANKA_TZ, now_sl, to_sl
 
 router = APIRouter(prefix="/trips", tags=["Trips"])
 
@@ -96,8 +98,8 @@ def create_trip(
         id=uuid.uuid4(),
         vehicle_id=trip_in.vehicle_id,
         route_id=trip_in.route_id,
-        departure_time=trip_in.departure_time,
-        arrival_time=trip_in.arrival_time,
+        departure_time=to_sl(trip_in.departure_time),
+        arrival_time=to_sl(trip_in.arrival_time),
         price_per_seat=trip_in.price_per_seat,
         status="scheduled",
         conductor_id=cond_id
@@ -116,19 +118,23 @@ def list_trips(
     current_user: Optional[models.User] = Depends(auth.get_optional_current_user)
 ):
     query = db.query(models.Trip).join(models.Route).join(models.Vehicle)
-    
+
+    # Staff (conductor/owner/admin) operate a trip through its whole journey, so
+    # they get looser visibility rules than passengers browsing for a seat.
+    is_staff = current_user is not None and current_user.role in ("conductor", "owner", "admin")
+
     if current_user:
         if current_user.role == "owner":
             query = query.filter(models.Vehicle.company_id == current_user.company_id)
         elif current_user.role == "conductor":
             query = query.filter(models.Trip.conductor_id == current_user.id)
-    
+
     # Filter by date
     if date:
         try:
             target_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
-            start_time = datetime.datetime.combine(target_date, datetime.time.min)
-            end_time = datetime.datetime.combine(target_date, datetime.time.max)
+            start_time = datetime.datetime.combine(target_date, datetime.time.min, tzinfo=SRI_LANKA_TZ)
+            end_time = datetime.datetime.combine(target_date, datetime.time.max, tzinfo=SRI_LANKA_TZ)
             
             # Generate trips from active schedules if date is within next 5 days
             today = datetime.date.today()
@@ -180,12 +186,12 @@ def list_trips(
                             
                             veh_id = override.replacement_vehicle_id if override else sched.vehicle_id
                             
-                            # Construct departure/arrival times
-                            dep_time = datetime.datetime.combine(target_date, sched.departure_time)
+                            # Construct departure/arrival times (schedule times are Sri Lanka wall-clock)
+                            dep_time = datetime.datetime.combine(target_date, sched.departure_time, tzinfo=SRI_LANKA_TZ)
                             if sched.arrival_time < sched.departure_time:
-                                arr_time = datetime.datetime.combine(target_date + datetime.timedelta(days=1), sched.arrival_time)
+                                arr_time = datetime.datetime.combine(target_date + datetime.timedelta(days=1), sched.arrival_time, tzinfo=SRI_LANKA_TZ)
                             else:
-                                arr_time = datetime.datetime.combine(target_date, sched.arrival_time)
+                                arr_time = datetime.datetime.combine(target_date, sched.arrival_time, tzinfo=SRI_LANKA_TZ)
                                 
                             new_trip = models.Trip(
                                 id=uuid.uuid4(),
@@ -201,10 +207,24 @@ def list_trips(
                             db.add(new_trip)
                             db.commit()
             
-            query = query.filter(
+            same_day = sqlalchemy.and_(
                 models.Trip.departure_time >= start_time,
                 models.Trip.departure_time <= end_time
             )
+
+            if is_staff:
+                # An overnight run (e.g. 23:00 -> 05:00) departs on the previous
+                # calendar day, so a plain departure-date window loses it the
+                # moment midnight passes - while the conductor is still driving
+                # it. Keep any journey that is currently under way.
+                now_for_query = now_sl()
+                in_progress = sqlalchemy.and_(
+                    models.Trip.departure_time <= now_for_query,
+                    models.Trip.arrival_time >= now_for_query
+                )
+                query = query.filter(sqlalchemy.or_(same_day, in_progress))
+            else:
+                query = query.filter(same_day)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -215,13 +235,20 @@ def list_trips(
     
     # Preload nested structures and filter matching routes (including intermediate stops)
     filtered_trips = []
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    now_sri_lanka = now_sl()
+
+    # The 30-minute cutoff is a passenger *booking* rule, not a visibility rule.
+    # Conductors/owners must keep seeing the trip once it enters the boarding
+    # window - that is exactly when they need the manifest and scanner.
+    #
+    # Passengers, including ticket holders, must NOT see it here: this list
+    # feeds the home search results, and a bus departing in under 30 minutes is
+    # no longer bookable. Live tracking of an already-booked trip is served by
+    # `GET /trips/my-active` instead, so the two concerns stay separate.
     for trip in trips:
-        dep_time = trip.departure_time
-        if dep_time.tzinfo is None:
-            dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
-        # Exclude trips whose departure is within 30 minutes or already past
-        if dep_time <= (now_utc + datetime.timedelta(minutes=30)):
+        dep_time = to_sl(trip.departure_time)
+        # Hide trips departing within 30 minutes from passengers only
+        if not is_staff and dep_time <= (now_sri_lanka + datetime.timedelta(minutes=30)):
             continue
 
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
@@ -237,7 +264,7 @@ def list_trips(
         # Compute confirmed booked seats
         confirmed_b = db.query(models.Booking).filter(
             models.Booking.trip_id == trip.id,
-            models.Booking.booking_status == "confirmed"
+            models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES)
         ).all()
         b_seats = set()
         for cb in confirmed_b:
@@ -297,6 +324,52 @@ def list_trips(
                 
     return filtered_trips
 
+@router.get("/my-active", response_model=List[schemas.TripResponse])
+def list_my_active_trips(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Trips the caller holds a confirmed ticket for that are trackable right now.
+
+    Deliberately separate from `GET /trips`: that endpoint feeds home-screen
+    search and must keep hiding buses departing within 30 minutes, because they
+    can no longer be booked. This one powers live tracking, where the passenger
+    needs the very trip that search is hiding. Declared above `/{trip_id}` so
+    the literal path is not swallowed as a UUID parameter.
+    """
+    now = now_sl()
+
+    bookings = db.query(models.Booking).filter(
+        models.Booking.passenger_id == current_user.id,
+        models.Booking.booking_status.in_(["confirmed", "completed"]),
+    ).all()
+
+    trip_ids = {b.trip_id for b in bookings if b.trip_id}
+    if not trip_ids:
+        return []
+
+    trips = db.query(models.Trip).filter(models.Trip.id.in_(trip_ids)).all()
+
+    active = []
+    for trip in trips:
+        dep_time = to_sl(trip.departure_time)
+        arr_time = to_sl(trip.arrival_time)
+        if dep_time is None or arr_time is None:
+            continue
+
+        # Same window the driver broadcasts in: boarding open through arrival.
+        if now < (dep_time - datetime.timedelta(minutes=30)) or now > arr_time:
+            continue
+
+        trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+        trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
+        trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
+        active.append(trip)
+
+    active.sort(key=lambda t: t.departure_time)
+    return active
+
+
 @router.get("/{trip_id}", response_model=schemas.TripResponse)
 def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
     trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
@@ -315,7 +388,7 @@ def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
     
     confirmed_b = db.query(models.Booking).filter(
         models.Booking.trip_id == trip.id,
-        models.Booking.booking_status == "confirmed"
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES)
     ).all()
     b_seats = set()
     for cb in confirmed_b:
@@ -370,8 +443,8 @@ async def update_trip_status(
                 route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
                 origin = route.origin if route else "Origin"
                 destination = route.destination if route else "Destination"
-                date_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
-                
+                date_str = to_sl(trip.departure_time).strftime("%Y-%m-%d %H:%M")
+
                 title = f"Trip {status.capitalize()}!"
                 if status == "cancelled":
                     msg = f"Your trip from {origin} to {destination} scheduled for {date_str} has been cancelled. A refund has been initiated."
@@ -442,8 +515,8 @@ async def update_trip(
     old_dep_time = trip.departure_time
     trip.vehicle_id = trip_in.vehicle_id
     trip.route_id = trip_in.route_id
-    trip.departure_time = trip_in.departure_time
-    trip.arrival_time = trip_in.arrival_time
+    trip.departure_time = to_sl(trip_in.departure_time)
+    trip.arrival_time = to_sl(trip_in.arrival_time)
     trip.price_per_seat = trip_in.price_per_seat
     
     db.commit()
@@ -460,7 +533,7 @@ async def update_trip(
                 from app.routes.notifications import create_and_send_notification
                 origin = route.origin
                 destination = route.destination
-                new_date_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+                new_date_str = to_sl(trip.departure_time).strftime("%Y-%m-%d %H:%M")
                 
                 await create_and_send_notification(
                     db=db,
@@ -508,7 +581,7 @@ def get_trip_manifest(
 
     bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
-        models.Booking.booking_status == "confirmed"
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES)
     ).all()
     
     manifest = []
@@ -571,11 +644,12 @@ def toggle_seat_board_status(
         
     if action == "board":
         # 30-minute validation check
-        now = datetime.datetime.now(datetime.timezone.utc)
-        earliest_boarding_time = trip.departure_time - datetime.timedelta(minutes=30)
+        now = now_sl()
+        dep_time = to_sl(trip.departure_time)
+        earliest_boarding_time = dep_time - datetime.timedelta(minutes=30)
         if now < earliest_boarding_time:
             minutes_until_boarding = int((earliest_boarding_time - now).total_seconds() / 60)
-            departure_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+            departure_str = dep_time.strftime("%Y-%m-%d %H:%M")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Boarding is only allowed within 30 minutes of the ride. Departure is in {minutes_until_boarding} minutes (at {departure_str})."
@@ -594,11 +668,12 @@ def toggle_seat_board_status(
             final_action = "unboarded"
         else:
             # Enforce 30-minute check for boarding inside toggle
-            now = datetime.datetime.now(datetime.timezone.utc)
-            earliest_boarding_time = trip.departure_time - datetime.timedelta(minutes=30)
+            now = now_sl()
+            dep_time = to_sl(trip.departure_time)
+            earliest_boarding_time = dep_time - datetime.timedelta(minutes=30)
             if now < earliest_boarding_time:
                 minutes_until_boarding = int((earliest_boarding_time - now).total_seconds() / 60)
-                departure_str = trip.departure_time.strftime("%Y-%m-%d %H:%M")
+                departure_str = dep_time.strftime("%Y-%m-%d %H:%M")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Boarding is only allowed within 30 minutes of the ride. Departure is in {minutes_until_boarding} minutes (at {departure_str})."

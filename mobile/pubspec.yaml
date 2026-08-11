@@ -39,11 +39,14 @@ dependencies:
   geolocator: ^11.0.0
   http: ^1.2.1
   url_launcher: ^6.2.5
-  web_socket_channel: ^2.4.5
+  # 3.x moves to package:web ^1.0.0, which modern firebase_core_web also needs.
+  # Staying on 2.x pins firebase_core to <3.5 and blocks Crashlytics.
+  web_socket_channel: ^3.0.3
   flutter_riverpod: ^2.5.1
   shared_preferences: ^2.5.5
   firebase_core: ^3.4.0
   firebase_messaging: ^15.1.0
+  firebase_crashlytics: ^4.1.3
   mobile_scanner: ^7.2.1
   qr_flutter: ^4.1.0
   video_player: ^2.11.1
@@ -66,6 +69,13 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # firebase_core now ships Swift Package Manager support but firebase_messaging
+  # does not, so Flutter resolved firebase_core via SPM and firebase_messaging
+  # via CocoaPods - and the CocoaPods side then could not find a `firebase_core`
+  # podspec, failing `pod install`. Keeping every plugin on CocoaPods avoids the
+  # split. Revisit once firebase_messaging adopts SPM.
+  config:
+    enable-swift-package-manager: false
   uses-material-design: true
   assets:
     - assets/images/

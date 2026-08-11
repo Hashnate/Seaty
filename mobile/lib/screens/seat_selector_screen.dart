@@ -114,7 +114,10 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
         setState(() => _isBookingInProgress = false);
         SeatyNotifications.show(
           context,
-          'Failed to hold seats. They may have just been booked.',
+          // Prefer the server's actual reason (e.g. the pre-departure cutoff);
+          // fall back to the original copy when it didn't send one.
+          bookingsNotifier.lastErrorMessage ??
+              'Failed to hold seats. They may have just been booked.',
           isError: true,
         );
       }
@@ -128,7 +131,8 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
         setState(() => _isBookingInProgress = false);
         SeatyNotifications.show(
           context,
-          'Failed to initiate payment session.',
+          bookingsNotifier.lastErrorMessage ??
+              'Failed to initiate payment session.',
           isError: true,
         );
       }

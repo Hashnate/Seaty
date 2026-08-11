@@ -4,7 +4,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/screens/tracker_screen.dart';
+import 'package:seaty/utils/active_trip.dart';
 import 'package:seaty/widgets/seaty_bus_loading.dart';
+import 'package:seaty/widgets/shimmer_loading.dart';
 
 class ConductorHomeTab extends ConsumerStatefulWidget {
   final Function(int tabIndex)? onNavigate;
@@ -28,16 +30,16 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
   }
 
   Future<void> _loadActiveManifest() async {
-    final tripsState = ref.read(tripsProvider);
     final tripsNotifier = ref.read(tripsProvider.notifier);
     final bookingsNotifier = ref.read(bookingsProvider.notifier);
 
-    if (tripsState.trips.isEmpty) {
-      await tripsNotifier.loadTrips();
-    }
+    // Always refetch. Guarding on `isEmpty` meant a list left behind by a
+    // previously signed-in conductor was treated as good enough, so the screen
+    // showed the wrong company's bus and manifest after an account switch.
+    await tripsNotifier.loadTrips();
     final trips = ref.read(tripsProvider).trips;
-    if (trips.isNotEmpty) {
-      final activeTrip = trips.first;
+    final activeTrip = pickActiveTrip(trips);
+    if (activeTrip != null) {
       final tripId = activeTrip['id'].toString();
       setState(() => _isLoadingManifest = true);
       final manifest = await bookingsNotifier.fetchTripManifest(tripId);
@@ -57,8 +59,15 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
     final conductorName =
         authState.userName.isNotEmpty ? authState.userName : 'Conductor';
 
-    // Pick active assigned trip for conductor if available
-    final activeTrip = tripsState.trips.isNotEmpty ? tripsState.trips.first : null;
+    // Pick active assigned trip for conductor if available - the journey under
+    // way wins over the day's next departure (matters for overnight runs).
+    final activeTrip = pickActiveTrip(tripsState.trips);
+
+    // Until the first fetch resolves there is nothing to show - and the empty
+    // state ("No Active Bus", 40 seats, LKR 0) is indistinguishable from real
+    // data, so it reads as fabricated. Show skeletons instead, and only claim
+    // "no trip" once the request has actually come back.
+    final bool isInitialLoad = tripsState.isLoading && tripsState.trips.isEmpty;
 
     final String assignedBusText = activeTrip != null
         ? 'Assigned: ${activeTrip['reg'] ?? 'N/A'} (${activeTrip['bus_name'] ?? 'Bus'})'
@@ -179,14 +188,26 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                                             ),
                                           ),
                                           const SizedBox(height: 2),
-                                          Text(
-                                            assignedBusText,
-                                            style: const TextStyle(
-                                              color: Color(0xFF94A3B8),
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
+                                          if (isInitialLoad)
+                                            SeatyShimmer(
+                                              child: Container(
+                                                height: 12,
+                                                width: 160,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  borderRadius: BorderRadius.circular(6),
+                                                ),
+                                              ),
+                                            )
+                                          else
+                                            Text(
+                                              assignedBusText,
+                                              style: const TextStyle(
+                                                color: Color(0xFF94A3B8),
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
-                                          ),
                                         ],
                                       ),
                                     ],
@@ -309,38 +330,50 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildStatTile(
-                            title: 'Validated',
-                            value: '$validatedCount / $bookedCount',
-                            subtitle: 'Passengers',
-                            icon: Icons.check_circle_rounded,
-                            color: const Color(0xFF10B981),
+                    if (isInitialLoad) ...[
+                      const Row(
+                        children: [
+                          Expanded(child: StatTileSkeleton()),
+                          SizedBox(width: 12),
+                          Expanded(child: StatTileSkeleton()),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const StatTileSkeleton(),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatTile(
+                              title: 'Validated',
+                              value: '$validatedCount / $bookedCount',
+                              subtitle: 'Passengers',
+                              icon: Icons.check_circle_rounded,
+                              color: const Color(0xFF10B981),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildStatTile(
-                            title: 'Available',
-                            value: '$availableSeats Seats',
-                            subtitle: 'Remaining',
-                            icon: Icons.event_seat_rounded,
-                            color: const Color(0xFF3B82F6),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildStatTile(
+                              title: 'Available',
+                              value: '$availableSeats Seats',
+                              subtitle: 'Remaining',
+                              icon: Icons.event_seat_rounded,
+                              color: const Color(0xFF3B82F6),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _buildStatTile(
-                      title: 'Cash Collected',
-                      value: 'LKR ${totalCash.toStringAsFixed(0)}',
-                      subtitle: 'From $bookedCount verified tickets today',
-                      icon: Icons.payments_rounded,
-                      color: const Color(0xFF2563EB),
-                      isFullWidth: true,
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _buildStatTile(
+                        title: 'Cash Collected',
+                        value: 'LKR ${totalCash.toStringAsFixed(0)}',
+                        subtitle: 'From $bookedCount verified tickets today',
+                        icon: Icons.payments_rounded,
+                        color: const Color(0xFF2563EB),
+                        isFullWidth: true,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -348,6 +381,23 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
               const SizedBox(height: 20),
 
               // ── CURRENT ASSIGNED TRIP ─────────────────────
+              if (isInitialLoad)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: SeatyShimmer(
+                    child: SizedBox(
+                      height: 132,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.all(Radius.circular(20)),
+                        ),
+                        child: SizedBox(width: double.infinity),
+                      ),
+                    ),
+                  ),
+                )
+              else
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: GestureDetector(
@@ -431,6 +481,38 @@ class _ConductorHomeTabState extends ConsumerState<ConductorHomeTab> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
+                        // This card navigates to the trip manifest, but nothing
+                        // said so - it read as a static summary. An explicit
+                        // affordance makes the tap target discoverable.
+                        if (activeTrip != null) ...[
+                          const SizedBox(height: 14),
+                          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.event_seat_rounded,
+                                size: 15,
+                                color: Color(0xFF2563EB),
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'View seat map & passenger manifest',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2563EB),
+                                ),
+                              ),
+                              const Spacer(),
+                              const Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 13,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),

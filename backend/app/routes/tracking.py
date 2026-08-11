@@ -4,11 +4,33 @@ from typing import Dict, List, Set
 from uuid import UUID
 import json
 import datetime
+import math
 
 from app.database import SessionLocal
 from app import models, schemas, auth
 
 router = APIRouter(prefix="/ws", tags=["Real-time Tracking"])
+
+# A Sri Lankan inter-city bus realistically never exceeds ~110 km/h; anything implying
+# more than this between two fixes is a GPS glitch/jump, not real travel.
+MAX_PLAUSIBLE_SPEED_KMH = 150.0
+
+
+def _as_utc(dt: datetime.datetime | None) -> datetime.datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
 
 # =====================================================================
 # WebSocket Connection Manager
@@ -106,52 +128,84 @@ async def tracking_endpoint(
                 while True:
                     # Expect coordinates: {"latitude": 6.9271, "longitude": 79.8612, "speed": 45.0, "heading": 180.0}
                     data_str = await websocket.receive_text()
-                    data = json.loads(data_str)
-                    
-                    # Validate coordinate fields
-                    lat = float(data["latitude"])
-                    lon = float(data["longitude"])
-                    speed = float(data.get("speed", 0.0))
-                    heading = float(data.get("heading", 0.0))
-                    
-                    # Save / Update location in database
-                    db_location = db.query(models.VehicleLocation).filter(
-                        models.VehicleLocation.vehicle_id == vehicle_id
-                    ).first()
-                    
-                    if not db_location:
-                        db_location = models.VehicleLocation(
+
+                    try:
+                        data = json.loads(data_str)
+
+                        # Validate coordinate fields
+                        lat = float(data["latitude"])
+                        lon = float(data["longitude"])
+                        speed = float(data.get("speed", 0.0))
+                        heading = float(data.get("heading", 0.0))
+
+                        if not (-90.0 <= lat <= 90.0) or not (-180.0 <= lon <= 180.0):
+                            continue
+
+                        now = datetime.datetime.now(datetime.timezone.utc)
+
+                        # Save / Update location in database
+                        db_location = db.query(models.VehicleLocation).filter(
+                            models.VehicleLocation.vehicle_id == vehicle_id
+                        ).first()
+
+                        if db_location:
+                            # Reject implausible GPS jumps (glitch/spoofed fix) instead of
+                            # broadcasting a teleporting bus to passengers.
+                            elapsed = (now - _as_utc(db_location.updated_at)).total_seconds()
+                            if elapsed > 0.5:
+                                jump_km = _haversine_km(
+                                    float(db_location.latitude), float(db_location.longitude), lat, lon
+                                )
+                                implied_speed_kmh = jump_km / (elapsed / 3600)
+                                if implied_speed_kmh > MAX_PLAUSIBLE_SPEED_KMH:
+                                    continue
+
+                            db_location.latitude = lat
+                            db_location.longitude = lon
+                            db_location.speed = speed
+                            db_location.heading = heading
+                            db_location.updated_at = now
+                        else:
+                            db_location = models.VehicleLocation(
+                                vehicle_id=vehicle_id,
+                                latitude=lat,
+                                longitude=lon,
+                                speed=speed,
+                                heading=heading,
+                                updated_at=now
+                            )
+                            db.add(db_location)
+
+                        # Breadcrumb trail - one row per accepted fix, never overwritten
+                        db.add(models.VehicleLocationHistory(
                             vehicle_id=vehicle_id,
                             latitude=lat,
                             longitude=lon,
                             speed=speed,
                             heading=heading,
-                            updated_at=datetime.datetime.utcnow()
-                        )
-                        db.add(db_location)
-                    else:
-                        db_location.latitude = lat
-                        db_location.longitude = lon
-                        db_location.speed = speed
-                        db_location.heading = heading
-                        db_location.updated_at = datetime.datetime.utcnow()
-                    
-                    db.commit()
-                    
-                    # Broadcast location update to passengers
-                    broadcast_payload = {
-                        "vehicle_id": vehicle_id,
-                        "latitude": lat,
-                        "longitude": lon,
-                        "speed": speed,
-                        "heading": heading,
-                        "updated_at": datetime.datetime.utcnow().isoformat()
-                    }
-                    await manager.broadcast_location(vehicle_id, broadcast_payload)
+                            recorded_at=now,
+                        ))
+
+                        db.commit()
+
+                        # Broadcast location update to passengers
+                        broadcast_payload = {
+                            "vehicle_id": vehicle_id,
+                            "latitude": lat,
+                            "longitude": lon,
+                            "speed": speed,
+                            "heading": heading,
+                            "updated_at": now.isoformat()
+                        }
+                        await manager.broadcast_location(vehicle_id, broadcast_payload)
+                    except (KeyError, ValueError, TypeError, json.JSONDecodeError):
+                        # A single malformed or implausible fix shouldn't kill the whole
+                        # GPS stream - skip it and keep listening for the next one.
+                        db.rollback()
+                        continue
             except WebSocketDisconnect:
                 manager.disconnect_driver(vehicle_id)
-            except Exception as e:
-                # Catch JSON parsing / DB exceptions gracefully
+            except Exception:
                 manager.disconnect_driver(vehicle_id)
                 
         elif role == "passenger":

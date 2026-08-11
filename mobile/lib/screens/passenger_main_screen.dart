@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/theme/app_colors.dart';
+import 'package:seaty/providers/banners_provider.dart';
+import 'package:seaty/utils/safe_text.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
@@ -226,11 +228,61 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   late final ScrollController _scrollController;
   double _headerOpacity = 0.0;
 
-  final List<String> _heroImages = [
+  /// How far ahead a journey date can be picked.
+  ///
+  /// Must stay in step with the backend: `list_trips` only materialises trips
+  /// from `trip_schedules` for dates within `today + 5 days`, so any date past
+  /// that is guaranteed to come back empty. Offering them made the search look
+  /// broken. Widening this alone changes nothing - the backend window has to
+  /// move with it.
+  static const int _bookingHorizonDays = 5;
+
+  /// Shipped with the app. Used only when the admin console has no active
+  /// banner configured, or the banners request fails - so the carousel is
+  /// never empty and never divides by zero.
+  static const List<String> _bundledHeroImages = [
     'assets/images/bus_slider_1.png',
     'assets/images/bus_slider_2.png',
     'assets/images/bus_slider_3.png',
   ];
+
+  /// Remote banners are only adopted once every one of them is decoded and in
+  /// the image cache. Swapping the moment the URLs arrived meant the carousel
+  /// tore down the bundled asset and put up `Image.network`, which then showed
+  /// its placeholder for as long as the download took - the image -> grey ->
+  /// dark -> image flicker on a cold start.
+  List<String> _remoteHeroUrls = const [];
+  bool _remoteHeroReady = false;
+
+  /// Admin-managed banners when available, otherwise the bundled assets.
+  List<String> get _heroImages =>
+      _remoteHeroReady && _remoteHeroUrls.isNotEmpty
+          ? _remoteHeroUrls
+          : _bundledHeroImages;
+
+  /// Downloads and decodes every banner, and only then swaps the carousel over,
+  /// so the change is a single clean cut with no loading state on screen.
+  Future<void> _adoptRemoteHeroBanners(List<String> urls) async {
+    if (urls.isEmpty) return;
+    if (urls.join('|') == _remoteHeroUrls.join('|') && _remoteHeroReady) return;
+
+    for (final url in urls) {
+      if (!mounted) return;
+      try {
+        await precacheImage(NetworkImage(url), context);
+      } catch (_) {
+        // A single unreachable banner shouldn't strand the carousel on the
+        // bundled assets forever - keep going and adopt whatever decoded.
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _remoteHeroUrls = urls;
+      _remoteHeroReady = true;
+      if (_heroImageIndex >= urls.length) _heroImageIndex = 0;
+    });
+  }
 
   @override
   void initState() {
@@ -244,6 +296,14 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     _toFocusNode.addListener(_onFocusChange);
     _heroPageController = PageController();
     _startHeroSliderTimer();
+    // ref.listen only fires on *change*, so banners already fetched before this
+    // tab mounted (e.g. returning to Home) would never be adopted. Pick up any
+    // existing value once the first frame has a context to precache against.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final existing = ref.read(bannersProvider).imageUrls;
+      if (existing.isNotEmpty) _adoptRemoteHeroBanners(existing);
+    });
   }
 
   void _startHeroSliderTimer() {
@@ -297,6 +357,13 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   @override
   Widget build(BuildContext context) {
     final tripsState = ref.watch(tripsProvider);
+    // Listened to (not watched): adopting the banners is deferred until they
+    // are precached, so a plain rebuild here would only cause the flicker.
+    ref.listen<BannersState>(bannersProvider, (previous, next) {
+      if (next.imageUrls.isNotEmpty) {
+        _adoptRemoteHeroBanners(next.imageUrls);
+      }
+    });
 
     final allTrips = tripsState.trips;
     final Set<String> placesSet = {'All'};
@@ -415,6 +482,13 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     final double topPadding = MediaQuery.of(context).padding.top;
     final double heroHeight = 310.0 + topPadding;
 
+    // The welcome text + search card are bottom-anchored inside the fixed-height
+    // hero, so anything added to that block grows *upwards*. The "Clear all
+    // filters" chip therefore used to shove the welcome line up under the Seaty
+    // app bar - it now shares a row with that line instead of taking its own.
+    final bool hasActiveFilters =
+        _selectedFrom.isNotEmpty || _selectedTo.isNotEmpty || _selectedDate != null;
+
     final double cardWidth = MediaQuery.of(context).size.width - 40;
 
     return Stack(
@@ -444,21 +518,53 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                         });
                       },
                       itemBuilder: (context, index) {
+                        final source = _heroImages[index];
+                        final isRemote = source.startsWith('http');
+                        // A broken/unreachable admin banner must not leave a
+                        // blank hero, so both paths fall back to the branded
+                        // placeholder below.
+                        Widget placeholder() => Container(
+                              color: const Color(0xFF0F172A),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.directions_bus_rounded,
+                                  color: Colors.white24,
+                                  size: 64,
+                                ),
+                              ),
+                            );
+
+                        if (isRemote) {
+                          // Banners are precached before adoption, so this
+                          // normally paints immediately. If the cache was
+                          // evicted, show the bundled artwork rather than a
+                          // dark box - that dark frame was the visible flicker.
+                          Widget bundledStandIn() => Image.asset(
+                                _bundledHeroImages[index % _bundledHeroImages.length],
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                                errorBuilder: (context, error, stackTrace) => placeholder(),
+                              );
+                          return Image.network(
+                            source,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            height: double.infinity,
+                            // Hold the branded backdrop while bytes arrive
+                            // rather than flashing white.
+                            loadingBuilder: (context, child, progress) =>
+                                progress == null ? child : bundledStandIn(),
+                            errorBuilder: (context, error, stackTrace) => bundledStandIn(),
+                          );
+                        }
+
                         return Image.asset(
-                          _heroImages[index],
+                          source,
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: const Color(0xFF0F172A),
-                            child: const Center(
-                              child: Icon(
-                                Icons.directions_bus_rounded,
-                                color: Colors.white24,
-                                size: 64,
-                              ),
-                            ),
-                          ),
+                          errorBuilder: (context, error, stackTrace) => placeholder(),
                         );
                       },
                     ),
@@ -538,17 +644,61 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            const Text(
-                              'Where are you traveling today?',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                                letterSpacing: -0.4,
-                                shadows: [
-                                  Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0, 1)),
+                            // Welcome line and the clear-filters chip share one
+                            // row, so toggling the chip never changes this
+                            // block's height (it is bottom-anchored, and any
+                            // extra height pushes the text under the app bar).
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Where are you traveling today?',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white,
+                                      letterSpacing: -0.4,
+                                      shadows: [
+                                        Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0, 1)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (hasActiveFilters) ...[
+                                  const SizedBox(width: 8),
+                                  TextButton(
+                                    onPressed: () {
+                                      setState(() {
+                                        _selectedFrom = '';
+                                        _selectedTo = '';
+                                        _selectedDate = null;
+                                        _fromController.text = '';
+                                        _toController.text = '';
+                                        _dateController.text = 'All Dates';
+                                      });
+                                      ref.read(tripsProvider.notifier).loadTrips();
+                                    },
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      backgroundColor: Colors.black.withValues(alpha: 0.5),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    child: const Text(
+                                      'Clear all filters',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
                                 ],
-                              ),
+                              ],
                             ),
                             const SizedBox(height: 8),
 
@@ -556,43 +706,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                if (_selectedFrom.isNotEmpty || _selectedTo.isNotEmpty || _selectedDate != null) ...[
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Container(
-                                      margin: const EdgeInsets.only(bottom: 6),
-                                      child: TextButton(
-                                        onPressed: () {
-                                          setState(() {
-                                            _selectedFrom = '';
-                                            _selectedTo = '';
-                                            _selectedDate = null;
-                                            _fromController.text = '';
-                                            _toController.text = '';
-                                            _dateController.text = 'All Dates';
-                                          });
-                                          ref.read(tripsProvider.notifier).loadTrips();
-                                        },
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          backgroundColor: Colors.black.withValues(alpha: 0.5),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                        ),
-                                        child: const Text(
-                                          'Clear all filters',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-
                                 // Glassmorphic / Clean White Search Card
                                 Container(
                                   decoration: BoxDecoration(
@@ -717,11 +830,27 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                               child: GestureDetector(
                                                 behavior: HitTestBehavior.opaque,
                                                 onTap: () async {
+                                                  final now = DateTime.now();
+                                                  final today = DateTime(now.year, now.month, now.day);
+                                                  final lastSelectable = today.add(
+                                                    const Duration(days: _bookingHorizonDays),
+                                                  );
+                                                  // showDatePicker asserts if initialDate falls
+                                                  // outside the range, so clamp a previously
+                                                  // chosen (possibly stale) date into it.
+                                                  final desired = _selectedDate ?? today;
+                                                  final initial = desired.isBefore(today)
+                                                      ? today
+                                                      : (desired.isAfter(lastSelectable)
+                                                          ? lastSelectable
+                                                          : desired);
+
                                                   final DateTime? picked = await showDatePicker(
                                                     context: context,
-                                                    initialDate: _selectedDate ?? DateTime.now(),
-                                                    firstDate: DateTime.now().subtract(const Duration(days: 305)),
-                                                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                                                    initialDate: initial,
+                                                    firstDate: today,
+                                                    lastDate: lastSelectable,
+                                                    helpText: 'Select journey date',
                                                   );
                                                   if (picked != null) {
                                                     final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
@@ -1174,7 +1303,9 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
 
     // ── Vehicle type label ──
     final String vehicleType = vehicleObj?['type']?.toString() ?? 'Bus';
-    final String typeLabel = vehicleType[0].toUpperCase() + vehicleType.substring(1);
+    // An empty `type` reaches here as '' (the ?? only guards null), and
+    // ''[0] throws - which would take down the whole search-results list.
+    final String typeLabel = capitalize(vehicleType, fallback: 'Bus');
 
     // ── Amenities ──
     final List<dynamic> rawAmenities = (trip['amenities'] as List?) ?? [];

@@ -7,6 +7,7 @@ import datetime
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.timezone_utils import now_sl, to_sl
 
 router = APIRouter(prefix="/seat-holds", tags=["Seat Holds"])
 
@@ -29,7 +30,7 @@ def get_unavailable_seats(db: Session, trip_id: UUID) -> dict:
     # Get confirmed/paid booking seats
     confirmed_bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
-        models.Booking.booking_status == "confirmed",
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES),
         models.Booking.payment_status == "paid"
     ).all()
 
@@ -76,10 +77,8 @@ def create_seat_hold(
         raise HTTPException(status_code=400, detail=f"Cannot hold seats on a {trip.status} trip")
 
     # 30-minute pre-departure cutoff validation
-    now = datetime.datetime.now(datetime.timezone.utc)
-    dep_time = trip.departure_time
-    if dep_time.tzinfo is None:
-        dep_time = dep_time.replace(tzinfo=datetime.timezone.utc)
+    now = now_sl()
+    dep_time = to_sl(trip.departure_time)
     if now >= (dep_time - datetime.timedelta(minutes=30)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -155,7 +154,7 @@ def get_trip_seat_availability(
     # Find genders for the booked seats
     confirmed_bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
-        models.Booking.booking_status == "confirmed",
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES),
         models.Booking.payment_status == "paid"
     ).all()
 

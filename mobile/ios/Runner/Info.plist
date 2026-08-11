@@ -73,6 +73,7 @@
 		<key>UIBackgroundModes</key>
 		<array>
 			<string>remote-notification</string>
+			<string>location</string>
 		</array>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>We need your location to show nearby rides and track your journey.</string>

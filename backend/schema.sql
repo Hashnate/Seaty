@@ -233,6 +233,41 @@ CREATE TABLE public.vehicle_locations (
 ALTER TABLE public.vehicle_locations ENABLE ROW LEVEL SECURITY;
 
 -- ==========================================
+-- 10a. Hero Banners Table (admin-managed passenger home carousel)
+-- ==========================================
+CREATE TABLE public.hero_banners (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    image_url TEXT NOT NULL,
+    title TEXT,
+    subtitle TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_hero_banners_active_order ON public.hero_banners(is_active, sort_order);
+
+ALTER TABLE public.hero_banners ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
+-- 10b. Vehicle Location History Table (breadcrumb trail for live tracking)
+-- ==========================================
+CREATE TABLE public.vehicle_location_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    vehicle_id UUID NOT NULL REFERENCES public.vehicles(id) ON DELETE CASCADE,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    speed NUMERIC(5, 2), -- Speed in km/h
+    heading NUMERIC(5, 2), -- Bearing/Heading angle in degrees (0 - 360)
+    recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_vehicle_location_history_vehicle_time ON public.vehicle_location_history(vehicle_id, recorded_at);
+
+ALTER TABLE public.vehicle_location_history ENABLE ROW LEVEL SECURITY;
+
+-- ==========================================
 -- 11. Notifications Table
 -- ==========================================
 CREATE TABLE public.notifications (
@@ -386,6 +421,22 @@ CREATE POLICY "Anyone can view live vehicle locations" ON public.vehicle_locatio
 
 CREATE POLICY "Owners can update their own vehicle locations" ON public.vehicle_locations
     FOR ALL USING (
+        EXISTS (
+            SELECT 1 FROM public.vehicles
+            WHERE vehicles.id = vehicle_id AND vehicles.owner_id = auth.uid()
+        )
+    );
+
+-- Hero Banner policies (public read, admin write)
+CREATE POLICY "Anyone can view hero banners" ON public.hero_banners
+    FOR SELECT USING (true);
+
+-- Vehicle Location History policies (breadcrumb trail)
+CREATE POLICY "Anyone can view vehicle location history" ON public.vehicle_location_history
+    FOR SELECT USING (true);
+
+CREATE POLICY "Owners can insert their own vehicle location history" ON public.vehicle_location_history
+    FOR INSERT WITH CHECK (
         EXISTS (
             SELECT 1 FROM public.vehicles
             WHERE vehicles.id = vehicle_id AND vehicles.owner_id = auth.uid()

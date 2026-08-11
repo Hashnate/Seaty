@@ -354,3 +354,52 @@ export async function uploadVehicleGallery(token: string, files: File[]) {
 }
 
 
+
+// ==========================================
+// Hero Banners (Passenger home carousel - Admin managed)
+// ==========================================
+export interface HeroBanner {
+  id: string;
+  image_url: string;
+  title: string | null;
+  subtitle: string | null;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Admin console listing - includes banners hidden from the app. */
+export async function getBanners(token: string) {
+  return request<HeroBanner[]>('/banners?include_inactive=true', { token });
+}
+
+export async function createBanner(token: string, data: Record<string, unknown>) {
+  return request<HeroBanner>('/banners', { method: 'POST', body: data, token });
+}
+
+export async function updateBanner(token: string, bannerId: string, data: Record<string, unknown>) {
+  return request<HeroBanner>(`/banners/${bannerId}`, { method: 'PATCH', body: data, token });
+}
+
+export async function deleteBanner(token: string, bannerId: string) {
+  return request<void>(`/banners/${bannerId}`, { method: 'DELETE', token });
+}
+
+export async function uploadBannerImage(token: string, file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE}/uploads/banner`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ detail: 'Failed to upload banner image' }));
+    throw new Error(err.detail || 'Banner image upload failed');
+  }
+
+  return response.json() as Promise<{ url: string; filename: string }>;
+}
