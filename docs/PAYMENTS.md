@@ -3,8 +3,10 @@
 Seaty takes card payments through **Bancstac Paycenter Web 4.0** (Paycorp/CBC). This document
 covers the integration design, why it is shaped the way it is, and what is still unresolved.
 
-Status: **foundation built, live path blocked.** `PAYMENT_MODE` defaults to `off`; no deployment
-takes payments until it is switched on deliberately.
+Status: **live, on a reduced test charge.** `PAYMENT_MODE=live` and Bancstac accepts our
+`PAYMENT_INIT` — the header auth and HMAC are confirmed working against the real endpoint. Until
+public release every payment is charged **LKR 1** instead of the booking total, so real cards and
+real authorisations can be exercised without taking real fares.
 
 ---
 
@@ -28,6 +30,33 @@ So `mock` replaces the vendor sandbox. It is not a second code path: the routers
 `init_payment` / `complete_payment` interface, and only the outbound HTTP client differs. That
 exercises everything except the network hop — holds, confirmation, SMS, push, reconciliation,
 declines, and the app's WebView hand-off.
+
+### Pre-release test charge
+
+`PAYMENT_TEST_CHARGE_LKR` overrides the amount sent to the gateway. With it set to `1`, a
+LKR 5,175 booking is charged LKR 1:
+
+```
+TEST CHARGE ACTIVE: booking … is 517500 cents but charging 100 cents
+RESULT: 201  charged=LKR 1.00  gateway=bancstac:live
+        reqid=WUL9qp5ARA2WEUnbnSog
+```
+
+The booking is still confirmed **in full** — the passenger gets the seat they chose having paid a
+rupee. Three consequences:
+
+- `payments.amount` records **what was charged** (LKR 1), because `finalise_payment` verifies the
+  gateway's figure against it. The real total is preserved on the booking and recorded in
+  `gateway_response` as `real_amount_cents`.
+- **Revenue reporting overstates.** The admin dashboard sums `bookings.total_price`, so it will
+  show the full fare against a LKR 1 collection for as long as this is set.
+- **LKR 1 may be below the acquirer's floor.** `PAYMENT_INIT` succeeds, but authorisation is a
+  separate step — if cards decline at LKR 1, raise the value rather than assuming the integration
+  is broken.
+
+> [!CAUTION]
+> **Clear `PAYMENT_TEST_CHARGE_LKR` before public release.** Leaving it set means every passenger
+> travels for a rupee. It is on the [pre-launch checklist](DEPLOYMENT.md#pre-launch-checklist).
 
 ### Simulating payments for specific accounts
 

@@ -51,6 +51,16 @@ class Settings(BaseSettings):
     # not listed here goes to the real gateway. Clear it after review.
     PAYMENT_MOCK_ACCOUNTS: str = os.getenv("PAYMENT_MOCK_ACCOUNTS", "")
 
+    # Pre-release testing against the LIVE gateway: charge this many rupees
+    # instead of the booking total, so a real card and a real authorisation can
+    # be exercised for the price of a rupee. Empty or 0 charges the real amount.
+    #
+    # The booking is still confirmed in full - the passenger gets the seat they
+    # chose having paid LKR 1 - so this MUST be cleared before public release.
+    # Revenue reporting sums bookings.total_price and will overstate takings for
+    # as long as it is set.
+    PAYMENT_TEST_CHARGE_LKR: str = os.getenv("PAYMENT_TEST_CHARGE_LKR", "")
+
     BANCSTAC_ENDPOINT: str = os.getenv("BANCSTAC_ENDPOINT", "")
     BANCSTAC_CLIENT_ID: str = os.getenv("BANCSTAC_CLIENT_ID", "")
     BANCSTAC_AUTH_TOKEN: str = os.getenv("BANCSTAC_AUTH_TOKEN", "")

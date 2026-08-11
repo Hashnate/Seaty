@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 from uuid import UUID
 import html
@@ -208,11 +209,30 @@ async def initiate_payment(
     # portal. 50 char limit.
     gateway = get_gateway(for_user=current_user)
     client_ref = f"SEATY-{booking.id}"[:50]
-    amount_cents = to_cents(total_with_fee)
+
+    # Pre-release: charge a token amount against the LIVE gateway so a real card
+    # and a real authorisation can be exercised without taking real fares. The
+    # booking is still confirmed in full. Clear PAYMENT_TEST_CHARGE_LKR to
+    # charge properly - see docs/PAYMENTS.md.
+    real_cents = to_cents(total_with_fee)
+    charge_cents = real_cents
+    test_charge = (settings.PAYMENT_TEST_CHARGE_LKR or "").strip()
+    if test_charge and gateway.mode == "live":
+        try:
+            override = to_cents(Decimal(test_charge))
+            if override > 0:
+                charge_cents = override
+                logger.warning(
+                    "TEST CHARGE ACTIVE: booking %s is %s cents but charging %s cents",
+                    booking.id, real_cents, charge_cents,
+                )
+        except (InvalidOperation, ValueError):
+            logger.error("PAYMENT_TEST_CHARGE_LKR is not a number: %r - charging the real amount",
+                         test_charge)
 
     try:
         session = await gateway.init_payment(
-            amount_cents=amount_cents,
+            amount_cents=charge_cents,
             currency=CURRENCY,
             client_ref=client_ref,
             return_url=settings.BANCSTAC_RETURN_URL,
@@ -257,11 +277,20 @@ async def initiate_payment(
         # sweeper both look the booking up by it, so it is never taken from the
         # client.
         gateway_transaction_id=session.reqid,
-        amount=total_with_fee,
+        # What the card is actually charged. finalise_payment verifies the
+        # gateway's figure against this, so it has to be the charged amount and
+        # not the booking total.
+        amount=Decimal(charge_cents) / 100,
         platform_fee=platform_fee,
         currency=CURRENCY,
         status="pending",
         payment_url=session.payment_page_url,
+        gateway_response=(
+            {"test_charge": True,
+             "real_amount_cents": real_cents,
+             "charged_amount_cents": charge_cents}
+            if charge_cents != real_cents else None
+        ),
     )
     db.add(db_payment)
     db.commit()
@@ -332,6 +361,7 @@ async def finalise_payment(db: Session, payment: models.Payment) -> bool:
         result.response_text = "Client reference mismatch"
 
     payment.gateway_response = {
+        **(payment.gateway_response or {}),
         "response_code": result.response_code,
         "response_text": result.response_text,
         "txn_reference": result.txn_reference,
