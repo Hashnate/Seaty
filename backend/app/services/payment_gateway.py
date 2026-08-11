@@ -201,8 +201,28 @@ class MockGateway:
     @classmethod
     def set_outcome(cls, reqid: str, outcome: str) -> None:
         """Choose what the next complete_payment returns: approve | decline."""
-        if reqid in cls._sessions:
-            cls._sessions[reqid]["outcome"] = outcome
+        cls._sessions.setdefault(reqid, {
+            "amount_cents": 0, "currency": "LKR", "client_ref": None, "return_url": "",
+        })["outcome"] = outcome
+
+    @classmethod
+    def restore_session(cls, reqid: str, *, amount_cents: int, currency: str,
+                        client_ref: str) -> None:
+        """Re-prime a session from the caller's own record.
+
+        Sessions live in process memory, so a backend restart between opening a
+        payment and completing it would otherwise lose it and the payment would
+        fail for no real reason - a restart mid-test is routine. The payment row
+        holds everything needed, so the caller can hand it back.
+        """
+        if reqid not in cls._sessions:
+            cls._sessions[reqid] = {
+                "amount_cents": amount_cents,
+                "currency": currency,
+                "client_ref": client_ref,
+                "return_url": "",
+                "outcome": "approve",
+            }
 
     async def complete_payment(self, reqid: str) -> CompleteResult:
         session = self._sessions.get(reqid)

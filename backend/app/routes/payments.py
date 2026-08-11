@@ -289,6 +289,18 @@ async def finalise_payment(db: Session, payment: models.Payment) -> bool:
     # holds "bancstac:mock" or "bancstac:live"; completing a simulated payment
     # against the real gateway (or the reverse) would never match.
     created_mode = (payment.payment_gateway or "").split(":")[-1] or None
+
+    if created_mode == "mock":
+        # Mock sessions are in-process, so a restart between opening and
+        # completing loses them. The payment row has everything needed.
+        from app.services.payment_gateway import MockGateway
+        MockGateway.restore_session(
+            payment.gateway_transaction_id,
+            amount_cents=to_cents(payment.amount),
+            currency=payment.currency or CURRENCY,
+            client_ref=f"SEATY-{payment.booking_id}"[:50],
+        )
+
     try:
         result = await get_gateway(force_mode=created_mode).complete_payment(
             payment.gateway_transaction_id
@@ -448,6 +460,63 @@ margin-bottom:16px">MOCK GATEWAY — no real payment</div>
    style="display:block;background:#eee;color:#d93025;padding:13px;border-radius:9px;
    text-decoration:none;font-weight:600">Decline payment</a>
 </div></body></html>""")
+
+
+@router.post("/sandbox/complete/{transaction_id}", response_model=schemas.PaymentResponse,
+             include_in_schema=False)
+async def sandbox_complete_payment(transaction_id: str, db: Session = Depends(get_db)):
+    """Compatibility shim for app builds that predate the WebView flow.
+
+    Those builds show their own checkout screen and POST here with no auth
+    header, so requiring one would simply break them.
+
+    The original endpoint accepted **any** transaction id and could confirm any
+    booking as paid — free tickets for anyone who guessed one (docs/SECURITY.md
+    #3). This one accepts only a `MOCK-` reqid, which exists solely for a
+    simulated payment by an account in `PAYMENT_MOCK_ACCOUNTS`. Those bookings
+    are free by design, and a real Bancstac payment can never be settled here:
+    live sessions never carry that prefix.
+
+    Remove once the WebView build is everywhere.
+    """
+    if not transaction_id.startswith("MOCK-"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    payment = db.query(models.Payment).filter(
+        models.Payment.gateway_transaction_id == transaction_id
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment transaction not found")
+
+    await finalise_payment(db, payment)
+    db.refresh(payment)
+    return payment
+
+
+@router.post("/sandbox/fail/{transaction_id}", response_model=schemas.PaymentResponse,
+             include_in_schema=False)
+async def sandbox_fail_payment(transaction_id: str, db: Session = Depends(get_db)):
+    """Compatibility shim — the 'Cancel & Release Seats' button on old builds.
+
+    Same `MOCK-` restriction as above. The original could flip an already-paid
+    booking to cancelled for anyone who knew its transaction id
+    (docs/SECURITY.md #27).
+    """
+    from app.services.payment_gateway import MockGateway
+
+    if not transaction_id.startswith("MOCK-"):
+        raise HTTPException(status_code=404, detail="Not found")
+
+    payment = db.query(models.Payment).filter(
+        models.Payment.gateway_transaction_id == transaction_id
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment transaction not found")
+
+    MockGateway.set_outcome(transaction_id, "decline")
+    await finalise_payment(db, payment)
+    db.refresh(payment)
+    return payment
 
 
 @router.get("/mock/decline/{reqid}", include_in_schema=False)
