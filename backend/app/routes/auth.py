@@ -76,7 +76,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
     # Generate JWT
     access_token = auth.create_access_token(
-        data={"sub": user.email, "role": user.role}
+        data={"sub": user.email, "role": user.role, "tv": user.token_version or 1}
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -444,9 +444,31 @@ def login_phone(payload: schemas.PhoneLoginRequest, db: Session = Depends(get_db
         )
 
     access_token = auth.create_access_token(
-        data={"sub": matching_user.email, "role": matching_user.role}
+        data={"sub": matching_user.email, "role": matching_user.role,
+              "tv": matching_user.token_version or 1}
     )
     return {"access_token": access_token, "token_type": "bearer", "role": matching_user.role}
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+def logout(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Invalidate every token issued to the caller.
+
+    Signing out used to be purely local: the device forgot the token, but the
+    token itself stayed valid until it expired - up to 7 days. A device whose
+    local state did not survive (an iOS force-close can lose an unflushed
+    UserDefaults write) came back signed in, and a captured token kept working.
+
+    Bumping token_version kills them all, so sign-out no longer depends on the
+    client succeeding at anything. It signs the user out on every device, which
+    is the right default for a phone-and-OTP account.
+    """
+    current_user.token_version = (current_user.token_version or 1) + 1
+    db.commit()
+    return {"status": "success", "message": "Signed out on all devices."}
+
 
 @router.put("/profile", response_model=schemas.UserResponse)
 def update_profile(

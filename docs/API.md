@@ -26,6 +26,7 @@ Interactive OpenAPI docs are served at `/docs` and the raw schema at `/openapi.j
 | ------ | ------------------- | ------ | ------------------------------------------------------------ |
 | POST   | `/auth/register`    | Admin  | Creates an **owner**. `role` is pinned to `"owner"`; any other value is a 422 |
 | POST   | `/auth/login`       | Public | OAuth2 password form (`username` = email). Returns JWT        |
+| POST   | `/auth/logout`      | Any    | Bumps `token_version`, invalidating every token issued to the caller |
 | GET    | `/auth/me`          | Any    | Current user profile                                          |
 | POST   | `/auth/otp/send`    | Public | 🔓 Unrated-limited. Dev environment always uses code `123456` |
 | POST   | `/auth/otp/verify`  | Public | Verifies against an in-memory store; grants no token          |

@@ -45,7 +45,9 @@ CREATE TABLE public.users (
     role TEXT NOT NULL DEFAULT 'passenger' CHECK (role IN ('passenger', 'owner', 'admin', 'conductor')),
     company_id UUID REFERENCES public.bus_companies(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    fcm_token TEXT,
+    token_version INTEGER NOT NULL DEFAULT 1
 );
 
 -- Enable Row-Level Security

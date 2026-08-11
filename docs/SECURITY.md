@@ -550,9 +550,28 @@ a re-login, and every re-login costs a real SMS. A 24-hour token meant roughly o
 user per day. The trade-off is a seven-times-longer window for a stolen token, which makes the
 absence of revocation matter more than it did.
 
-**Fix**: `flutter_secure_storage` on mobile, and a short access token plus a refresh token — that
-removes the cost argument for long sessions entirely. A revocation list (or a `token_version`
-column on `users`, bumped on logout) would make sign-out actually mean something.
+**Partially fixed.** `users.token_version` now backs server-side revocation: every JWT carries the
+value it was minted with (`tv`), both auth dependencies compare it, and `POST /auth/logout` bumps
+it — killing every token already issued for that user.
+
+That makes sign-out real rather than advisory. It also fixes a mobile bug it was masking: on iOS a
+force-close can lose an unflushed `UserDefaults` write, so a device that "logged out" came back
+signed in on next launch. With the token dead server-side, the surviving local state 401s and the
+app drops to sign-in regardless.
+
+| Step | Result |
+| ---- | ------ |
+| sign in | `/auth/me` 200 |
+| `POST /auth/logout` | 200, "Signed out on all devices." |
+| same token afterwards | `/auth/me`, `/bookings`, `/trips/my-active`, `/favourites` — all 401 |
+| sign in again | new token 200; old token still 401 |
+
+Tokens minted before this existed carry no `tv` and are treated as version 1, so shipping it did
+not sign everyone out a second time.
+
+**Still open**: the token is stored in plaintext (`SharedPreferences` / `localStorage`), and there
+is no refresh flow — a captured token is valid for its full 7 days unless that user signs out.
+`flutter_secure_storage` and a short access token plus a refresh token would close both.
 
 ### 30. Operator documents are readable by every authenticated user
 

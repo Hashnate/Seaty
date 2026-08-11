@@ -44,6 +44,16 @@ def unusable_password_hash() -> str:
     """
     return get_password_hash(secrets.token_urlsafe(32))
 
+def token_version_matches(payload: dict, user: "models.User") -> bool:
+    """Is this token from the user's current session generation?
+
+    Tokens minted before `token_version` existed carry no `tv` claim; those are
+    treated as version 1, so introducing this does not sign everyone out. Once a
+    user logs out their version moves past 1 and those old tokens stop matching.
+    """
+    return int(payload.get("tv", 1)) == int(getattr(user, "token_version", 1) or 1)
+
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     if expires_delta:
@@ -72,6 +82,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(models.User).filter(models.User.email == token_data.username).first()
     if user is None:
         raise credentials_exception
+
+    # Signed out since this token was issued.
+    if not token_version_matches(payload, user):
+        raise credentials_exception
+
     return user
 
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
@@ -85,6 +100,8 @@ def get_optional_current_user(token: Optional[str] = Depends(oauth2_scheme_optio
         if username is None:
             return None
         user = db.query(models.User).filter(models.User.email == username).first()
+        if user is not None and not token_version_matches(payload, user):
+            return None
         return user
     except JWTError:
         return None

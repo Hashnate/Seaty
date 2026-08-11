@@ -188,6 +188,13 @@ Three changes, in [`auth_provider.dart`](../mobile/lib/providers/auth_provider.d
 Verified against real tokens: valid → signed in; expired, empty, malformed, `simulated` → signed
 out.
 
+**The local fix alone is not sufficient on iOS**, and that matters here: `await`ing the plugin only
+confirms the value reached `UserDefaults` in memory. A force-close is a SIGKILL, so an unflushed
+write is still lost. Sign-out is therefore backed server-side as well — `logout()` calls
+`POST /auth/logout`, which bumps `users.token_version` and kills the token outright. Whatever
+survives locally then 401s on first use and the app drops to sign-in. See
+[SECURITY.md](SECURITY.md) #17.
+
 ### C13 — The GPS socket retries forever on an authentication failure
 
 `gps_tracking_provider.dart` reconnects on any drop with 1/2/4/8/15/30 s backoff and no attempt

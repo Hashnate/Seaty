@@ -194,6 +194,14 @@ try:
     except Exception as e:
         print(f"Error adding unique index on payments.gateway_transaction_id: {e}")
 
+    # 14. Server-side session invalidation. Bumped on logout; every JWT carries
+    # the value it was minted with, so a bump kills tokens already issued.
+    print("Adding users.token_version...")
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 1")
+    except Exception as e:
+        print(f"Error adding users.token_version: {e}")
+
     # NOTE: step 12 (a one-time -5:30 shift of existing trips.departure_time/
     # arrival_time) was removed here. It assumed the Postgres session timezone
     # defaulted to UTC, which was never confirmed against the live database and

@@ -497,6 +497,29 @@ class AuthNotifier extends Notifier<AuthState> {
   /// Force-closing the app at that point lost it, and the next launch restored
   /// the signed-in session.
   Future<void> logout() async {
+    // Kill the token server-side first, while we still hold it. This is what
+    // makes sign-out real: even if the local write never reaches disk - an iOS
+    // force-close can lose an unflushed UserDefaults write - the token is dead,
+    // so the next launch 401s and lands on the sign-in screen anyway.
+    //
+    // Best-effort: offline, or a backend that has not shipped /auth/logout yet,
+    // must not trap the user in a signed-in app. Local state is cleared either
+    // way.
+    final oldToken = state.token;
+    if (oldToken.isNotEmpty && !oldToken.startsWith('simulated')) {
+      try {
+        final settings = ref.read(settingsProvider);
+        await http
+            .post(
+              Uri.parse('${settings.apiBaseUrl}/auth/logout'),
+              headers: {'Authorization': 'Bearer $oldToken'},
+            )
+            .timeout(const Duration(seconds: 8));
+      } catch (e) {
+        debugPrint('Server-side logout failed (clearing locally anyway): $e');
+      }
+    }
+
     final newState = AuthState(
       isAuthenticated: false,
       role: 'passenger',

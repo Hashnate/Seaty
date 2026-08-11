@@ -44,6 +44,11 @@ class User(Base):
     role = Column(String, nullable=False, default="passenger")
     company_id = Column(UUID(as_uuid=True), ForeignKey("bus_companies.id", ondelete="SET NULL"), nullable=True)
     fcm_token = Column(String, nullable=True)
+    # Bumped on sign-out. Every JWT carries the value it was minted with, so a
+    # bump kills every token already issued for this user. Without it, logging
+    # out only cleared the device - the token stayed valid until it expired,
+    # and a device whose local state survived a force-close stayed signed in.
+    token_version = Column(Integer, nullable=False, default=1, server_default="1")
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
