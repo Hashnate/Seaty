@@ -65,17 +65,51 @@ class AuthState {
   }
 }
 
+/// Session keys in SharedPreferences. Listed so logout can remove every one -
+/// leaving any behind is what let a stale flag resurrect a signed-out session.
+const _kSessionKeys = <String>[
+  'isAuthenticated', 'role', 'userName', 'token', 'userNic', 'userGender', 'userPhone',
+];
+
+/// Whether a stored token could still authenticate a request.
+///
+/// The restored session is only as trustworthy as the token in it, so this is
+/// what decides whether the app is signed in — not a separate boolean that can
+/// disagree with it. Also catches an expired token (they last 7 days), which
+/// would otherwise show the home screen and then 401 on everything.
+bool _tokenIsUsable(String token) {
+  if (token.isEmpty || token.startsWith('simulated')) return false;
+  try {
+    final parts = token.split('.');
+    if (parts.length != 3) return false;
+    var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+    payload = payload.padRight(payload.length + ((4 - payload.length % 4) % 4), '=');
+    final claims = json.decode(utf8.decode(base64.decode(payload)));
+    final exp = claims is Map ? claims['exp'] : null;
+    if (exp is! int) return false;
+    return DateTime.now().millisecondsSinceEpoch < exp * 1000;
+  } catch (_) {
+    // Anything unparseable is not something we should trust.
+    return false;
+  }
+}
+
 class AuthNotifier extends Notifier<AuthState> {
   @override
   AuthState build() {
     final prefs = ref.watch(sharedPreferencesProvider);
-    final isAuthenticated = prefs.getBool('isAuthenticated') ?? false;
     final role = prefs.getString('role') ?? 'passenger';
     final userName = prefs.getString('userName') ?? 'Guest User';
     final token = prefs.getString('token') ?? '';
     final userNic = prefs.getString('userNic') ?? '';
     final userGender = prefs.getString('userGender') ?? '';
     final userPhone = prefs.getString('userPhone') ?? '';
+
+    // Both must hold. The flag alone was enough to restore a session, so a
+    // logout whose write never reached disk - force-closing the app before
+    // SharedPreferences flushed - came back signed in on next launch.
+    final isAuthenticated =
+        (prefs.getBool('isAuthenticated') ?? false) && _tokenIsUsable(token);
 
     final authState = AuthState(
       isAuthenticated: isAuthenticated,
@@ -94,21 +128,28 @@ class AuthNotifier extends Notifier<AuthState> {
     return authState;
   }
 
-  void _saveSession(AuthState newState) {
+  /// Persists the session. Awaited, unlike before: `setString` and friends
+  /// update SharedPreferences' in-memory cache immediately but reach the
+  /// platform asynchronously, so an unawaited write is lost if the process
+  /// dies first. That is invisible for a sign-in (the app keeps running) and
+  /// exactly the bug for a sign-out.
+  Future<void> _saveSession(AuthState newState) async {
     final prefs = ref.read(sharedPreferencesProvider);
-    prefs.setBool('isAuthenticated', newState.isAuthenticated);
-    prefs.setString('role', newState.role);
-    prefs.setString('userName', newState.userName);
-    prefs.setString('token', newState.token);
-    prefs.setString('userNic', newState.userNic);
-    prefs.setString('userGender', newState.userGender);
-    prefs.setString('userPhone', newState.userPhone);
+    await Future.wait([
+      prefs.setBool('isAuthenticated', newState.isAuthenticated),
+      prefs.setString('role', newState.role),
+      prefs.setString('userName', newState.userName),
+      prefs.setString('token', newState.token),
+      prefs.setString('userNic', newState.userNic),
+      prefs.setString('userGender', newState.userGender),
+      prefs.setString('userPhone', newState.userPhone),
+    ]);
   }
 
-  void setRole(String newRole) {
+  Future<void> setRole(String newRole) async {
     final newState = state.copyWith(role: newRole);
     state = newState;
-    _saveSession(newState);
+    await _saveSession(newState);
   }
 
   Future<Map<String, dynamic>> checkPhoneDB(
@@ -313,7 +354,7 @@ class AuthNotifier extends Notifier<AuthState> {
     );
 
     state = newState;
-    _saveSession(newState);
+    await _saveSession(newState);
 
     // Load profile immediately to populate gender, NIC etc.
     loadProfile();
@@ -386,7 +427,7 @@ class AuthNotifier extends Notifier<AuthState> {
               : state.role,
         );
         state = newState;
-        _saveSession(newState);
+        await _saveSession(newState);
       }
     } catch (e) {
       debugPrint('Error loading profile: $e');
@@ -407,7 +448,7 @@ class AuthNotifier extends Notifier<AuthState> {
       userPhone: phone,
     );
     state = localState;
-    _saveSession(localState);
+    await _saveSession(localState);
 
     if (state.token.isEmpty || state.token.startsWith('simulated')) return true;
 
@@ -437,10 +478,10 @@ class AuthNotifier extends Notifier<AuthState> {
           userPhone: data['phone_number'] ?? state.userPhone,
         );
         state = serverState;
-        _saveSession(serverState);
+        await _saveSession(serverState);
         return true;
       } else if (response.statusCode == 401) {
-        logout();
+        await logout();
       }
     } catch (e) {
       debugPrint('Error updating profile: $e');
@@ -448,7 +489,14 @@ class AuthNotifier extends Notifier<AuthState> {
     return false;
   }
 
-  void logout() {
+  /// Signs out and waits for it to actually be on disk.
+  ///
+  /// Await this before letting the user leave the screen. The previous version
+  /// returned immediately: the in-memory state flipped so the UI showed the
+  /// sign-in screen, but the write to SharedPreferences was still in flight.
+  /// Force-closing the app at that point lost it, and the next launch restored
+  /// the signed-in session.
+  Future<void> logout() async {
     final newState = AuthState(
       isAuthenticated: false,
       role: 'passenger',
@@ -459,8 +507,16 @@ class AuthNotifier extends Notifier<AuthState> {
       userPhone: '',
     );
     state = newState;
-    _saveSession(newState);
     clearSessionScopedCaches();
+
+    // Removed rather than overwritten, so a partially applied write cannot
+    // leave a key behind that still looks like a session.
+    final prefs = ref.read(sharedPreferencesProvider);
+    try {
+      await Future.wait([for (final k in _kSessionKeys) prefs.remove(k)]);
+    } catch (e) {
+      debugPrint('Error clearing session: $e');
+    }
   }
 
   /// Drops every provider holding data belonging to the signed-out account.

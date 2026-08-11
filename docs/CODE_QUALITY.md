@@ -161,6 +161,33 @@ table order.
 **Fix**: normalise on both paths; better, store the normalised form in a generated column and
 put a unique index on `(normalised_phone, role)`.
 
+### C14 — Sign-out did not survive a force-close — **fixed**
+
+Log out, force-close the app, reopen: straight to the home screen, still signed in.
+
+`_saveSession` fired seven `SharedPreferences` writes and awaited none of them, and `logout()`
+was `void` so nothing awaited it either. The plugin updates its in-memory cache synchronously but
+reaches the platform asynchronously — so the UI flipped to the sign-in screen and looked correct,
+while the write was still in flight. Killing the process before it landed lost it, and the next
+launch read the stale `isAuthenticated = true`.
+
+It only ever showed up on sign-out. For sign-in the app keeps running, so the write always
+completed.
+
+Three changes, in [`auth_provider.dart`](../mobile/lib/providers/auth_provider.dart):
+
+1. `_saveSession` and `logout` are `Future`s and await their writes; every call site awaits,
+   including the 401 handlers in `bookings_provider` and `fleet_provider` and the sign-out button.
+2. Logout **removes** the session keys rather than overwriting them, so a partially applied write
+   cannot leave something behind that still looks like a session.
+3. Startup no longer trusts the boolean on its own — it requires a token that is present,
+   well-formed, and **not expired**. Two keys that can disagree is what made this fragile, and
+   with 7-day tokens an expired one would otherwise land the user on the home screen only to 401
+   on everything.
+
+Verified against real tokens: valid → signed in; expired, empty, malformed, `simulated` → signed
+out.
+
 ### C13 — The GPS socket retries forever on an authentication failure
 
 `gps_tracking_provider.dart` reconnects on any drop with 1/2/4/8/15/30 s backoff and no attempt

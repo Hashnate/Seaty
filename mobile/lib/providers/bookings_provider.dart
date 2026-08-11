@@ -108,7 +108,7 @@ class BookingsNotifier extends Notifier<BookingsState> {
         }
         state = state.copyWith(bookings: loadedBookings);
       } else if (response.statusCode == 401) {
-        ref.read(authProvider.notifier).logout();
+        await ref.read(authProvider.notifier).logout();
       }
     } catch (e) {
       debugPrint('Error loading bookings: $e');
@@ -230,7 +230,7 @@ class BookingsNotifier extends Notifier<BookingsState> {
         lastErrorMessage = null;
         return json.decode(response.body);
       } else if (response.statusCode == 401) {
-        ref.read(authProvider.notifier).logout();
+        await ref.read(authProvider.notifier).logout();
       } else {
         lastErrorMessage = _extractErrorDetail(response.body);
       }

@@ -102,7 +102,7 @@ class FleetNotifier extends Notifier<FleetState> {
         }
         state = state.copyWith(vehicles: loadedVehicles);
       } else if (response.statusCode == 401) {
-        ref.read(authProvider.notifier).logout();
+        await ref.read(authProvider.notifier).logout();
       }
     } catch (e) {
       debugPrint('Error loading vehicles: $e');

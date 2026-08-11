@@ -410,7 +410,12 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                         width: double.infinity,
                         height: 44,
                         child: OutlinedButton.icon(
-                          onPressed: () => ref.read(authProvider.notifier).logout(),
+                          onPressed: () async {
+                            // Awaited: logout is only durable once the
+                            // SharedPreferences write has landed. Returning
+                            // before that is what let a force-close undo it.
+                            await ref.read(authProvider.notifier).logout();
+                          },
                           icon: const Icon(
                             Icons.logout_rounded,
                             color: Colors.redAccent,
