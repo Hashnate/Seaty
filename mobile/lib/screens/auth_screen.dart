@@ -392,7 +392,11 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
                   _currentUserName = name;
                   await _generateAndSendOtp(context, name, phone);
                   setState(() => _authState = PhoneAuthState.verifyOtp);
-                } else if (widget.initialRole == 'passenger') {
+                  // AuthWrapper renders PhoneAuthScreen with no initialRole, so
+                  // null means the default passenger entrance and must offer
+                  // sign-up. Comparing to 'passenger' without this fallback sent
+                  // every unauthenticated launch down the staff branch.
+                } else if ((widget.initialRole ?? 'passenger') == 'passenger') {
                   FocusScope.of(context).unfocus();
                   setState(() {
                     _isNewUser = true;
