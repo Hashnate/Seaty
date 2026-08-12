@@ -274,3 +274,113 @@
     transform: none;
   }
 }
+
+/* ---------- Checkout Animation ---------- */
+.checkout-btn {
+  animation: btnCheckout 5s ease-in-out infinite;
+  overflow: hidden;
+  position: relative;
+}
+@keyframes btnCheckout {
+  0%, 20% { background: var(--c-blue); color: #fff; width: 100%; }
+  30%, 60% { background: var(--c-navy); color: transparent; width: 40px; margin-inline: auto; border-radius: 20px; }
+  70%, 90% { background: var(--c-green); color: #fff; width: 100%; border-radius: 8px; }
+  100% { background: var(--c-blue); color: #fff; width: 100%; }
+}
+.checkout-spinner {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  opacity: 0;
+  animation: spinCheckout 5s linear infinite;
+}
+@keyframes spinCheckout {
+  0%, 25% { opacity: 0; transform: translate(-50%, -50%) rotate(0deg); }
+  30%, 60% { opacity: 1; transform: translate(-50%, -50%) rotate(360deg); }
+  65%, 100% { opacity: 0; }
+}
+.checkout-check {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  opacity: 0;
+  animation: checkCheckout 5s ease-out infinite;
+}
+@keyframes checkCheckout {
+  0%, 65% { opacity: 0; transform: translate(-50%, -50%) scale(0); }
+  70%, 90% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; }
+}
+
+/* ---------- QR Scan Animation ---------- */
+.qr-scan-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: var(--c-green);
+  box-shadow: 0 0 8px var(--c-green);
+  animation: scanQR 3s ease-in-out infinite alternate;
+}
+@keyframes scanQR {
+  0% { top: 10%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 90%; opacity: 0; }
+}
+
+/* ---------- Review Stars Animation ---------- */
+.review-star {
+  animation: starFill 4s ease-in-out infinite;
+  fill: #e2e8f0;
+}
+@keyframes starFill {
+  0%, 10% { fill: #e2e8f0; transform: scale(1); }
+  20%, 80% { fill: #f59e0b; transform: scale(1.1); }
+  30%, 100% { transform: scale(1); }
+}
+.review-star:nth-child(1) { animation-delay: 0s; }
+.review-star:nth-child(2) { animation-delay: 0.1s; }
+.review-star:nth-child(3) { animation-delay: 0.2s; }
+.review-star:nth-child(4) { animation-delay: 0.3s; }
+.review-star:nth-child(5) { animation-delay: 0.4s; }
+
+.review-verify {
+  animation: verifyPop 4s ease-out infinite;
+}
+@keyframes verifyPop {
+  0%, 40% { opacity: 0; transform: scale(0); }
+  50%, 90% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; }
+/* ---------- Static Page overrides (for Features & Operations pages) ---------- */
+
+body.static-page .reveal,
+body.static-page .reveal-left,
+body.static-page .reveal-right,
+body.static-page .reveal-scale,
+body.static-page .ticket-card {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+
+body.static-page .hero::before,
+body.static-page .blob,
+body.static-page .seat-grid .seat,
+body.static-page .route-path,
+body.static-page .route-marker,
+body.static-page .pulse-ring,
+body.static-page .toast,
+body.static-page .moving-svg-bus-group,
+body.static-page .marker-ping,
+body.static-page .animate-seat-booking {
+  animation: none !important;
+}
+
+body.static-page .store-badge:hover,
+body.static-page .card:hover {
+  transform: none !important;
+}

@@ -46,7 +46,16 @@
   var revealEls = document.querySelectorAll(".reveal");
   var prefersReducedMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
-  ).matches;
+  ).matches || document.body.classList.contains("static-page");
+
+  /* Pause SVG SMIL animations for static pages */
+  if (document.body.classList.contains("static-page")) {
+    document.querySelectorAll("svg").forEach(function (svg) {
+      if (typeof svg.pauseAnimations === "function") {
+        svg.pauseAnimations();
+      }
+    });
+  }
 
   if (revealEls.length) {
     if (prefersReducedMotion || !("IntersectionObserver" in window)) {

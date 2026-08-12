@@ -92,6 +92,7 @@ h4 {
 p {
   margin: 0 0 var(--space-4);
   color: var(--text-secondary);
+  font-size: 1rem;
 }
 
 :focus-visible {
@@ -186,7 +187,7 @@ p {
   }
 }
 
-@media (max-width: 620px) {
+@media (max-width: 768px) {
   .grid-2,
   .grid-3,
   .grid-4 {
