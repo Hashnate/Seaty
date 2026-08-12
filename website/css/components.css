@@ -3568,5 +3568,25 @@
 }
 
 .moving-dot.active {
-  animation: mapDotMove 3s linear infinite;
+  animation: mapDotMove 6s linear infinite;
+}
+
+/* ---------- Cinematic Photo Fade ---------- */
+.cinematic-photo-fade {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* Uses a radial mask to softly fade the edges of the hard-cropped photograph into the background */
+  mask-image: radial-gradient(circle, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 80%);
+  -webkit-mask-image: radial-gradient(circle, rgba(0,0,0,1) 45%, rgba(0,0,0,0) 80%);
+}
+
+.cinematic-photo-fade img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5));
 }

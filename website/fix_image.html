@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seaty Logo Fixer</title>
+    <style>
+        body { font-family: sans-serif; background: #0f172a; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .container { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .btn { background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; margin-top: 1rem; }
+        .btn:hover { background: #2563eb; }
+        input[type="file"] { margin: 1rem 0; padding: 1rem; border: 2px dashed #334155; border-radius: 8px; width: 100%; box-sizing: border-box; }
+        canvas { max-width: 100%; border-radius: 8px; margin-top: 1rem; display: none; }
+        .controls { display: flex; gap: 10px; margin-top: 1rem; justify-content: center; }
+        .control-group { display: flex; flex-direction: column; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Fix Seaty Logo in Image</h2>
+    <p>Upload the image with the incorrect AI logo (e.g., the woman in the blue shirt).</p>
+    
+    <input type="file" id="imageInput" accept="image/png, image/jpeg">
+    
+    <div id="editor" style="display: none;">
+        <p>Use the sliders to perfectly position the correct logo over the old one!</p>
+        <div class="controls">
+            <div class="control-group"><label>X Position</label><input type="range" id="xPos" min="0" max="1000" value="650"></div>
+            <div class="control-group"><label>Y Position</label><input type="range" id="yPos" min="0" max="1000" value="480"></div>
+            <div class="control-group"><label>Size</label><input type="range" id="size" min="10" max="300" value="120"></div>
+            <div class="control-group"><label>Rotation</label><input type="range" id="rot" min="-180" max="180" value="-5"></div>
+        </div>
+        
+        <canvas id="canvas"></canvas>
+        <br>
+        <button class="btn" id="downloadBtn">Download Fixed Image</button>
+    </div>
+</div>
+
+<script>
+    const imageInput = document.getElementById('imageInput');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const editor = document.getElementById('editor');
+    const downloadBtn = document.getElementById('downloadBtn');
+    
+    const xPos = document.getElementById('xPos');
+    const yPos = document.getElementById('yPos');
+    const size = document.getElementById('size');
+    const rot = document.getElementById('rot');
+
+    let baseImg = new Image();
+    let logoImg = new Image();
+    
+    // Load the correct logo
+    logoImg.src = 'assets/images/app_logo_cropped.png';
+
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            baseImg.onload = () => {
+                canvas.width = baseImg.width;
+                canvas.height = baseImg.height;
+                
+                // Update slider max values based on image size
+                xPos.max = baseImg.width;
+                yPos.max = baseImg.height;
+                
+                // Make rough guess for the shirt position
+                xPos.value = baseImg.width * 0.65;
+                yPos.value = baseImg.height * 0.48;
+                size.value = baseImg.width * 0.15;
+                
+                editor.style.display = 'block';
+                canvas.style.display = 'block';
+                draw();
+            };
+            baseImg.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    function draw() {
+        if (!baseImg.src || !logoImg.src) return;
+        
+        // Draw base image
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(baseImg, 0, 0);
+        
+        // Draw logo
+        ctx.save();
+        ctx.translate(parseInt(xPos.value), parseInt(yPos.value));
+        ctx.rotate(parseInt(rot.value) * Math.PI / 180);
+        
+        const s = parseInt(size.value);
+        // Draw a dark blue patch behind it to cover the old logo
+        ctx.fillStyle = '#0a1d4a'; 
+        ctx.fillRect(-s/2, -s/2, s, s*0.3);
+        
+        // Draw the real logo
+        ctx.drawImage(logoImg, -s/2, -s/2, s, (logoImg.height / logoImg.width) * s);
+        ctx.restore();
+    }
+
+    xPos.addEventListener('input', draw);
+    yPos.addEventListener('input', draw);
+    size.addEventListener('input', draw);
+    rot.addEventListener('input', draw);
+
+    downloadBtn.addEventListener('click', () => {
+        const link = document.createElement('a');
+        link.download = 'fixed_image.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    });
+    
+    // Fallback if logo loads slow
+    logoImg.onload = draw;
+</script>
+</body>
+</html>
