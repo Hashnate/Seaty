@@ -54,9 +54,15 @@
 
 <main id="main">
 
-  <section class="hero" style="padding-block:var(--space-20) var(--space-16);">
-    <span class="blob" style="width:280px;height:280px;top:-60px;left:10%;background:var(--c-cyan-400);"></span>
-    <div class="container reveal text-center" style="position:relative;max-width:760px;">
+  <section class="hero" style="position:relative; overflow:hidden; padding-block:var(--space-20) var(--space-16);">
+    <!-- Cinematic Background Video -->
+    <video autoplay loop muted playsinline style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:0;">
+      <source src="assets/video/Create_a_premium_cinematic_web.mp4" type="video/mp4">
+    </video>
+    <!-- Dark overlay to ensure text contrast -->
+    <div style="position:absolute; top:0; left:0; width:100%; height:100%; background:rgba(4, 13, 26, 0.65); z-index:1;"></div>
+
+    <div class="container reveal text-center" style="position:relative; z-index:2; max-width:760px;">
       <span class="eyebrow" style="color:var(--c-cyan-300);justify-content:center;">Platform Capabilities</span>
       <h1 style="color:#fff;">Every trip, fully visible &amp; stress-free</h1>
       <p class="lede" style="color:var(--text-on-dark-muted);margin-inline:auto;">
