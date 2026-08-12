@@ -76,12 +76,12 @@
         </div>
       </div>
 
-      <div class="container" style="position:relative;padding-block:var(--space-20) var(--space-16);display:grid;grid-template-columns:1.15fr 0.85fr;gap:var(--space-12);align-items:center;">
+      <div class="container" style="position:relative;padding-block:var(--space-20) var(--space-16);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-12);align-items:center;">
         <div class="reveal">
           <span class="eyebrow" style="color:var(--c-cyan-300);">Sri Lanka's Next-Gen Transport Platform</span>
           <h1 style="color:#fff;">Book smart.<br />Sit better.</h1>
-          <p class="lede" style="color:var(--text-on-dark-muted);">
-            Say goodbye to long queues and uncertainty. Reserve your exact luxury bus seat on a live seat map, pay with instant confirmation, and track your vehicle in real-time.
+          <p class="lede" style="color:var(--text-on-dark-muted); max-width: 500px;">
+            Say goodbye to long queues and uncertainty. Reserve your seat, track your journey on a live map, and travel with confidence using SEATY.
           </p>
           <div class="btn-row" style="margin-top:var(--space-8);">
             <a href="download.html" class="btn btn-primary btn-lg" id="hero-download-btn">Download Seaty App</a>
@@ -96,80 +96,191 @@
       <div class="container">
         <div class="section-head center reveal">
           <span class="eyebrow">Why Seaty</span>
-          <h2>Everything a smooth journey needs, in one app</h2>
+          <h2>Everything you need for a smooth journey, in one app</h2>
           <p class="lede" style="margin-inline:auto;">
-            Engineered to replace hassle with absolute clarity. From departure schedules to exact seat choices, Seaty
-            elevates intercity highway travel in Sri Lanka.
+            SEATY brings important travel services into one simple mobile experience.
           </p>
         </div>
 
         <div class="grid grid-3 reveal-group">
           <article class="card feature-card reveal">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                <rect x="14" y="14" width="7" height="7" rx="1.5" />
-              </svg></div>
-            <h3>Live Interactive Seat Selection</h3>
-            <p>Pick window, aisle, or front-row seats on a live layout. Real-time WebSocket synchronization ensures held
-              seats never conflict across users.</p>
+            <div class="feature-preview">
+              <div class="seaty-seat-card-demo compact-seat-demo" style="margin:0; transform:scale(0.8); transform-origin:top; width: 100%;">
+                <div class="seat-map-legend">
+                  <span class="legend-item"><i class="legend-pill pill-available"></i> Available</span>
+                  <span class="legend-item"><i class="legend-pill pill-male"></i> Male</span>
+                  <span class="legend-item"><i class="legend-pill pill-female"></i> Female</span>
+                  <span class="legend-item"><i class="legend-pill pill-held"></i> Held</span>
+                </div>
+
+                <div class="bus-layout-frame" style="height:350px; overflow:hidden; mask-image:linear-gradient(to bottom, transparent, black 10%, black 90%, transparent); -webkit-mask-image:linear-gradient(to bottom, transparent, black 10%, black 90%, transparent);">
+                  <div style="animation: panUp 12s infinite alternate ease-in-out;">
+                    <div class="driver-cabin-bar">
+                      <div class="entry-door">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M15 12h.01"></path></svg>
+                        <span>ENTRY DOOR</span>
+                      </div>
+                      <div class="cabin-notch"></div>
+                      <div class="steering-cabin">
+                        <span>DRIVER CABIN <small>RHD</small></span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 3v6M3 12h6M15 12h6M8.5 15.5l3.5-3.5"></path></svg>
+                      </div>
+                    </div>
+
+                    <div class="bus-seats-container">
+                      <!-- Row 1 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-male">1</div><div class="seat-item seat-female">2</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-male">3</div><div class="seat-item seat-female">4</div></div></div>
+                      <!-- Row 2 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-female">5</div><div class="seat-item seat-male">6</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-male">7</div><div class="seat-item seat-male">8</div></div></div>
+                      <!-- Row 3 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-female">9</div><div class="seat-item seat-female">10</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-male">11</div><div class="seat-item seat-female">12</div></div></div>
+                      <!-- Row 4 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-male">13</div><div class="seat-item seat-male">14</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-male">15</div><div class="seat-item seat-male">16</div></div></div>
+                      <!-- Row 5 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-male">17</div><div class="seat-item seat-female">18</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-male">19</div><div class="seat-item seat-female">20</div></div></div>
+                      <!-- Row 6 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-male">21</div><div class="seat-item seat-male">22</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-female">23</div><div class="seat-item seat-female">24</div></div></div>
+                      <!-- Row 7 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-female">25</div><div class="seat-item animate-seat-booking" style="--delay: 1">26</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item animate-seat-booking" style="--delay: 3">27</div><div class="seat-item">28</div></div></div>
+                      <!-- Row 8 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item animate-seat-booking" style="--delay: 5">29</div><div class="seat-item">30</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item">31</div><div class="seat-item">32</div></div></div>
+                      <!-- Row 9 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item">33</div><div class="seat-item seat-male">34</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item">35</div><div class="seat-item seat-male">36</div></div></div>
+                      <!-- Row 10 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item seat-male">37</div><div class="seat-item seat-female">38</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item seat-male">39</div><div class="seat-item seat-male">40</div></div></div>
+                      <!-- Row 11 -->
+                      <div class="seat-row"><div class="seat-pair"><div class="seat-item">41</div><div class="seat-item">42</div></div><div class="aisle-indicator">↑</div><div class="seat-pair"><div class="seat-item">43</div><div class="seat-item animate-seat-booking" style="--delay: 2">44</div></div></div>
+                      <!-- Row 12 Back Bench -->
+                      <div class="seat-row back-bench">
+                        <div class="seat-item animate-seat-booking" style="--delay: 4">45</div>
+                        <div class="seat-item">46</div>
+                        <div class="seat-item">47</div>
+                        <div class="seat-item">48</div>
+                        <div class="seat-item">49</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <style>
+                    @keyframes panUp {
+                      0%, 10% { transform: translateY(0); }
+                      90%, 100% { transform: translateY(calc(-100% + 180px)); }
+                    }
+                  </style>
+                </div>
+              </div>
+            </div>
+            <div class="feature-content">
+              <h3>Live Interactive Seat Selection</h3>
+              <p>Pick your window, aisle, or front-row seat on a live layout. Real-time seat selection helps you choose the right seat before your journey.</p>
+            </div>
           </article>
 
           <article class="card feature-card reveal" style="--reveal-delay:80ms;">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11Z" />
-                <circle cx="12" cy="10" r="2.5" />
-              </svg></div>
-            <h3>Precision Bus GPS Tracking</h3>
-            <p>Track your assigned bus as it maneuvers through highway stops. Receive precise estimated time of arrival
-              (ETA) notifications directly on your phone.</p>
+            <div class="feature-preview">
+              <img src="assets/images/image_copy_3.png" alt="Seaty Live Tracker Mobile Screen View" class="app-screen-full-img" style="height:100%; object-fit:cover; object-position:top;">
+            </div>
+            <div class="feature-content">
+              <h3>Precise Bus GPS Tracking</h3>
+              <p>Track your assigned bus as it moves through the journey. Receive accurate location and ETA updates directly on your phone.</p>
+            </div>
           </article>
 
           <article class="card feature-card reveal" style="--reveal-delay:160ms;">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3Z" />
-                <path d="M9 12l2 2 4-4" />
-              </svg></div>
-            <h3>Transparent Server-Side Checkout</h3>
-            <p>Fares and platform fees are generated securely by our backend engine — ensuring absolute price honesty
-              and zero hidden booking surges.</p>
+            <div class="feature-preview">
+              <div class="fp-receipt">
+                <div class="fp-row"><span>Ticket Fare</span><span>LKR 1,500</span></div>
+                <div class="fp-row"><span>Service Fee</span><span>LKR 50</span></div>
+                <div class="fp-row total"><span>Total</span><span>LKR 1,550</span></div>
+                <div class="fp-checkout-btn checkout-btn">
+                  <span>Pay Now</span>
+                  <div class="checkout-spinner"></div>
+                  <svg class="checkout-check" viewBox="0 0 24 24" width="20" height="20" stroke="#fff" stroke-width="2" fill="none"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+              </div>
+            </div>
+            <div class="feature-content">
+              <h3>Transparent Server-Side Checkout</h3>
+              <p>Fees and platform charges are generated securely by our backend system so passengers receive clear and reliable pricing.</p>
+            </div>
           </article>
 
           <article class="card feature-card reveal" style="--reveal-delay:0ms;">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <path
-                  d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4V8Z" />
-                <path d="M10 6v12" stroke-dasharray="2.2 3" />
-              </svg></div>
-            <h3>Contactless QR Digital Tickets</h3>
-            <p>Your validated digital ticket lives inside your app. Conductors scan the dynamic QR code in seconds upon
-              boarding for instant admission.</p>
+            <div class="feature-preview">
+              <div class="qr-scanner-demo">
+                <div class="qr-scanner-viewport">
+                  <div class="scanner-corner corner-tl"></div>
+                  <div class="scanner-corner corner-tr"></div>
+                  <div class="scanner-corner corner-bl"></div>
+                  <div class="scanner-corner corner-br"></div>
+                  
+                  <div class="scanner-laser-beam"></div>
+
+                  <img src="assets/images/WhatsApp Image 2026-08-06 at 1.45.51 PM.jpeg" alt="Seaty Digital QR Ticket" class="qr-scanner-img">
+
+                  <div class="scanner-success-toast">
+                    <div class="success-badge-icon">✓</div>
+                    <div class="success-toast-text">
+                      <h4>Boarding Verified!</h4>
+                      <p>Seat 12A • Colombo → Trincomalee<br>Status: Passenger Boarded</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="feature-content">
+              <h3>Contactless QR Digital Tickets</h3>
+              <p>Your valid digital ticket lives inside the app. Show your QR code when boarding for quick and convenient access.</p>
+            </div>
           </article>
 
           <article class="card feature-card reveal" style="--reveal-delay:80ms;">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <path d="M6 8a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 12 6 8Z" />
-                <path d="M9.5 17a2.5 2.5 0 0 0 5 0" />
-              </svg></div>
-            <h3>Instant Push &amp; SMS Alerts</h3>
-            <p>Stay informed with automated departure countdowns, delay notifications, platform updates, and digital
-              payment receipts.</p>
+            <div class="feature-preview">
+              <div class="fp-toast-container">
+                <div class="fp-toast toast" style="--d:0">
+                  <div class="fp-toast-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
+                  <div class="fp-toast-text">
+                    <div class="fp-toast-title">Booking Confirmed</div>
+                    <div class="fp-toast-sub">Your seat is reserved.</div>
+                  </div>
+                </div>
+                <div class="fp-toast toast" style="--d:1">
+                  <div class="fp-toast-icon" style="background:var(--c-orange);"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+                  <div class="fp-toast-text">
+                    <div class="fp-toast-title">Journey Reminder</div>
+                    <div class="fp-toast-sub">Bus arrives in 15 mins.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="feature-content">
+              <h3>Instant Push &amp; SMS Alerts</h3>
+              <p>Stay informed with booking confirmations, departure reminders, instant updates, and important travel notifications.</p>
+            </div>
           </article>
 
           <article class="card feature-card reveal" style="--reveal-delay:160ms;">
-            <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"
-                stroke-linejoin="round">
-                <path d="M12 3l2.6 5.7 6.2.6-4.7 4.2 1.4 6.1L12 16.9 6.5 19.6l1.4-6.1-4.7-4.2 6.2-.6L12 3Z" />
-              </svg></div>
-            <h3>Verified Vehicle Reviews</h3>
-            <p>Read authentic feedback from verified passengers on vehicle cleanliness, driver punctuality, and AC
-              comfort before reserving your seat.</p>
+            <div class="feature-preview">
+              <div class="fp-review">
+                <div class="fp-stars">
+                  <svg class="review-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <svg class="review-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <svg class="review-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <svg class="review-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <svg class="review-star" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+                  <span style="font-size:0.7rem;font-weight:700;color:var(--text-secondary);margin-left:4px;">5.0</span>
+                </div>
+                <div class="fp-review-text">"Clean bus, perfect AC, and very punctual."</div>
+                <div class="fp-verified review-verify">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  Verified Passenger
+                </div>
+              </div>
+            </div>
+            <div class="feature-content">
+              <h3>Verified Vehicle Reviews</h3>
+              <p>Read authentic feedback from verified passengers and make better travel decisions based on real experiences.</p>
+            </div>
           </article>
         </div>
 
@@ -181,21 +292,22 @@
     </section>
 
     <!-- ============ REALISTIC VISUAL SHOWCASE ============ -->
-    <section class="section" style="background:var(--bg-surface-alt);">
+    <section class="section" style="background:var(--bg-surface-alt);" id="passengers">
       <div class="container">
         <div class="feature-showcase-row reveal">
           <div>
             <span class="eyebrow">Passenger Comfort</span>
             <h2>Travel with peace of mind across Sri Lanka</h2>
             <p class="lede">
-              Whether commuting between Colombo and Kandy, traveling down the Southern Expressway to Galle, or embarking
-              on a trip to Ella, Seaty connects you directly with top-tier Sri Lanka luxury express operators.
+              Avoid unnecessary queues and reduce uncertainty during travel. SEATY gives you complete control over your journey from booking to arrival.
             </p>
             <ul
               style="color:var(--text-secondary);display:grid;gap:var(--space-3);font-weight:600;margin-top:var(--space-6);">
-              <li>&#10003; Browse verified express coaches with AC, Wi-Fi &amp; recliners</li>
-              <li>&#10003; Instant seat reservation with zero double-booking risk</li>
-              <li>&#10003; Digital boarding pass on your mobile phone</li>
+              <li>&#10003; Browse verified express coaches</li>
+              <li>&#10003; View available seats</li>
+              <li>&#10003; Use digital QR tickets</li>
+              <li>&#10003; Track buses in real time</li>
+              <li>&#10003; Receive booking notifications</li>
             </ul>
             <div style="margin-top:var(--space-8);">
               <a href="download.html" class="btn btn-primary">Book Your Next Trip</a>
@@ -209,15 +321,14 @@
       </div>
     </section>
 
-    <!-- ============ DESTINATIONS SHOWCASE ============ -->
+    <!-- ============ POPULAR ROUTES SHOWCASE ============ -->
     <section class="section">
       <div class="container">
         <div class="section-head center reveal">
           <span class="eyebrow">Popular Sri Lankan Routes</span>
           <h2>Connecting key express routes across Sri Lanka</h2>
           <p class="lede" style="margin-inline:auto;">
-            From southern coastal expressways to central hill capital expressways, book seats on daily luxury
-            departures.
+            From southern coastal expressways to central hill-country destinations, SEATY helps passengers discover and plan journeys across Sri Lanka.
           </p>
         </div>
 
@@ -225,7 +336,7 @@
           <div class="destination-card reveal">
             <img src="assets/images/colombo_to_kandy.png" alt="Colombo to Kandy Scenic Highway Express" />
             <div class="destination-card-content">
-              <h3>Colombo &harr; Kandy</h3>
+              <h3>Colombo &rarr; Kandy</h3>
               <p>Daily Express Departures &bull; 3 hrs 15 mins</p>
             </div>
           </div>
@@ -233,7 +344,7 @@
           <div class="destination-card reveal" style="--reveal-delay:80ms;">
             <img src="assets/images/colombo_to_galle.png" alt="Southern Expressway Highway Coach to Galle" />
             <div class="destination-card-content">
-              <h3>Colombo &harr; Galle / Matara</h3>
+              <h3>Colombo &rarr; Galle / Matara</h3>
               <p>Southern Expressway &bull; 1 hr 45 mins</p>
             </div>
           </div>
@@ -242,7 +353,7 @@
             <img src="assets/images/badulla.png"
               alt="Central Highlands Express to Nuwara Eliya &amp; Ella" />
             <div class="destination-card-content">
-              <h3>Colombo &harr; Ella / Badulla</h3>
+              <h3>Colombo &rarr; Ella / Badulla</h3>
               <p>Luxury Night &amp; Day Coaches &bull; Daily</p>
             </div>
           </div>
@@ -250,61 +361,6 @@
       </div>
     </section>
 
-    <!-- ============ ROLE SPOTLIGHT WITH SRI LANKAN IMAGES ============ -->
-    <section class="section" style="background:var(--bg-surface-alt);">
-      <div class="container">
-        <div class="section-head center reveal">
-          <span class="eyebrow">Unified Transport Network</span>
-          <h2>One platform tailored for passengers, fleet operators &amp; conductors</h2>
-        </div>
-
-        <div class="role-tabs reveal" style="justify-content:center;display:flex;">
-          <button class="role-tab is-active" data-role-target="passenger">Passenger</button>
-          <button class="role-tab" data-role-target="owner">Bus Operator</button>
-          <button class="role-tab" data-role-target="conductor">Conductor</button>
-        </div>
-
-        <div class="role-panel is-active grid grid-2" data-role="passenger"
-          style="align-items:center;gap:var(--space-12);">
-          <div class="image-frame" style="max-width:480px;margin-inline:auto;">
-            <img src="assets/images/passenger.png" alt="Passenger experience with Seaty app" />
-          </div>
-          <ul style="color:var(--text-secondary);display:grid;gap:var(--space-4);font-weight:600;">
-            <li>Search schedules across premier Sri Lankan transport providers</li>
-            <li>Select exact seat position on live visual seat maps</li>
-            <li>Instant booking with server-authenticated LKR fares</li>
-            <li>Live GPS tracking from depot departure to arrival</li>
-            <li>Verified reviews and favorite route shortcuts</li>
-          </ul>
-        </div>
-
-        <div class="role-panel grid grid-2" data-role="owner" style="align-items:center;gap:var(--space-12);">
-          <div class="image-frame" style="max-width:420px;margin-inline:auto;">
-            <img src="assets/images/operator.png" alt="Sri Lanka Fleet Manager dashboard at bus stand" />
-          </div>
-          <ul style="color:var(--text-secondary);display:grid;gap:var(--space-4);font-weight:600;">
-            <li>Manage fleet inventory, vehicle specs &amp; custom seat maps</li>
-            <li>Automate daily recurring trip schedules with zero overhead</li>
-            <li>Assign drivers, conductors, and route shifts seamlessly</li>
-            <li>Track all active fleet coaches on a centralized live Sri Lanka map</li>
-            <li>Real-time revenue analytics and occupancy reporting</li>
-          </ul>
-        </div>
-
-        <div class="role-panel grid grid-2" data-role="conductor" style="align-items:center;gap:var(--space-12);">
-          <div class="image-frame" style="max-width:540px;width:100%;margin-inline:auto;">
-            <img src="assets/images/image_copy_6.png"
-              alt="Sri Lankan Bus conductor scanning passenger ticket at SLTB / Highway bus" style="width:100%;height:auto;display:block;" />
-          </div>
-          <ul style="color:var(--text-secondary);display:grid;gap:var(--space-4);font-weight:600;">
-            <li>Daily trip schedule dashboard at a glance</li>
-            <li>Instant QR ticket scanner for fast passenger boarding</li>
-            <li>Real-time seat status updates (Boarded / Unclaimed)</li>
-            <li>Automated GPS stream dispatch for tracking passengers</li>
-          </ul>
-        </div>
-      </div>
-    </section>
 
     <!-- ============ OPERATOR CTA BAND ============ -->
     <section class="section" style="background:var(--gradient-hero);position:relative;overflow:hidden;">
@@ -313,8 +369,7 @@
         <span class="eyebrow" style="color:var(--c-cyan-300);justify-content:center;">For Bus Fleet Operators</span>
         <h2 style="color:#fff;">Digitize your bus fleet with Seaty</h2>
         <p class="lede" style="color:var(--text-on-dark-muted);margin-inline:auto;">
-          Maximize seat occupancy, eliminate manual ticket handling, and monitor your entire fleet live. Built
-          specifically for Sri Lankan bus company owners.
+          Maximize seat occupancy, simplify manual ticket handling, and monitor your entire fleet with SEATY.
         </p>
         <div class="btn-row" style="justify-content:center;margin-top:var(--space-8);">
           <a href="for-operators.html" class="btn btn-primary btn-lg">Explore Operator Solutions</a>
@@ -325,30 +380,42 @@
 
     <!-- ============ DOWNLOAD BAND ============ -->
     <section class="section">
-      <div class="container text-center reveal">
-        <span class="eyebrow" style="justify-content:center;">Get Started Today</span>
-        <h2>Download Seaty App</h2>
-        <p class="lede" style="margin-inline:auto;">Available for iOS and Android smartphones.</p>
-        <div class="btn-row" style="justify-content:center;margin-top:var(--space-6);">
-          <a href="download.html" class="store-badge">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 3l16 9-16 9V3Z" />
-            </svg>
-            <span class="store-badge-text"><small>GET IT ON</small><strong>Google Play</strong></span>
-          </a>
-          <a href="download.html" class="store-badge">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M16.5 2.5c.1 1.2-.4 2.4-1.1 3.3-.8.9-2 1.6-3.1 1.5-.2-1.2.4-2.5 1.1-3.3.8-.9 2.1-1.6 3.1-1.5Z" />
-              <path
-                d="M20.5 17c-.5 1.2-.8 1.7-1.5 2.7-1 1.4-2.3 3.1-4 3.1-1.5 0-1.9-1-3.9-1s-2.5 1-4 1c-1.7 0-3-1.9-4-3.3C1 16.7.6 12.6 2.4 9.9c1.2-1.8 3.1-2.9 4.9-2.9 1.6 0 2.7 1.1 4 1.1 1.3 0 2.1-1.1 4-1.1 1.4 0 3.1.8 4.1 2.1-3.6 2-3 7.3 1.1 8.9Z" />
-            </svg>
-            <span class="store-badge-text"><small>Download on the</small><strong>App Store</strong></span>
-          </a>
+      <div class="container reveal">
+        <div class="grid grid-2" style="align-items:center;background:var(--bg-surface);border-radius:var(--radius-xl);box-shadow:var(--shadow-md);padding:var(--space-6) var(--space-8);border:1px solid var(--border-color);">
+          <div>
+            <span class="eyebrow">Get Started Today</span>
+            <h2>Travel smarter with SEATY</h2>
+            <p class="lede">
+              Download the SEATY mobile app and experience smarter, more convenient bus travel across Sri Lanka.
+            </p>
+            <div class="btn-row" style="margin-top:var(--space-6);">
+              <a href="download.html" class="btn btn-primary btn-lg">Download Seaty App</a>
+            </div>
+            <div style="display:flex;align-items:center;gap:var(--space-6);margin-top:var(--space-8);">
+              <div>
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=https://seaty.lk" alt="Scan to download Seaty" style="width:100px;height:100px;border-radius:var(--radius-sm);border:1px solid var(--border-color);" />
+              </div>
+              <div style="display:grid;gap:var(--space-3);">
+                <a href="download.html" class="store-badge">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 3l16 9-16 9V3Z" />
+                  </svg>
+                  <span class="store-badge-text"><small>GET IT ON</small><strong>Google Play</strong></span>
+                </a>
+                <a href="download.html" class="store-badge">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16.5 2.5c.1 1.2-.4 2.4-1.1 3.3-.8.9-2 1.6-3.1 1.5-.2-1.2.4-2.5 1.1-3.3.8-.9 2.1-1.6 3.1-1.5Z" />
+                    <path d="M20.5 17c-.5 1.2-.8 1.7-1.5 2.7-1 1.4-2.3 3.1-4 3.1-1.5 0-1.9-1-3.9-1s-2.5 1-4 1c-1.7 0-3-1.9-4-3.3C1 16.7.6 12.6 2.4 9.9c1.2-1.8 3.1-2.9 4.9-2.9 1.6 0 2.7 1.1 4 1.1 1.3 0 2.1-1.1 4-1.1 1.4 0 3.1.8 4.1 2.1-3.6 2-3 7.3 1.1 8.9Z" />
+                  </svg>
+                  <span class="store-badge-text"><small>Download on the</small><strong>App Store</strong></span>
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="image-frame" style="max-width:260px;margin-inline:auto;">
+            <img src="assets/images/ticket.png" alt="Seaty Digital Ticket Screen" style="border-radius:24px;box-shadow:var(--shadow-lg);" />
+          </div>
         </div>
-        <p style="margin-top:var(--space-4);color:var(--text-muted);font-size:.85rem;">Check out the full mobile release
-          guide on our <a href="download.html" style="color:var(--c-blue);font-weight:600;">Download Page</a>.</p>
       </div>
     </section>
 
@@ -359,7 +426,7 @@
       <div class="footer-grid">
         <div class="footer-brand">
           <a href="index.html" class="footer-logo"><img src="assets/images/WhatsApp_Image_2026-08-10_at_8.52.41_AM-removebg-preview.png" alt="Seaty" /></a>
-          <p>Seaty is the seat booking and live bus tracking platform for Sri Lanka, engineered by Hashnate.</p>
+          <p>SEATY is a smart booking and live bus tracking platform for Sri Lanka, engineered for hassle-free travel.</p>
           <div class="social-icons">
             <a href="#" class="social-icon" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none"
                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -387,7 +454,7 @@
           <h4>Product</h4>
           <ul>
             <li><a href="features.html">Features</a></li>
-            <li><a href="for-operators.html">For Bus Operators</a></li>
+            <li><a href="for-operators.html">For Operators</a></li>
             <li><a href="download.html">Download App</a></li>
           </ul>
         </div>
@@ -395,8 +462,8 @@
           <h4>Company &amp; Support</h4>
           <ul>
             <li><a href="support.html">Support Center</a></li>
-            <li><a href="mailto:info@hashnate.com">info@hashnate.com</a></li>
-            <li><a href="tel:0262237803">026 223 7803</a></li>
+            <li><a href="support.html#contact">Contact Us</a></li>
+            <li><a href="support.html#faq">FAQ</a></li>
           </ul>
         </div>
         <div class="footer-col">
@@ -408,7 +475,7 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <span>&copy; <span id="current-year">2026</span> Hashnate. All rights reserved.</span>
+        <span>&copy; <span id="current-year">2026</span> SEATY. All rights reserved.</span>
         <span>#44, 1/1, Main Street, Kinniya, Trincomalee, Sri Lanka</span>
       </div>
     </div>
