@@ -3,29 +3,54 @@
 /* ---------- Header / nav ---------- */
 
 .site-header {
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 100;
-  height: var(--header-h);
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 900;
+  padding: 8px 30px; /* Reduced from 16px to tuck closer to top */
   display: flex;
   align-items: center;
-  background: rgba(248, 250, 252, 0.72);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border-bottom: 1px solid var(--border-color);
-  transition: box-shadow var(--dur-base) var(--ease-standard);
+  justify-content: center;
+  transition: padding .35s cubic-bezier(.22,.8,.28,1), background .35s ease, box-shadow .35s ease, border-color .35s ease;
+  pointer-events: none;
 }
 
 .site-header.is-scrolled {
-  box-shadow: var(--shadow-md);
+  padding: 4px 30px; /* Shrink padding to dock closer to the top */
 }
 
 .nav-inner {
+  --ink: #1E2148;
+  --paper: #FFFFFF;
+  --navy-chip: rgba(30, 33, 72, 0.85); /* #1E2148 at 85% opacity */
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  
+  pointer-events: auto; /* Re-enable clicks on the nav bar itself */
   width: 100%;
+  max-width: 1300px; /* From user specs */
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-6);
+  gap: 18px; /* From user specs */
+  background: var(--navy-chip);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 100px;
+  padding: 6px 8px 6px 20px; /* Reduced padding for a thinner pill */
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+  transition: background .35s cubic-bezier(.22,.8,.28,1), box-shadow .35s cubic-bezier(.22,.8,.28,1);
+}
+
+.site-header.is-scrolled .nav-inner {
+  background: rgba(15, 23, 42, 0.95); /* More opaque when floating */
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255,255,255,0.08) inset;
 }
 
 .nav-logo {
@@ -37,11 +62,12 @@
 
 .nav-logo img,
 .nav-logo-img {
-  height: 75px;
+  height: 44px; /* Reduced size for thinner pill */
   width: auto;
   object-fit: contain;
   display: block;
   transition: transform var(--dur-fast) var(--ease-out-back);
+  filter: brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0,0,0,0.2));
 }
 
 .nav-logo:hover img {
@@ -51,46 +77,44 @@
 .nav-links {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
+  gap: 18px; /* From user specs */
 }
 
 .nav-link {
   position: relative;
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--text-primary);
-  padding: var(--space-2) 0;
+  font-family: var(--font);
+  font-weight: 500;
+  font-size: 15px; /* Slightly larger as per 1300px container scale */
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.75);
+  padding: 6px 14px; /* Tighter padding */
+  border-radius: 50px;
+  transition: all var(--ease, cubic-bezier(.22,.8,.28,1)) 0.3s;
 }
 
-.nav-link::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -6px;
-  width: 100%;
-  height: 2px;
-  border-radius: var(--radius-full);
-  background: var(--gradient-cta);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform var(--dur-base) var(--ease-standard);
-}
-
-.nav-link:hover::after,
-.nav-link.is-active::after {
-  transform: scaleX(1);
+.nav-link:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-link.mockup-nav-active svg { stroke: var(--c-blue-600); }
 
 .nav-link.is-active {
-  color: var(--c-blue);
+  color: var(--ink);
+  background: var(--paper);
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .nav-actions {
   display: flex;
   align-items: center;
   gap: var(--space-4);
+}
+
+.nav-actions .btn {
+  padding: 8px 20px; /* Thinner padding for a slimmer pill */
+  font-size: 14px;
 }
 
 .nav-toggle {
@@ -122,6 +146,16 @@
 
 .nav-toggle[aria-expanded="true"] span:nth-child(3) {
   transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ---------- Hero Section ---------- */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  position: relative;
+  /* Extra top padding removed since we center it, or keep small buffer if needed. 
+     Using flex + align-items: center will center the inner container. */
 }
 
 .nav-mobile-panel {
@@ -252,6 +286,17 @@
 .btn-outline-light:hover {
   background: rgba(248, 250, 252, 0.16);
   border-color: #fff;
+}
+
+.btn-white {
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 4px 14px rgba(255, 255, 255, 0.15);
+}
+
+.btn-white:hover {
+  background: #f8fafc;
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.25);
 }
 
 .btn-ghost {
@@ -500,8 +545,7 @@
 .phone-screens-slider img {
   width: 20%;
   height: 100%;
-  object-fit: cover;
-  object-position: top center;
+  object-fit: fill; /* Must be fill to distort synchronously with the 100% 100% background image */
   display: block;
 }
 
