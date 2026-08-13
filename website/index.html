@@ -38,7 +38,7 @@
   <header class="site-header">
     <div class="container nav-inner">
       <a href="index.html" class="nav-logo" id="header-logo"><img
-          src="assets/images/WhatsApp_Image_2026-08-10_at_8.52.41_AM-removebg-preview.png"
+          src="assets/images/app_logo.png"
           alt="Seaty — Book Smart. Sit Better." class="nav-logo-img" /></a>
       <nav class="nav-links" aria-label="Primary">
         <a href="index.html" class="nav-link is-active">Home</a>
@@ -66,26 +66,20 @@
 
   <main id="main">
 
-    <!-- ============ HERO WITH 4K SRI LANKA BACKGROUND ============ -->
-    <section class="hero"
-      style="background-image: linear-gradient(90deg, rgba(4, 13, 26, 0.90) 0%, rgba(4, 13, 26, 0.70) 35%, rgba(4, 13, 26, 0.15) 55%, transparent 70%), url('assets/images/background2.png'); background-size: 100% 100%; background-position: center center; background-repeat: no-repeat; position: relative;">
+    <!-- ============ HERO WITH MOTION BACKGROUND ============ -->
+    <section class="hero" style="position: relative; overflow: hidden; min-height: 100vh; display: flex; align-items: center;">
+      <!-- Background Video -->
+      <video autoplay loop muted playsinline style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top center; z-index: 0; pointer-events: none;">
+        <source src="assets/video/A_sleek_high_tech_motion_grap.mp4" type="video/mp4">
+      </video>
+      <!-- Gradient Overlay for text readability -->
+      <div style="position: absolute; inset: 0; background: linear-gradient(90deg, rgba(4, 13, 26, 0.95) 0%, rgba(4, 13, 26, 0.70) 45%, rgba(4, 13, 26, 0.10) 65%, transparent 100%); z-index: 1; pointer-events: none;"></div>
 
-      <!-- Dynamic Phone Screen Transition Overlay -->
-      <div class="hero-phone-overlay">
-        <div class="phone-screens-slider">
-          <img src="assets/images/register.png" alt="Register Screen" />
-          <img src="assets/images/live_track.png" alt="Live Track Screen" />
-          <img src="assets/images/ticket.png" alt="Ticket Screen" />
-          <img src="assets/images/image_copy_12.png" alt="My Tickets Screen" />
-          <img src="assets/images/register.png" alt="Register Screen" />
-        </div>
-      </div>
-
-      <div class="container" style="position:relative;padding-block:var(--space-20) var(--space-16);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-12);align-items:center;">
-        <div class="reveal">
+      <div class="container" style="position:relative; z-index: 2; padding-block:var(--space-20) var(--space-16); width: 100%;">
+        <div class="reveal" style="max-width: 650px;">
           <span class="eyebrow" style="color:var(--c-cyan-300);">Sri Lanka's Next-Gen Transport Platform</span>
           <h1 style="color:#fff;">Book smart.<br />Sit better.</h1>
-          <p class="lede" style="color:var(--text-on-dark-muted); max-width: 500px;">
+          <p class="lede" style="color:var(--text-on-dark-muted);">
             Say goodbye to long queues and uncertainty. Reserve your seat, track your journey on a live map, and travel with confidence using SEATY.
           </p>
           <div class="btn-row" style="margin-top:var(--space-8);">
@@ -93,6 +87,42 @@
             <a href="for-operators.html" class="btn btn-outline-light btn-lg" id="hero-operator-btn">Partner as
               Operator</a>
           </div>
+        </div>
+        
+        <!-- Live Animated UI Cards -->
+        <style>
+          @media (max-width: 1000px) { .hero-animated-cards { display: none !important; } }
+        </style>
+        <div class="hero-animated-cards" style="position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 450px; height: 500px; pointer-events: none; z-index: 5;">
+          
+          <!-- Card 2: Seat Selected -->
+          <div class="animate-float-delayed" style="position: absolute; top: 48%; right: 45%; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.15); padding: 14px 22px; border-radius: 100px; display: flex; align-items: center; gap: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); color: white;">
+            <div style="width: 12px; height: 12px; background: #22C55E; border-radius: 50%; box-shadow: 0 0 12px #22C55E; animation: pulseDot 2s infinite;"></div>
+            <div style="font-size: 15px; font-weight: 600;">Seat 12A Selected</div>
+          </div>
+
+          <!-- Card 3: Ticket Verified -->
+          <div class="animate-float-slow" style="position: absolute; bottom: 15%; right: 5%; background: rgba(255,255,255,0.95); padding: 16px 20px; border-radius: 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); color: #0F172A;">
+            <div style="width: 40px; height: 40px; background: #EFF6FF; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #3B82F6;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
+            <div>
+              <div style="font-size: 16px; font-weight: 700;">Ticket Verified</div>
+              <div style="font-size: 14px; color: #64748B; font-weight: 500; margin-top: 2px;">Ready to board</div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      
+      <!-- Card 1: Live Tracking (Moved to bottom right to cover watermark) -->
+      <div class="hero-animated-cards animate-float" style="position: absolute; bottom: 5px; right: 25px; background: rgba(255,255,255,0.12); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.25); padding: 16px; border-radius: 16px; display: flex; align-items: center; gap: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); color: white; z-index: 5;">
+        <div style="width: 44px; height: 44px; background: rgba(59, 130, 246, 0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #93C5FD;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div>
+          <div style="font-size: 13px; opacity: 0.9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Live Tracking</div>
+          <div style="font-size: 16px; font-weight: 700; margin-top: 2px;">Colombo - Kandy</div>
         </div>
       </div>
     </section>
@@ -505,10 +535,10 @@
               <!-- Column 2 (Scrolls Down) -->
               <div class="marquee-down" style="display: flex; flex-direction: column; gap: 16px; flex: 1;">
                 <!-- Set 1 -->
-                <img src="assets/images/srilanka_fleet_manager.png" style="border-radius: 16px; width: 100%; height: 260px; object-fit: cover;" alt="Modern Dashboard">
+                <img src="assets/images/Gemini_Generated_Image_9mdwwu9mdwwu9mdw.png" style="border-radius: 16px; width: 100%; height: 260px; object-fit: cover; object-position: top center;" alt="Modern Dashboard">
                 <img src="assets/images/luxury_express_buses.png" style="border-radius: 16px; width: 100%; height: 260px; object-fit: cover;" alt="Bus Fleet Steering">
                 <!-- Set 2 (Duplicate for infinite scroll) -->
-                <img src="assets/images/srilanka_fleet_manager.png" style="border-radius: 16px; width: 100%; height: 260px; object-fit: cover;" alt="Modern Dashboard">
+                <img src="assets/images/Gemini_Generated_Image_9mdwwu9mdwwu9mdw.png" style="border-radius: 16px; width: 100%; height: 260px; object-fit: cover; object-position: top center;" alt="Modern Dashboard">
                 <img src="assets/images/luxury_express_buses.png" style="border-radius: 16px; width: 100%; height: 260px; object-fit: cover;" alt="Bus Fleet Steering">
               </div>
 
@@ -671,8 +701,23 @@
                     </div>
                   </div>
                 </div>
+                
+                <!-- Mockup Bottom Nav (Dark Pill) -->
+                <div style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); background: #111827; border-radius: 100px; padding: 5px 10px; display: flex; align-items: center; justify-content: space-between; width: 85%; max-width: 300px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 10;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 6px;"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                  
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  
+                  <div style="background: #3B82F6; color: white; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 100px; font-size: 11px; font-weight: 600;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                    Tickets
+                  </div>
+                  
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+                </div>
               </div>
-            </div>
           </div>
         </div>
       </div>
@@ -684,7 +729,7 @@
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a href="index.html" class="footer-logo"><img src="assets/images/WhatsApp_Image_2026-08-10_at_8.52.41_AM-removebg-preview.png" alt="Seaty" /></a>
+          <a href="index.html" class="footer-logo"><img src="assets/images/app_logo.png" alt="Seaty" /></a>
           <p>SEATY is a smart booking and live bus tracking platform for Sri Lanka, engineered for hassle-free travel.</p>
           <div class="social-icons">
             <a href="#" class="social-icon" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none"
@@ -698,15 +743,7 @@
                 <circle cx="12" cy="12" r="4" />
                 <circle cx="17" cy="7" r="1" />
               </svg></a>
-            <a href="#" class="social-icon" aria-label="LinkedIn"><svg viewBox="0 0 24 24" fill="none"
-                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
-                <path d="M8 10.5V17M8 7.5v.01M12.5 17v-4a2 2 0 0 1 4 0v4M12.5 10.5V17" />
-              </svg></a>
-            <a href="#" class="social-icon" aria-label="X (Twitter)"><svg viewBox="0 0 24 24" fill="none"
-                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M4 4l16 16M20 4 4 20" />
-              </svg></a>
+
           </div>
         </div>
         <div class="footer-col">
