@@ -260,4 +260,99 @@
   /* Footer year */
   var yearEl = document.getElementById("current-year");
   if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+  /* ---------- Motion Redesign Interactivity ---------- */
+  var scrollProgress = document.getElementById("scrollProgress");
+  var featureNavLinks = document.querySelectorAll(".feature-nav-link");
+  var featureNav = document.querySelector(".feature-nav");
+  var sections = document.querySelectorAll("section[id]");
+
+  if (scrollProgress || (featureNavLinks.length && featureNav)) {
+    window.addEventListener("scroll", function() {
+      if (scrollProgress) {
+        var winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        var height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        var scrolled = (winScroll / height) * 100;
+        scrollProgress.style.width = scrolled + "%";
+      }
+
+      if (featureNavLinks.length && featureNav && sections.length) {
+        var scrollY = window.pageYOffset;
+        if (scrollY > window.innerHeight * 0.5) {
+          featureNav.classList.add("is-visible");
+        } else {
+          featureNav.classList.remove("is-visible");
+        }
+        
+        sections.forEach(function(current) {
+          var sectionHeight = current.offsetHeight;
+          var sectionTop = current.offsetTop - 150;
+          var sectionId = current.getAttribute("id");
+
+          if (scrollY > sectionTop && scrollY <= sectionTop + sectionHeight) {
+            featureNavLinks.forEach(function(link) {
+              link.classList.remove("active");
+              if (link.getAttribute("data-target") === sectionId) {
+                link.classList.add("active");
+              }
+            });
+          }
+        });
+      }
+    }, { passive: true });
+    
+    featureNavLinks.forEach(function(link) {
+      link.addEventListener("click", function(e) {
+        e.preventDefault();
+        var targetId = this.getAttribute("data-target");
+        var targetSection = document.getElementById(targetId);
+        if (targetSection) {
+          window.scrollTo({
+            top: targetSection.offsetTop - 80,
+            behavior: "smooth"
+          });
+        }
+      });
+    });
+  }
+
+  /* Mouse Parallax for Desktop */
+  if (window.matchMedia("(hover: hover)").matches && !prefersReducedMotion) {
+    var parallaxElements = document.querySelectorAll(".parallax-element");
+    var parallaxSlow = document.querySelectorAll(".parallax-element-slow");
+    var floatEl1 = document.querySelector(".float-element-1");
+    var floatEl2 = document.querySelector(".float-element-2");
+    var phoneMockup = document.querySelector(".phone-map-container");
+
+    window.addEventListener("mousemove", function(e) {
+      var mouseX = (e.clientX / window.innerWidth - 0.5);
+      var mouseY = (e.clientY / window.innerHeight - 0.5);
+
+      parallaxElements.forEach(function(el) {
+        el.style.transform = 'translate(' + (mouseX * -35) + 'px, ' + (mouseY * -35) + 'px)';
+      });
+      parallaxSlow.forEach(function(el) {
+        el.style.transform = 'translate(' + (mouseX * -15) + 'px, ' + (mouseY * -15) + 'px)';
+      });
+      if (floatEl1) {
+        floatEl1.style.transform = 'translate(' + (mouseX * -20) + 'px, ' + (mouseY * -20) + 'px)';
+      }
+      if (floatEl2) {
+        floatEl2.style.transform = 'translate(' + (mouseX * 15) + 'px, ' + (mouseY * 15) + 'px)';
+      }
+      if (phoneMockup && phoneMockup.classList.contains("is-visible")) {
+        var rotateX = mouseY * -8;
+        var rotateY = mouseX * 8;
+        phoneMockup.style.transform = 'perspective(1000px) rotateX(' + rotateX + 'deg) rotateY(' + rotateY + 'deg) scale(1)';
+      }
+    });
+    
+    if (phoneMockup) {
+      phoneMockup.style.transition = 'transform 0.1s ease-out';
+      phoneMockup.addEventListener("mouseleave", function() {
+        if (phoneMockup.classList.contains("is-visible")) {
+          phoneMockup.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1)';
+        }
+      });
+    }
+  }
 })();

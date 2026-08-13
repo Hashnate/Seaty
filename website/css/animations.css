@@ -8,8 +8,14 @@
 }
 @keyframes marqueeDown {
   0% { transform: translateY(-50%); }
-  100% { transform: translateY(0); }
+  100% { transform: translateY(0); opacity: 1; }
 }
+
+@keyframes scrollMarquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 .marquee-up {
   animation: marqueeUp 25s linear infinite;
 }
@@ -19,6 +25,39 @@
 
 
 /* ---------- Floating UI Animations ---------- */
+@keyframes blobFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+}
+
+/* ---------- Chart Animations ---------- */
+@keyframes chartGrowUp {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+
+@keyframes chartGrowRight {
+  0% { transform: scaleX(0); }
+  100% { transform: scaleX(1); }
+}
+
+.chart-bar-anim {
+  transform-origin: bottom;
+  transform: scaleY(0);
+}
+.reveal.is-visible .chart-bar-anim {
+  animation: chartGrowUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.chart-progress-anim {
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.reveal.is-visible .chart-progress-anim {
+  animation: chartGrowRight 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 @keyframes float {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-15px); }
@@ -34,6 +73,15 @@
   70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
 }
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8) translateY(0); }
+  50% { opacity: 0.8; transform: scale(1.2) translateY(-10px); }
+}
+
+.star {
+  animation: twinkle 4s ease-in-out infinite;
+}
+
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
@@ -50,6 +98,19 @@
 }
 .pulse-dot {
   animation: pulseDot 2s infinite;
+}
+
+/* ---------- Map Route Drawing Animation ---------- */
+.active-leaflet-path {
+  stroke-dasharray: 1000 !important;
+  stroke-dashoffset: 1000 !important;
+  animation: drawRoutePath 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes drawRoutePath {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* ---------- Scroll reveal ---------- */
@@ -88,6 +149,108 @@
 
 .reveal-scale.is-visible {
   transform: scale(1);
+}
+
+.reveal-blur {
+  opacity: 0.3;
+  transform: scale(0.92);
+  filter: blur(8px);
+  transition: opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1), transform 1.2s cubic-bezier(0.22, 1, 0.36, 1), filter 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-blur.is-visible {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
+.reveal-clip {
+  opacity: 1; /* override base */
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-clip.is-visible {
+  clip-path: inset(0 0 0 0);
+}
+
+/* ---------- Cinematic Load ---------- */
+.cinematic-reveal-1 {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: cinematicUp 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.3s;
+}
+
+.cinematic-reveal-2 {
+  opacity: 0;
+  transform: translateY(35px);
+  animation: cinematicUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.4s;
+}
+
+.cinematic-reveal-4 {
+  opacity: 0;
+  transform: translateY(35px);
+  animation: cinematicUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.8s;
+}
+
+.cinematic-reveal-5 {
+  opacity: 0;
+  transform: translateY(35px);
+  animation: cinematicUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 1.0s;
+}
+
+@keyframes liveGlow {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes liveStarFloat {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.1);
+    color: #f59e0b;
+    filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));
+  }
+}
+
+.cinematic-reveal-3 {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: cinematicUp 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: 0.7s;
+}
+
+@keyframes cinematicUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Advanced Micro Animations ---------- */
+@keyframes scanningLine {
+  0% { top: 0; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes heroGlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 /* ---------- Hero mesh background drift ---------- */
