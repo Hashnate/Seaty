@@ -41,32 +41,32 @@
   <div class="container nav-inner">
     <a href="index.html" class="nav-logo"><img src="assets/images/app_logo.png" alt="Seaty — Book Smart. Sit Better." class="nav-logo-img" /></a>
     <nav class="nav-links" aria-label="Primary">
-      <a href="/" class="nav-link">Home</a>
-      <a href="/features" class="nav-link is-active">Features</a>
-      <a href="/for-operators" class="nav-link">For Operators</a>
-      <a href="/download" class="nav-link">Download</a>
-      <a href="/support" class="nav-link">Support</a>
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="features.html" class="nav-link is-active">Features</a>
+      <a href="for-operators.html" class="nav-link">For Operators</a>
+      <a href="download.html" class="nav-link">Download</a>
+      <a href="support.html" class="nav-link">Support</a>
     </nav>
     <div class="nav-actions">
-      <a href="/download" class="btn btn-primary">Get the App</a>
+      <a href="download.html" class="btn btn-primary">Get the App</a>
       <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
     </div>
   </div>
   <div class="nav-mobile-panel">
-    <a href="/" class="nav-link">Home</a>
-    <a href="/features" class="nav-link is-active">Features</a>
-    <a href="/for-operators" class="nav-link">For Operators</a>
-    <a href="/download" class="nav-link">Download</a>
-    <a href="/support" class="nav-link">Support</a>
-    <a href="/download" class="btn btn-primary btn-block">Get the App</a>
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="features.html" class="nav-link is-active">Features</a>
+    <a href="for-operators.html" class="nav-link">For Operators</a>
+    <a href="download.html" class="nav-link">Download</a>
+    <a href="support.html" class="nav-link">Support</a>
+    <a href="download.html" class="btn btn-primary btn-block">Get the App</a>
   </div>
 </header>
 
 <main id="main">
 
-  <section class="hero" style="position:relative; overflow:hidden; padding-block:var(--space-20) var(--space-16);">
+  <section class="hero" style="position:relative; overflow:hidden; min-height: 100vh; display: flex; align-items: center; justify-content: center;">
     <video autoplay loop muted playsinline class="hero-bg-video" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); min-width:100%; min-height:100%; object-fit:cover; opacity:0.35; z-index:0; pointer-events:none;">
       <source src="assets/video/Sleek_modern_D_smartphone_moc.mp4" type="video/mp4" />
     </video>
@@ -75,7 +75,8 @@
       <span class="eyebrow cinematic-reveal-1" style="color:var(--c-cyan-300);justify-content:center;">Platform Capabilities</span>
       <h1 class="cinematic-reveal-2" style="color:#fff;">Every trip, fully visible &amp; stress-free</h1>
       <p class="lede cinematic-reveal-3" style="color:var(--text-on-dark-muted);margin-inline:auto;">
-        Discover how Seaty replaces guesswork with real-time seat availability, live GPS streaming, digital boarding passes, and server-verified security across Sri Lanka.
+        <span class="hide-on-mobile">Discover how Seaty replaces guesswork with real-time seat availability, live GPS streaming, digital boarding passes, and server-verified security across Sri Lanka.</span>
+        <span class="show-on-mobile">Real-time seat availability, live GPS streaming, and digital boarding passes.</span>
       </p>
     </div>
 
@@ -84,17 +85,8 @@
       <div class="hero-live-card animate-float" style="position:relative; animation-delay: 0s;">
       <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
       <div class="card-text">
-        <p>Live Location</p>
-        <strong>Bus #1204 Active</strong>
-      </div>
-      </div>
-    </div>
-    <div class="cinematic-reveal-5" style="position:absolute; bottom: 20%; right: 12%; z-index:3;">
-      <div class="hero-live-card animate-float-delayed" style="position:relative; animation-delay: 1.5s;">
-      <div class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></div>
-      <div class="card-text">
-        <p>E-Ticket Issued</p>
-        <strong>Boarding Pass Ready</strong>
+        <p>Live GPS Tracking</p>
+        <strong>Colombo ➔ Kandy Active</strong>
       </div>
       </div>
     </div>
@@ -474,7 +466,7 @@
         <div class="floating-badge badge-1 float-element-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Secure Checkout</div>
 
       </div>
-      <div class="reveal reveal-right">
+      <div class="reveal reveal-right order-first-mobile">
         <span class="eyebrow">Fare Protection &amp; Security</span>
         <h2>Transparent server-calculated pricing</h2>
         <p class="lede">
@@ -606,7 +598,7 @@
       </div>
 
       <div class="btn-row" style="justify-content:center;margin-top:var(--space-8);">
-        <a href="/download" class="btn btn-primary btn-lg cta-interactive">Experience Seaty Now <svg class="btn-arrow" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></a>
+        <a href="download.html" class="btn btn-primary btn-lg cta-interactive">Experience Seaty Now <svg class="btn-arrow" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></a>
       </div>
     </div>
   </section>
@@ -618,7 +610,10 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <a href="index.html" class="footer-logo"><img src="assets/images/app_logo.png" alt="Seaty" /></a>
-        <p>Seaty is the seat booking and live bus tracking platform for Sri Lanka, engineered by Hashnate.</p>
+        <p>
+          <span class="hide-on-mobile">Seaty is the seat booking and live bus tracking platform for Sri Lanka, engineered by Hashnate.</span>
+          <span class="show-on-mobile">Smart bus booking & live tracking platform for Sri Lanka.</span>
+        </p>
         <div class="social-icons">
           <a href="#" class="social-icon" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 21v-7h2.5l.5-3H14V9a1.5 1.5 0 0 1 1.5-1.5H17V4.5A17 17 0 0 0 14.8 4C12.6 4 11 5.3 11 7.7V11H8.5v3H11v7Z"/></svg></a>
           <a href="#" class="social-icon" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1"/></svg></a>
@@ -628,15 +623,15 @@
       <div class="footer-col">
         <h4>Product</h4>
         <ul>
-          <li><a href="/features">Features</a></li>
-          <li><a href="/for-operators">For Bus Operators</a></li>
-          <li><a href="/download">Download App</a></li>
+          <li><a href="features.html">Features</a></li>
+          <li><a href="for-operators.html">For Bus Operators</a></li>
+          <li><a href="download.html">Download App</a></li>
         </ul>
       </div>
       <div class="footer-col">
         <h4>Company &amp; Support</h4>
         <ul>
-          <li><a href="/support">Support Center</a></li>
+          <li><a href="support.html">Support Center</a></li>
           <li><a href="mailto:info@hashnate.com">info@hashnate.com</a></li>
           <li><a href="tel:0262237803">026 223 7803</a></li>
         </ul>
@@ -644,8 +639,8 @@
       <div class="footer-col">
         <h4>Legal</h4>
         <ul>
-          <li><a href="/privacy-policy">Privacy Policy</a></li>
-          <li><a href="/terms-and-conditions">Terms &amp; Conditions</a></li>
+          <li><a href="privacy-policy.html">Privacy Policy</a></li>
+          <li><a href="terms-and-conditions.html">Terms &amp; Conditions</a></li>
         </ul>
       </div>
     </div>

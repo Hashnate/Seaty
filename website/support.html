@@ -94,6 +94,48 @@
     background: rgba(34, 211, 238, 0.2);
     color: #fff;
   }
+
+  @media (max-width: 768px) {
+    .contact-card-premium {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      grid-template-areas: 
+        "icon title"
+        "icon desc"
+        "icon btn";
+      text-align: left;
+      align-items: center;
+      gap: var(--space-2) var(--space-4);
+      padding: var(--space-5);
+    }
+    .contact-card-premium .feature-icon {
+      grid-area: icon;
+      width: 52px;
+      height: 52px;
+      margin-bottom: 0;
+      align-self: start;
+    }
+    .contact-card-premium .feature-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+    .contact-card-premium h3 {
+      grid-area: title;
+      margin-bottom: 0;
+      font-size: 1.1rem;
+    }
+    .contact-card-premium p {
+      grid-area: desc;
+      margin-bottom: var(--space-2);
+      font-size: 0.9rem;
+    }
+    .contact-card-premium .btn-ghost {
+      grid-area: btn;
+      justify-self: start;
+      padding: 6px 12px;
+      font-size: 0.85rem;
+    }
+  }
 </style>
 </head>
 <body>
@@ -103,26 +145,26 @@
   <div class="container nav-inner">
     <a href="index.html" class="nav-logo"><img src="assets/images/app_logo.png" alt="Seaty — Book Smart. Sit Better." class="nav-logo-img" /></a>
     <nav class="nav-links" aria-label="Primary">
-      <a href="/" class="nav-link">Home</a>
-      <a href="/features" class="nav-link">Features</a>
-      <a href="/for-operators" class="nav-link">For Operators</a>
-      <a href="/download" class="nav-link">Download</a>
-      <a href="/support" class="nav-link is-active">Support</a>
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="features.html" class="nav-link">Features</a>
+      <a href="for-operators.html" class="nav-link">For Operators</a>
+      <a href="download.html" class="nav-link">Download</a>
+      <a href="support.html" class="nav-link is-active">Support</a>
     </nav>
     <div class="nav-actions">
-      <a href="/download" class="btn btn-primary">Get the App</a>
+      <a href="download.html" class="btn btn-primary">Get the App</a>
       <button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false">
         <span></span><span></span><span></span>
       </button>
     </div>
   </div>
   <div class="nav-mobile-panel">
-    <a href="/" class="nav-link">Home</a>
-    <a href="/features" class="nav-link">Features</a>
-    <a href="/for-operators" class="nav-link">For Operators</a>
-    <a href="/download" class="nav-link">Download</a>
-    <a href="/support" class="nav-link is-active">Support</a>
-    <a href="/download" class="btn btn-primary btn-block">Get the App</a>
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="features.html" class="nav-link">Features</a>
+    <a href="for-operators.html" class="nav-link">For Operators</a>
+    <a href="download.html" class="nav-link">Download</a>
+    <a href="support.html" class="nav-link is-active">Support</a>
+    <a href="download.html" class="btn btn-primary btn-block">Get the App</a>
   </div>
 </header>
 
@@ -146,19 +188,19 @@
       <div class="contact-card-premium reveal">
         <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div>
         <h3>Email Support</h3>
-        <p>For passenger inquiries, booking assistance, or operator onboarding.</p>
+        <p>For passenger inquiries<span class="hide-on-mobile">, booking assistance, or operator onboarding</span>.</p>
         <a href="mailto:info@hashnate.com" class="btn-ghost" style="font-weight:700;">info@hashnate.com →</a>
       </div>
       <div class="contact-card-premium reveal" style="--reveal-delay:80ms;">
         <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2Z"/></svg></div>
         <h3>Direct Phone Helpline</h3>
-        <p>Speak directly with our Sri Lanka operations support team.</p>
+        <p>Speak directly with our <span class="hide-on-mobile">Sri Lanka operations </span>support team.</p>
         <a href="tel:0262237803" class="btn-ghost" style="font-weight:700;">026 223 7803 →</a>
       </div>
       <div class="contact-card-premium reveal" style="--reveal-delay:160ms;">
         <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg></div>
         <h3>Headquarters</h3>
-        <p>Hashnate Headquarters<br />#44, 1/1, Main Street, Kinniya, Trincomalee, Sri Lanka</p>
+        <p>Hashnate Headquarters<br /><span class="hide-on-mobile">#44, 1/1, Main Street, </span>Kinniya, <span class="hide-on-mobile">Trincomalee, </span>Sri Lanka</p>
         <a href="#" class="btn-ghost" style="font-weight:700;">View Map →</a>
       </div>
     </div>
@@ -195,7 +237,7 @@
           </div>
 
           <div class="spotlight-visual-col">
-            <div class="seaty-seat-card-demo compact-seat-demo" style="margin:0;">
+            <div class="seaty-seat-card-demo compact-seat-demo" style="margin:0 auto;">
               <div class="seat-map-legend">
                 <span class="legend-item"><i class="legend-pill pill-available"></i> Available</span>
                 <span class="legend-item"><i class="legend-pill pill-male"></i> Male</span>
@@ -535,7 +577,10 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <a href="index.html" class="footer-logo"><img src="assets/images/app_logo.png" alt="Seaty" /></a>
-        <p>Seaty is the seat booking and live bus tracking platform for Sri Lanka, engineered by Hashnate.</p>
+        <p>
+          <span class="hide-on-mobile">Seaty is the seat booking and live bus tracking platform for Sri Lanka, engineered by Hashnate.</span>
+          <span class="show-on-mobile">Smart bus booking & live tracking platform for Sri Lanka.</span>
+        </p>
         <div class="social-icons">
           <a href="#" class="social-icon" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 21v-7h2.5l.5-3H14V9a1.5 1.5 0 0 1 1.5-1.5H17V4.5A17 17 0 0 0 14.8 4C12.6 4 11 5.3 11 7.7V11H8.5v3H11v7Z"/></svg></a>
           <a href="#" class="social-icon" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1"/></svg></a>
@@ -545,15 +590,15 @@
       <div class="footer-col">
         <h4>Product</h4>
         <ul>
-          <li><a href="/features">Features</a></li>
-          <li><a href="/for-operators">For Bus Operators</a></li>
-          <li><a href="/download">Download App</a></li>
+          <li><a href="features.html">Features</a></li>
+          <li><a href="for-operators.html">For Bus Operators</a></li>
+          <li><a href="download.html">Download App</a></li>
         </ul>
       </div>
       <div class="footer-col">
         <h4>Company &amp; Support</h4>
         <ul>
-          <li><a href="/support">Support Center</a></li>
+          <li><a href="support.html">Support Center</a></li>
           <li><a href="mailto:info@hashnate.com">info@hashnate.com</a></li>
           <li><a href="tel:0262237803">026 223 7803</a></li>
         </ul>
@@ -561,8 +606,8 @@
       <div class="footer-col">
         <h4>Legal</h4>
         <ul>
-          <li><a href="/privacy-policy">Privacy Policy</a></li>
-          <li><a href="/terms-and-conditions">Terms &amp; Conditions</a></li>
+          <li><a href="privacy-policy.html">Privacy Policy</a></li>
+          <li><a href="terms-and-conditions.html">Terms &amp; Conditions</a></li>
         </ul>
       </div>
     </div>
