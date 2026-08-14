@@ -6,7 +6,6 @@ import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/theme/app_colors.dart';
 import 'package:seaty/providers/banners_provider.dart';
-import 'package:seaty/utils/safe_text.dart';
 import 'package:seaty/screens/tracker_screen.dart';
 import 'package:seaty/screens/ticket_screen.dart';
 import 'package:seaty/screens/profile_screen.dart';
@@ -1276,24 +1275,21 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       }
     }
 
-    // If duration not in route, dynamically calculate from departure and arrival timestamps!
     if (durationLabel.isEmpty && depDt != null && arrDt != null) {
       Duration diff = arrDt.difference(depDt);
       if (diff.isNegative) {
-        // Arrival is on the next day (e.g., 23:00 to 05:00)
         diff += const Duration(days: 1);
       }
       final h = diff.inHours;
       final m = diff.inMinutes.remainder(60);
       durationLabel = h > 0 ? (m > 0 ? '${h}h ${m}m' : '${h}h') : '${m}m';
     } else if (durationLabel.isEmpty && depTime.contains(':') && arrTime.contains(':')) {
-      // Calculate from HH:MM string representations
       try {
         final depParts = depTime.split(':');
         final arrParts = arrTime.split(':');
         final depMin = int.parse(depParts[0]) * 60 + int.parse(depParts[1]);
         var arrMin = int.parse(arrParts[0]) * 60 + int.parse(arrParts[1]);
-        if (arrMin < depMin) arrMin += 24 * 60; // crossed midnight
+        if (arrMin < depMin) arrMin += 24 * 60;
         final diffMin = arrMin - depMin;
         final h = diffMin ~/ 60;
         final m = diffMin % 60;
@@ -1301,11 +1297,96 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       } catch (_) {}
     }
 
-    // ── Vehicle type label ──
-    final String vehicleType = vehicleObj?['type']?.toString() ?? 'Bus';
-    // An empty `type` reaches here as '' (the ?? only guards null), and
-    // ''[0] throws - which would take down the whole search-results list.
-    final String typeLabel = capitalize(vehicleType, fallback: 'Bus');
+    // ── Category & seating info ──
+    String categoryLabel = (trip['bus_type'] ?? trip['category'] ?? vehicleObj?['type'] ?? '').toString().toUpperCase();
+    if (categoryLabel.isEmpty || categoryLabel == 'BUS') {
+      final bool isAc = (trip['is_ac'] == true) || (vehicleObj?['is_ac'] == true);
+      categoryLabel = isAc ? 'A/C SLEEPER' : 'EXPRESS';
+    }
+
+    dynamic rawSeatLayout = trip['seat_layout'] ?? vehicleObj?['seat_layout'];
+    String seatLayout = '2 + 2';
+    if (rawSeatLayout != null) {
+      if (rawSeatLayout is Map) {
+        final type = rawSeatLayout['type']?.toString();
+        if (type != null && type.isNotEmpty && !type.startsWith('{')) {
+          seatLayout = type;
+        } else {
+          seatLayout = '2 + 2';
+        }
+      } else {
+        final s = rawSeatLayout.toString();
+        if (s.startsWith('{') || s.startsWith('[')) {
+          seatLayout = '2 + 2';
+        } else {
+          seatLayout = s;
+        }
+      }
+    }
+
+    // ── Dynamic Available Seats calculation ──
+    final int totalSeats = (trip['total_seats'] ?? vehicleObj?['total_seats']) as int? ?? 40;
+    int bookedCount = 0;
+    final dynamic bookedRaw = trip['booked_seats'] ?? vehicleObj?['booked_seats'];
+    if (bookedRaw is List) {
+      bookedCount = bookedRaw.length;
+    } else if (trip['booked_seats_count'] is int) {
+      bookedCount = trip['booked_seats_count'];
+    }
+    final int seatsLeft = (trip['available_seats'] as int?) ??
+        (trip['seats_available'] as int?) ??
+        (totalSeats - bookedCount).clamp(0, totalSeats);
+
+    // ── Rating badge ──
+    final dynamic val = trip['rating'] ?? trip['average_rating'] ?? vehicleObj?['average_rating'] ?? vehicleObj?['rating'];
+    final num? r = (val is num) ? val : num.tryParse(val?.toString() ?? '');
+
+    Widget ratingWidget;
+    if (r == null || r <= 0) {
+      ratingWidget = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          'New',
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF64748B),
+          ),
+        ),
+      );
+    } else {
+      ratingWidget = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFDE68A), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.star_rounded,
+              color: Color(0xFFF59E0B),
+              size: 15,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              r.toDouble().toStringAsFixed(1),
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFB45309),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     // ── Amenities ──
     final List<dynamic> rawAmenities = (trip['amenities'] as List?) ?? [];
@@ -1324,245 +1405,320 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
         );
       },
       child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFF1F5F9), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
-              blurRadius: 12,
-              offset: const Offset(0, 3),
+        margin: const EdgeInsets.only(bottom: 16),
+        child: CustomPaint(
+          painter: _TicketCardBorderPainter(
+            cornerRadius: 16.0,
+            notchRadius: 10.0,
+            notchYFromBottom: 58.0,
+          ),
+          child: ClipPath(
+            clipper: _TicketCardClipper(
+              cornerRadius: 16.0,
+              notchRadius: 10.0,
+              notchYFromBottom: 58.0,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Row 1: Bus Name & Type | Price & per person ──
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        trip['bus_name'] ?? 'Express Lines',
-                        style: const TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1E293B),
-                          letterSpacing: 0.15,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        typeLabel,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'Rs. $priceStr',
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2563EB), // Brand Royal Blue like navbar
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    const Text(
-                      'per person',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFF94A3B8),
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // ── Row 2: Origin Time ──── Line & Duration ──── Dest Time ──
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Departure (Time + Origin City)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      depTime.isNotEmpty ? depTime : '07:00',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      trip['origin'] ?? 'Origin',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Center Timeline (Line with dots + Duration text below)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Container(
+              color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Upper Ticket Stub Section ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 10),
+                        // Header Row: Operator Name + Rating Pill
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF2563EB),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
                             Expanded(
-                              child: Container(
-                                height: 2,
-                                color: const Color(0xFF93C5FD),
+                              child: Text(
+                                trip['bus_name'] ?? 'Soyaru Sampath Superline',
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF0F172A),
+                                  letterSpacing: -0.2,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            ratingWidget,
+                          ],
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Time & Route Timeline Row
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Departure (23:00 / Trincomalee)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  depTime.isNotEmpty ? depTime : '23:00',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  trip['origin'] ?? 'Trincomalee',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            // Route Timeline Center Graphics
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 26),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      '${durationLabel.isNotEmpty ? durationLabel : '6h'} • DIRECT',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF94A3B8),
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        // Left Origin Node (Concentric halo dot)
+                                        Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFFDBEAFE),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Container(
+                                              width: 5,
+                                              height: 5,
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFF2563EB),
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // Left Solid Gradient Line Bar
+                                        Expanded(
+                                          child: Container(
+                                            height: 2.5,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(2),
+                                              gradient: const LinearGradient(
+                                                colors: [Color(0xFF60A5FA), Color(0xFF2563EB)],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // Center Bus Badge (Dark gradient with blue accent ring)
+                                        Container(
+                                          width: 30,
+                                          height: 30,
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
+                                              colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                                            ),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                                blurRadius: 6,
+                                                offset: const Offset(0, 2),
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(
+                                            Icons.directions_bus_rounded,
+                                            color: Colors.white,
+                                            size: 15,
+                                          ),
+                                        ),
+                                        // Right Solid Gradient Line Bar
+                                        Expanded(
+                                          child: Container(
+                                            height: 2.5,
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(2),
+                                              gradient: const LinearGradient(
+                                                colors: [Color(0xFF2563EB), Color(0xFF3B82F6)],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        // Right Destination Node (Hollow ring dot)
+                                        Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: const Color(0xFF0F172A),
+                                              width: 2.2,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Text(
+                                      '$seatsLeft seats left',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: seatsLeft <= 5 ? const Color(0xFFE11D48) : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Arrival (05:00 / Colombo)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  arrTime.isNotEmpty ? arrTime : '05:00',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  trip['destination'] ?? 'Colombo',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Color(0xFF64748B),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+                      ],
+                    ),
+                  ),
+
+                  // ── Horizontal Dashed Divider Line ──
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: CustomPaint(
+                      size: const Size(double.infinity, 1),
+                      painter: _DashedLinePainter(
+                        color: const Color(0xFFCBD5E1),
+                        dashWidth: 5,
+                        dashSpace: 4,
+                      ),
+                    ),
+                  ),
+
+                  // ── Bottom Ticket Stub Section (Amenities + Price + Action Button) ──
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 10, 14, 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Amenities Row
+                        Expanded(
+                          child: Wrap(
+                            spacing: 14,
+                            runSpacing: 6,
+                            children: amenities.take(4).map((ame) {
+                              return _buildMinimalAmenityIcon(ame);
+                            }).toList(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Price & Book Arrow Action
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'FROM',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF94A3B8),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                Text(
+                                  'Rs. $priceStr',
+                                  style: const TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w900,
+                                    color: Color(0xFF0F172A),
+                                    letterSpacing: -0.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 10),
                             Container(
-                              width: 6,
-                              height: 6,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF2563EB),
-                                shape: BoxShape.circle,
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2563EB),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: 18,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          durationLabel,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF94A3B8),
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
                       ],
                     ),
                   ),
-                ),
-
-                // Arrival (Time + Destination City)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      arrTime.isNotEmpty ? arrTime : '11:30',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1E293B),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      trip['destination'] ?? 'Destination',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-
-            const SizedBox(height: 22),
-
-            // ── Row 3: Minimal Amenities Inline Row & Bottom-Right Rating ──
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Wrap(
-                    spacing: 16,
-                    runSpacing: 8,
-                    children: amenities.map((ame) {
-                      return _buildMinimalAmenityIcon(ame);
-                    }).toList(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Builder(
-                  builder: (context) {
-                    final num? r = (trip['rating'] ?? trip['average_rating']) as num?;
-                    if (r == null || r <= 0) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          'New',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      );
-                    }
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.star_rounded,
-                          color: Color(0xFFFFB800), // Gold star
-                          size: 16,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          r.toDouble().toStringAsFixed(1),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1686,4 +1842,163 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return "${weekdays[date.weekday - 1]} ${date.day} ${months[date.month - 1]}";
   }
+}
+
+class _DashedLinePainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double dashWidth;
+  final double dashSpace;
+
+  _DashedLinePainter({
+    this.color = const Color(0xFFCBD5E1),
+    double? strokeWidth,
+    this.dashWidth = 5.0,
+    this.dashSpace = 4.0,
+  }) : strokeWidth = strokeWidth ?? 1.5;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double startX = 0;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    while (startX < size.width) {
+      canvas.drawLine(
+        Offset(startX, size.height / 2),
+        Offset(startX + dashWidth, size.height / 2),
+        paint,
+      );
+      startX += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedLinePainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.dashWidth != dashWidth ||
+      oldDelegate.dashSpace != dashSpace;
+}
+
+Path _getTicketPath(Size size, double cornerRadius, double notchRadius, double notchYFromBottom) {
+  final path = Path();
+  final double notchY = (size.height - notchYFromBottom).clamp(0.0, size.height);
+
+  // Start top left after corner
+  path.moveTo(cornerRadius, 0);
+
+  // Top edge
+  path.lineTo(size.width - cornerRadius, 0);
+
+  // Top right corner
+  path.arcToPoint(Offset(size.width, cornerRadius), radius: Radius.circular(cornerRadius));
+
+  // Right edge down to notch top
+  if (notchY - notchRadius > cornerRadius) {
+    path.lineTo(size.width, notchY - notchRadius);
+    // Right notch (inward arc)
+    path.arcToPoint(
+      Offset(size.width, notchY + notchRadius),
+      radius: Radius.circular(notchRadius),
+      clockwise: false,
+    );
+  }
+
+  // Right edge down to bottom right corner
+  path.lineTo(size.width, size.height - cornerRadius);
+
+  // Bottom right corner
+  path.arcToPoint(Offset(size.width - cornerRadius, size.height), radius: Radius.circular(cornerRadius));
+
+  // Bottom edge
+  path.lineTo(cornerRadius, size.height);
+
+  // Bottom left corner
+  path.arcToPoint(Offset(0, size.height - cornerRadius), radius: Radius.circular(cornerRadius));
+
+  // Left edge up to notch bottom
+  if (notchY + notchRadius < size.height - cornerRadius) {
+    path.lineTo(0, notchY + notchRadius);
+    // Left notch (inward arc)
+    path.arcToPoint(
+      Offset(0, notchY - notchRadius),
+      radius: Radius.circular(notchRadius),
+      clockwise: false,
+    );
+  }
+
+  // Left edge up to top left corner
+  path.lineTo(0, cornerRadius);
+
+  // Top left corner
+  path.arcToPoint(Offset(cornerRadius, 0), radius: Radius.circular(cornerRadius));
+
+  path.close();
+  return path;
+}
+
+class _TicketCardClipper extends CustomClipper<Path> {
+  final double cornerRadius;
+  final double notchRadius;
+  final double notchYFromBottom;
+
+  _TicketCardClipper({
+    this.cornerRadius = 16.0,
+    this.notchRadius = 10.0,
+    required this.notchYFromBottom,
+  });
+
+  @override
+  Path getClip(Size size) {
+    return _getTicketPath(size, cornerRadius, notchRadius, notchYFromBottom);
+  }
+
+  @override
+  bool shouldReclip(covariant _TicketCardClipper oldClipper) {
+    return oldClipper.cornerRadius != cornerRadius ||
+        oldClipper.notchRadius != notchRadius ||
+        oldClipper.notchYFromBottom != notchYFromBottom;
+  }
+}
+
+class _TicketCardBorderPainter extends CustomPainter {
+  final double cornerRadius;
+  final double notchRadius;
+  final double notchYFromBottom;
+
+  _TicketCardBorderPainter({
+    this.cornerRadius = 16.0,
+    this.notchRadius = 10.0,
+    required this.notchYFromBottom,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _getTicketPath(size, cornerRadius, notchRadius, notchYFromBottom);
+
+    // 1. Draw Drop Shadow along the ticket clipped path
+    canvas.drawShadow(
+      path,
+      const Color(0xFF0F172A).withValues(alpha: 0.12),
+      6.0,
+      true,
+    );
+
+    // 2. Draw Outline Border
+    final borderPaint = Paint()
+      ..color = const Color(0xFFE2E8F0)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    canvas.drawPath(path, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TicketCardBorderPainter oldDelegate) =>
+      oldDelegate.cornerRadius != cornerRadius ||
+      oldDelegate.notchRadius != notchRadius ||
+      oldDelegate.notchYFromBottom != notchYFromBottom;
 }
