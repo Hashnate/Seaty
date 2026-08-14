@@ -56,14 +56,15 @@
 <main id="main">
 
   <!-- ============ HERO ============ -->
-  <section class="hero" style="padding-block:var(--space-20) var(--space-16); background: url('assets/images/Gemini_Generated_Image_wrlpfewrlpfewrlp.png') no-repeat center center; background-size: 120%; position: relative;">
+  <section class="hero" style="padding-block:var(--space-20) var(--space-16); background: linear-gradient(rgba(8, 26, 48, 0.7), rgba(8, 26, 48, 0.4)), url('assets/images/Gemini_Generated_Image_wrlpfewrlpfewrlp.png') no-repeat center center; background-size: cover; position: relative;">
     <span class="blob" style="width:300px;height:300px;top:-70px;right:-60px;background:var(--c-coral);"></span>
     <div class="container hero-grid" style="align-items:center;gap:var(--space-12);">
-      <div class="reveal">
+      <div class="reveal text-center-mobile">
         <span class="eyebrow" style="color:var(--c-cyan-300);">Built for Sri Lankan Operators</span>
         <h1 style="color:#fff;">Everything your bus company operations need</h1>
-        <p class="lede" style="color:var(--text-on-dark-muted);">
-          Engineered specifically for intercity express and luxury bus operators in Sri Lanka. Move from manual ticketing to connected fleet operations.
+        <p class="lede" style="color:var(--text-on-dark-muted);margin-inline:auto;">
+          <span class="hide-on-mobile">Engineered specifically for intercity express and luxury bus operators in Sri Lanka. Move from manual ticketing to connected fleet operations.</span>
+          <span class="show-on-mobile">Engineered for Sri Lankan bus operators. Upgrade to connected fleet operations.</span>
         </p>
         <div class="btn-row" style="margin-top:var(--space-8);">
           <a href="#operator-features" class="btn btn-primary btn-lg">Explore Operator Solutions</a>
@@ -74,7 +75,7 @@
         <img src="assets/images/image_copy_4.png" alt="Sri Lankan Intercity Luxury Bus" style="border-radius:var(--radius-xl);box-shadow:var(--shadow-lg);" />
         
         <!-- Floating Dashboard Preview -->
-        <div class="op-dash-frame" style="position:absolute;bottom:-90px;right:-60px;width:320px;height:240px;transform:scale(0.85);box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+        <div class="op-dash-frame hero-floating-dash">
           <div class="op-sidebar" style="width:60px;padding:12px;align-items:center;">
             <div style="width:24px;height:24px;background:var(--c-blue);border-radius:4px;margin-bottom:16px;"></div>
             <div style="width:20px;height:4px;background:var(--border-color);border-radius:2px;margin-bottom:8px;"></div>
@@ -468,27 +469,45 @@
       <div class="op-workflow">
         <div class="op-wf-step">
           <div class="op-wf-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></div>
-          <div class="op-wf-label">01 Schedule Trip</div>
+          <div class="op-wf-text">
+            <div class="op-wf-label">01 Schedule Trip</div>
+            <div class="op-wf-desc">Plan routes and departure times effortlessly.</div>
+          </div>
         </div>
         <div class="op-wf-step">
           <div class="op-wf-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg></div>
-          <div class="op-wf-label">02 Assign Vehicle</div>
+          <div class="op-wf-text">
+            <div class="op-wf-label">02 Assign Vehicle</div>
+            <div class="op-wf-desc">Allocate the best bus from your fleet inventory.</div>
+          </div>
         </div>
         <div class="op-wf-step">
           <div class="op-wf-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>
-          <div class="op-wf-label">03 Assign Driver &amp; Conductor</div>
+          <div class="op-wf-text">
+            <div class="op-wf-label">03 Assign Driver &amp; Conductor</div>
+            <div class="op-wf-desc">Notify your staff instantly with app alerts.</div>
+          </div>
         </div>
         <div class="op-wf-step">
           <div class="op-wf-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
-          <div class="op-wf-label">04 Monitor Live Trip</div>
+          <div class="op-wf-text">
+            <div class="op-wf-label">04 Monitor Live Trip</div>
+            <div class="op-wf-desc">Track GPS location and occupancy in real-time.</div>
+          </div>
         </div>
         <div class="op-wf-step">
           <div class="op-wf-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
-          <div class="op-wf-label">05 Complete Journey</div>
+          <div class="op-wf-text">
+            <div class="op-wf-label">05 Complete Journey</div>
+            <div class="op-wf-desc">Log trip data securely upon arrival.</div>
+          </div>
         </div>
         <div class="op-wf-step">
           <div class="op-wf-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"></path><path d="M22 12A10 10 0 0 0 12 2v10z"></path></svg></div>
-          <div class="op-wf-label">06 Review Revenue</div>
+          <div class="op-wf-text">
+            <div class="op-wf-label">06 Review Revenue</div>
+            <div class="op-wf-desc">Analyze earnings and passenger feedback.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -514,7 +533,8 @@
       </div>
       <h2 class="reveal" style="color:#fff; --reveal-delay: 100ms;">Ready to bring your bus fleet onto Seaty?</h2>
       <p class="lede reveal" style="color:var(--text-on-dark-muted);margin-inline:auto; --reveal-delay: 200ms;">
-        Contact our operator onboarding team to set up your bus company account, register vehicles, and launch recurring express trips.
+        <span class="hide-on-mobile">Contact our operator onboarding team to set up your bus company account, register vehicles, and launch recurring express trips.</span>
+        <span class="show-on-mobile">Contact us to set up your account and launch express trips.</span>
       </p>
       <div class="btn-row reveal" style="justify-content:center;margin-top:var(--space-8); --reveal-delay: 300ms;">
         <a href="support.html" class="btn btn-primary btn-lg btn-shimmer" style="transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 10px 30px rgba(0,0,0,0.3), 0 0 40px rgba(var(--c-warning-rgb, 255,165,0), 0.2);" onmouseover="this.style.transform='scale(1.05) translateY(-4px)'; this.style.boxShadow='0 15px 35px rgba(0,0,0,0.4), 0 0 60px rgba(255,165,0,0.4)';" onmouseout="this.style.transform='scale(1) translateY(0)'; this.style.boxShadow='0 10px 30px rgba(0,0,0,0.3), 0 0 40px rgba(255,165,0,0.2)';">Contact Operator Support</a>
@@ -529,7 +549,10 @@
     <div class="footer-grid">
       <div class="footer-brand">
         <a href="index.html" class="footer-logo"><img src="assets/images/app_logo.png" alt="Seaty" /></a>
-        <p>SEATY is a smart booking and live bus tracking platform for Sri Lanka, engineered for hassle-free travel.</p>
+        <p>
+          <span class="hide-on-mobile">SEATY is a smart booking and live bus tracking platform for Sri Lanka, engineered for hassle-free travel.</span>
+          <span class="show-on-mobile">Smart bus booking & live tracking platform for Sri Lanka.</span>
+        </p>
         <div class="social-icons">
           <a href="#" class="social-icon" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 21v-7h2.5l.5-3H14V9a1.5 1.5 0 0 1 1.5-1.5H17V4.5A17 17 0 0 0 14.8 4C12.6 4 11 5.3 11 7.7V11H8.5v3H11v7Z"/></svg></a>
           <a href="#" class="social-icon" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="1"/></svg></a>

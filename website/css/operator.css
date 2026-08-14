@@ -11,6 +11,26 @@
   font-family: var(--font-body);
 }
 
+.hero-floating-dash {
+  position: absolute;
+  bottom: -90px;
+  right: -60px;
+  width: 320px;
+  height: 240px;
+  transform: scale(0.85);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+
+@media (max-width: 600px) {
+  .hero-floating-dash {
+    bottom: -40px;
+    right: 0;
+    transform: scale(0.65);
+    transform-origin: bottom right;
+  }
+}
+
 .op-sidebar {
   width: 220px;
   background: var(--bg-surface-alt);
@@ -517,12 +537,20 @@
   box-shadow: 0 4px 10px rgba(37,99,235,0.2);
   color: var(--c-blue);
 }
+.op-wf-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
 .op-wf-label {
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--c-navy);
   text-align: center;
   max-width: 80px;
+}
+.op-wf-desc {
+  display: none; /* Hidden on desktop, shown on mobile */
 }
 
 @media (max-width: 900px) {
@@ -537,6 +565,9 @@
   .op-content-grid {
     flex-direction: column;
     height: auto;
+  }
+  .op-map-area {
+    min-height: 250px;
   }
   .op-right-panel {
     width: 100%;
@@ -555,11 +586,50 @@
   }
   .op-wf-step {
     flex-direction: row;
-    padding: var(--space-2) 0;
+    padding: var(--space-4);
     width: 100%;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.03);
+    align-items: center;
+    gap: var(--space-4);
+  }
+  .op-wf-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    align-items: flex-start;
   }
   .op-wf-label {
     text-align: left;
     max-width: none;
+    font-size: 1rem;
+    color: var(--c-navy);
+  }
+  .op-wf-desc {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--c-slate-500);
+    line-height: 1.4;
+  }
+}
+
+/* Responsive Text Utilities */
+@media (max-width: 900px) {
+  .hide-on-mobile {
+    display: none !important;
+  }
+  .text-center-mobile {
+    text-align: center !important;
+  }
+}
+@media (min-width: 901px) {
+  .show-on-mobile {
+    display: none !important;
+  }
+  .text-center-mobile {
+    text-align: left;
   }
 }

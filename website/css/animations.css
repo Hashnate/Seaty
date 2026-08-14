@@ -239,6 +239,19 @@
   }
 }
 
+/* Disable cinematic reveals on desktop to prevent loading delays */
+@media (min-width: 901px) {
+  .cinematic-reveal-1,
+  .cinematic-reveal-2,
+  .cinematic-reveal-3,
+  .cinematic-reveal-4,
+  .cinematic-reveal-5 {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}
+
 /* ---------- Advanced Micro Animations ---------- */
 @keyframes scanningLine {
   0% { top: 0; opacity: 0; }
