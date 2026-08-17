@@ -214,20 +214,26 @@ class AuthNotifier extends Notifier<AuthState> {
             headers: {'Content-Type': 'application/json'},
             body: json.encode({'phone_number': cleanPhone}),
           )
-          .timeout(const Duration(seconds: 5));
+          .timeout(const Duration(seconds: 10));
 
+      final dynamic data = json.decode(response.body);
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
         return {
           'success': data['success'] == true,
           'otp_code': data['otp_code'],
           'message': data['message'],
         };
+      } else {
+        String message = 'Failed to send OTP.';
+        if (data is Map && data['detail'] != null) {
+          message = data['detail'] is String ? data['detail'] : json.encode(data['detail']);
+        }
+        return {'success': false, 'otp_code': null, 'message': message};
       }
     } catch (e) {
       debugPrint('Send OTP API error: $e');
     }
-    return {'success': false, 'otp_code': null, 'message': 'Network error sending OTP'};
+    return {'success': false, 'otp_code': null, 'message': 'Network error sending OTP. Please check your internet connection.'};
   }
 
   Future<Map<String, dynamic>> verifyOtp(String phone, String otpCode) async {

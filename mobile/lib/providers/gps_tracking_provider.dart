@@ -209,6 +209,7 @@ class GpsTrackingNotifier extends Notifier<GpsTrackingState> {
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'Seaty trip in progress',
           notificationText: 'Sharing this bus\'s live location with passengers.',
+          notificationIcon: AndroidResource(name: 'launcher_icon', defType: 'mipmap'),
           enableWakeLock: true,
         ),
       );
