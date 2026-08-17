@@ -197,7 +197,7 @@
   backdrop-filter: blur(32px) saturate(180%);
   -webkit-backdrop-filter: blur(32px) saturate(180%);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
-  padding: calc(80px + env(safe-area-inset-top, 20px)) var(--space-6) var(--space-6);
+  padding: calc(90px + env(safe-area-inset-top, 12px)) var(--space-6) var(--space-6);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -285,8 +285,8 @@
     border-color: transparent;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     box-shadow: 0 15px 30px rgba(0, 0, 0, 0.6), inset 0 -1px 15px rgba(56, 189, 248, 0.1);
-    padding: 24px 16px 12px 20px; /* Safe fallback */
-    padding: calc(12px + env(safe-area-inset-top, 16px)) 16px 12px 20px;
+    padding: 16px 16px 8px 16px; /* Safe fallback */
+    padding: calc(8px + env(safe-area-inset-top, 12px)) 16px 8px 16px;
   }
 
   /* Animated subtle sweep shine across the pill */
@@ -4387,5 +4387,340 @@
 @media (max-width: 1024px) {
   .feature-nav {
     display: none; /* Hide sticky nav on mobile for simplicity, or we could make it horizontal */
+  }
+}
+
+/* ==========================================================================
+   PREMIUM MOBILE EXPERIENCE — Styles, Effects & Transitions
+   Only applied at ≤860px (phone screens)
+   ========================================================================== */
+
+@media (max-width: 860px) {
+
+  /* --- Staggered card entrance on mobile --- */
+  .grid .card:nth-child(1),
+  .grid .feature-card:nth-child(1),
+  .grid .glass-card:nth-child(1) { --reveal-delay: 0ms; }
+  .grid .card:nth-child(2),
+  .grid .feature-card:nth-child(2),
+  .grid .glass-card:nth-child(2) { --reveal-delay: 80ms; }
+  .grid .card:nth-child(3),
+  .grid .feature-card:nth-child(3),
+  .grid .glass-card:nth-child(3) { --reveal-delay: 160ms; }
+  .grid .card:nth-child(4),
+  .grid .feature-card:nth-child(4),
+  .grid .glass-card:nth-child(4) { --reveal-delay: 240ms; }
+
+  /* --- Premium card styling for mobile --- */
+  .card,
+  .feature-card,
+  .glass-card {
+    border-radius: var(--radius-xl);
+    transition:
+      transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.4s ease;
+  }
+
+  .card:active,
+  .feature-card:active,
+  .glass-card:active {
+    transform: scale(0.97);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    transition-duration: 0.12s;
+  }
+
+  /* --- Feature icon pulse on scroll-reveal --- */
+  .reveal.is-visible .feature-icon {
+    animation: mobileIconPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes mobileIconPop {
+    0% { transform: scale(0.6); opacity: 0; }
+    60% { transform: scale(1.12); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* --- Smoother, bouncier reveal animations on mobile --- */
+  .reveal {
+    transform: translateY(36px);
+    transition:
+      opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .reveal-scale {
+    transform: scale(0.88);
+    transition:
+      opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+      transform 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* --- Premium button touch effects (tactile press) --- */
+  .btn {
+    transition:
+      transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.3s ease,
+      background 0.3s ease,
+      color 0.3s ease,
+      border-color 0.3s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn:active {
+    transform: scale(0.94) !important;
+    transition-duration: 0.08s;
+  }
+
+  .btn-primary:active {
+    box-shadow:
+      0 2px 8px rgba(255, 107, 74, 0.3),
+      inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .btn-outline-light:active {
+    background: rgba(248, 250, 252, 0.2);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  /* --- Mobile menu link staggered slide-in --- */
+  .nav-mobile-panel.is-open .nav-link {
+    animation: mobileMenuSlideIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .nav-mobile-panel.is-open .nav-link:nth-child(1) { animation-delay: 0.05s; }
+  .nav-mobile-panel.is-open .nav-link:nth-child(2) { animation-delay: 0.1s; }
+  .nav-mobile-panel.is-open .nav-link:nth-child(3) { animation-delay: 0.15s; }
+  .nav-mobile-panel.is-open .nav-link:nth-child(4) { animation-delay: 0.2s; }
+  .nav-mobile-panel.is-open .nav-link:nth-child(5) { animation-delay: 0.25s; }
+
+  .nav-mobile-panel.is-open .btn {
+    animation: mobileMenuSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: 0.32s;
+  }
+
+  @keyframes mobileMenuSlideIn {
+    0% {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* --- Mobile menu link active/touch state --- */
+  .nav-mobile-panel .nav-link {
+    border-radius: var(--radius-md);
+    transition: background 0.2s ease, transform 0.15s ease;
+  }
+
+  .nav-mobile-panel .nav-link:active {
+    transform: scale(0.97);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  /* --- Section headings entrance effect --- */
+  .section-head h2 {
+    transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* --- Eyebrow label glow effect --- */
+  .eyebrow {
+    position: relative;
+  }
+
+  .eyebrow::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    background: linear-gradient(90deg, var(--c-coral), var(--c-cyan-400), transparent);
+    opacity: 0.4;
+    border-radius: 1px;
+  }
+
+  /* --- Accordion premium mobile touch --- */
+  .accordion-trigger {
+    transition: background 0.2s ease;
+    border-radius: var(--radius-sm);
+    padding-inline: var(--space-3);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .accordion-trigger:active {
+    background: rgba(37, 99, 235, 0.04);
+  }
+
+  .accordion-icon {
+    transition:
+      transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+      background 0.3s ease;
+  }
+
+  /* --- Step numbers bounce on reveal --- */
+  .reveal.is-visible .step-number {
+    animation: stepBounce 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes stepBounce {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* --- Role tabs smooth horizontal scroll --- */
+  .role-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: var(--space-2);
+    padding-bottom: var(--space-2);
+  }
+
+  .role-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .role-tab {
+    flex-shrink: 0;
+    transition:
+      all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .role-tab:active {
+    transform: scale(0.95);
+  }
+
+  /* --- Store badge touch feedback --- */
+  .store-badge {
+    transition:
+      transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+      background 0.3s ease,
+      box-shadow 0.3s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .store-badge:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  /* --- Stat strip glass polish on mobile --- */
+  .stat-strip {
+    border-radius: var(--radius-xl);
+    padding: var(--space-4);
+  }
+
+  .stat-value {
+    font-size: 1.3rem;
+  }
+
+  /* --- Section dividers with subtle gradient line --- */
+  .section + .section {
+    border-top: 1px solid transparent;
+    border-image: linear-gradient(
+      90deg,
+      transparent 5%,
+      rgba(37, 99, 235, 0.1) 30%,
+      rgba(6, 182, 212, 0.15) 50%,
+      rgba(37, 99, 235, 0.1) 70%,
+      transparent 95%
+    ) 1;
+  }
+
+  /* --- Footer premium mobile layout --- */
+  .site-footer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .site-footer::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--c-coral), var(--c-blue), var(--c-cyan-400));
+    opacity: 0.6;
+  }
+
+  .footer-col a {
+    display: inline-block;
+    transition: color 0.2s ease, transform 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .footer-col a:active {
+    transform: translateX(3px);
+    color: var(--c-cyan-300);
+  }
+
+  /* --- Review card swipe feel --- */
+  .review-card {
+    width: 280px;
+    transition:
+      transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.4s ease;
+  }
+
+  /* --- Premium dark section ambient glow --- */
+  section[style*="--c-navy"],
+  .hero,
+  .contact-section-dark {
+    position: relative;
+  }
+
+  /* --- Pill/tag touch interaction --- */
+  .pill {
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .pill:active {
+    transform: scale(0.93);
+  }
+
+  /* --- Image smooth load transition --- */
+  img {
+    transition: opacity 0.4s ease;
+  }
+
+  /* --- Smooth scroll momentum --- */
+  .photo-marquee-mobile {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* --- Global touch ripple suppression for cleaner feel --- */
+  a, button, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* --- Mobile-only keyframes (outside media query for browser compat) --- */
+@keyframes mobileGlowPulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes mobileFadeSlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
