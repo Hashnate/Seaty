@@ -479,7 +479,17 @@ def update_profile(
     if payload.full_name is not None:
         current_user.full_name = payload.full_name
     if payload.nic_number is not None:
-        current_user.nic_number = payload.nic_number
+        nic_val = payload.nic_number.strip().upper()
+        if nic_val:
+            import re
+            if not re.match(r"^(\d{9}[VX]|\d{12})$", nic_val):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid NIC format. Must be 12 digits or 9 digits followed by V/X."
+                )
+            current_user.nic_number = nic_val
+        else:
+            current_user.nic_number = ""
     if payload.gender is not None:
         current_user.gender = payload.gender
     if payload.phone_number is not None:

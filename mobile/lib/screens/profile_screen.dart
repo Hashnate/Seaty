@@ -49,7 +49,7 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
 
     final success = await ref.read(authProvider.notifier).updateProfile(
       _nameController.text.trim(),
-      _nicController.text.trim(),
+      _nicController.text.trim().toUpperCase(),
       _gender,
       _phoneController.text.trim(),
     );
@@ -273,8 +273,6 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     final initialLetter = auth.userName.isNotEmpty
         ? auth.userName[0].toUpperCase()
         : 'U';
-    final isPhoneLocked = auth.role == 'owner';
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -442,82 +440,37 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Phone Field (Locked for Owner)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _buildFieldLabel('Phone Number'),
-                          if (isPhoneLocked)
-                            const Padding(
-                              padding: EdgeInsets.only(bottom: 4.0, right: 4.0),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.lock_outline_rounded,
-                                    size: 13,
-                                    color: Color(0xFF2563EB),
-                                  ),
-                                  SizedBox(width: 3),
-                                  Text(
-                                    'Admin Only',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF2563EB),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
+                      // Phone Field (Locked)
+                      _buildFieldLabel('Phone Number'),
                       TextFormField(
                         controller: _phoneController,
-                        readOnly: isPhoneLocked,
-                        style: TextStyle(
-                          color: isPhoneLocked
-                              ? const Color(0xFF475569)
-                              : const Color(0xFF0A2540),
+                        readOnly: true,
+                        style: const TextStyle(
+                          color: Color(0xFF475569),
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),
                         decoration: _buildInputDecoration(
                           'Enter phone number',
                           Icons.phone_android_outlined,
-                          suffixIcon: isPhoneLocked
-                              ? const Icon(
-                                  Icons.lock_rounded,
-                                  color: Color(0xFF94A3B8),
-                                  size: 18,
-                                )
-                              : null,
-                          readOnly: isPhoneLocked,
+                          suffixIcon: const Icon(
+                            Icons.lock_rounded,
+                            color: Color(0xFF94A3B8),
+                            size: 18,
+                          ),
+                          readOnly: true,
                         ),
                         validator: (val) => val == null || val.trim().isEmpty
                             ? 'Phone number is required'
                             : null,
                       ),
-                      if (isPhoneLocked) ...[
-                        const SizedBox(height: 4),
-                        const Padding(
-                          padding: EdgeInsets.only(left: 4.0),
-                          child: Text(
-                            'Phone number is locked and can only be modified by system Admin.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Color(0xFF94A3B8),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 12),
 
                       // NIC Field
                       _buildFieldLabel('NIC Number'),
                       TextFormField(
                         controller: _nicController,
+                        textCapitalization: TextCapitalization.characters,
                         style: const TextStyle(
                           color: Color(0xFF0A2540),
                           fontWeight: FontWeight.w600,
@@ -527,9 +480,17 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                           'e.g. 199912345678 or 991234567V',
                           Icons.badge_outlined,
                         ),
-                        validator: (val) => val == null || val.trim().isEmpty
-                            ? 'NIC number is required'
-                            : null,
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'NIC number is required';
+                          }
+                          final trimmed = val.trim();
+                          final nicRegex = RegExp(r'^([0-9]{9}[vVxX]|[0-9]{12})$');
+                          if (!nicRegex.hasMatch(trimmed)) {
+                            return 'Invalid NIC format (12 digits or 9 digits ending with V/X)';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 12),
 
