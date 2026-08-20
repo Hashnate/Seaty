@@ -532,3 +532,24 @@ def update_fcm_token_auth_alias(
           f"had_previous={'yes' if old_token else 'no'}, new_token={payload.fcm_token[:20]}...")
     return {"status": "success", "message": "FCM token updated successfully"}
 
+
+@router.delete("/me", status_code=status.HTTP_200_OK)
+@router.delete("/account", status_code=status.HTTP_200_OK)
+def delete_account(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Permanently delete caller's account and associated data.
+
+    Complies with Apple App Store Guideline 5.1.1(v).
+    """
+    if current_user.phone_number:
+        norm = normalize_phone_digits(current_user.phone_number)
+        otp_store.pop(norm, None)
+        otp_send_log.pop(norm, None)
+
+    db.delete(current_user)
+    db.commit()
+    return {"status": "success", "message": "Account successfully deleted."}
+
+
