@@ -4,10 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
-import 'package:seaty/screens/payment_webview_screen.dart';
+import 'package:seaty/screens/booking_overview_screen.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:seaty/widgets/animated_3d_seat.dart';
-import 'package:seaty/theme/app_theme.dart';
 import 'package:seaty/widgets/seaty_bus_loading.dart';
 
 // Seat Selector Screen
@@ -21,7 +20,6 @@ class SeatSelectorScreen extends ConsumerStatefulWidget {
 
 class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
   bool _isLoading = true;
-  bool _isBookingInProgress = false;
 
   dynamic _wsChannel;
   Timer? _pollingTimer;
@@ -72,7 +70,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
 
   void _startSyncTimer() {
     _pollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
-      if (mounted && !_isBookingInProgress) {
+      if (mounted) {
         final bookingsNotifier = ref.read(bookingsProvider.notifier);
         await bookingsNotifier.loadSeatAvailability(widget.trip['id'].toString());
       }
@@ -95,69 +93,6 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
     await bookingsNotifier.loadSeatAvailability(widget.trip['id'].toString(), clearFirst: true);
     if (mounted) {
       setState(() => _isLoading = false);
-    }
-  }
-
-  void _handleConfirmAndBook(
-    Map<String, dynamic> passengerDetails,
-  ) async {
-    setState(() => _isBookingInProgress = true);
-    final bookingsNotifier = ref.read(bookingsProvider.notifier);
-
-    // 1. Create booking (Pending)
-    final booking = await bookingsNotifier.initiateBooking(
-      widget.trip['id'].toString(),
-      passengerDetails,
-    );
-    if (booking == null) {
-      if (mounted) {
-        setState(() => _isBookingInProgress = false);
-        SeatyNotifications.show(
-          context,
-          // Prefer the server's actual reason (e.g. the pre-departure cutoff);
-          // fall back to the original copy when it didn't send one.
-          bookingsNotifier.lastErrorMessage ??
-              'Failed to hold seats. They may have just been booked.',
-          isError: true,
-        );
-      }
-      return;
-    }
-
-    // 2. Initiate payment session
-    final payment = await bookingsNotifier.initiatePayment(booking['id'].toString());
-    if (payment == null) {
-      if (mounted) {
-        setState(() => _isBookingInProgress = false);
-        SeatyNotifications.show(
-          context,
-          bookingsNotifier.lastErrorMessage ??
-              'Failed to initiate payment session.',
-          isError: true,
-        );
-      }
-      return;
-    }
-
-    if (!mounted) return;
-    setState(() => _isBookingInProgress = false);
-
-    // Hand off to the gateway's hosted page. The backend has already verified
-    // the transaction by the time this returns, so the outcome is a cue to
-    // refresh - not proof of payment.
-    final outcome = await startPaymentFlow(
-      context,
-      ref,
-      paymentUrl: payment['payment_url']?.toString() ?? '',
-      bookingId: booking['id'].toString(),
-      amount: (payment['amount'] as num?)?.toDouble() ?? 0,
-    );
-
-    if (!mounted) return;
-    showPaymentOutcome(context, outcome);
-
-    if (outcome == PaymentOutcome.success) {
-      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 
@@ -356,14 +291,23 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                       _buildLabel('NIC Number'),
                       TextFormField(
                         controller: nicController,
+                        textCapitalization: TextCapitalization.characters,
                         style: const TextStyle(color: Colors.white),
                         decoration: _buildInputDec(
                           'e.g. 199912345678 or 991234567V',
                           Icons.badge_outlined,
                         ),
-                        validator: (val) => val == null || val.trim().isEmpty
-                            ? 'NIC is required'
-                            : null,
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'NIC is required';
+                          }
+                          final trimmed = val.trim();
+                          final nicRegex = RegExp(r'^([0-9]{9}[vVxX]|[0-9]{12})$');
+                          if (!nicRegex.hasMatch(trimmed)) {
+                            return 'Invalid NIC format (12 digits or 9 digits with V/X)';
+                          }
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
 
@@ -421,7 +365,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                             final Map<String, dynamic> primaryDetails = {
                               'name': nameController.text.trim(),
                               'phone': phoneController.text.trim(),
-                              'nic': nicController.text.trim(),
+                              'nic': nicController.text.trim().toUpperCase(),
                               'gender': primaryGender,
                               'booking_type': bookingFor,
                             };
@@ -436,7 +380,19 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                               'guests': guests,
                             };
 
-                            _handleConfirmAndBook(fullDetails);
+                            final price = (widget.trip['price'] as num?)?.toDouble() ?? 1600.0;
+                            final totalPrice = price * selectedSeats.length;
+
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => BookingOverviewScreen(
+                                  trip: widget.trip,
+                                  passengerDetails: fullDetails,
+                                  selectedSeats: selectedSeats,
+                                  totalPrice: totalPrice,
+                                ),
+                              ),
+                            );
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF2563EB),
@@ -446,7 +402,7 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                             ),
                           ),
                           child: const Text(
-                            'Continue to Payment',
+                            'Review Booking',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -810,10 +766,9 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                       ),
                       const SizedBox(height: 12),
                       ElevatedButton(
-                        onPressed:
-                            (bookingsState.selectedSeats.isEmpty || _isBookingInProgress)
-                                ? null
-                                : () => _showPassengerDetailsSheet(context, auth, bookingsState),
+                        onPressed: bookingsState.selectedSeats.isEmpty
+                            ? null
+                            : () => _showPassengerDetailsSheet(context, auth, bookingsState),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF2563EB),
                           foregroundColor: Colors.white,
@@ -825,24 +780,20 @@ class _SeatSelectorScreenState extends ConsumerState<SeatSelectorScreen> {
                           ),
                           elevation: 0,
                         ),
-                        child: _isBookingInProgress
-                            ? const SeatyBusLoadingIndicator.small(
-                                busColor: Colors.white,
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Confirm & Book Seats',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Icon(Icons.arrow_forward_rounded, size: 18),
-                                ],
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Confirm & Book Seats',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
                               ),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.arrow_forward_rounded, size: 18),
+                          ],
+                        ),
                       ),
                     ],
                   ),

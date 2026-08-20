@@ -231,7 +231,7 @@ def list_trips(
                 detail="Invalid date format. Use YYYY-MM-DD"
             )
             
-    trips = query.all()
+    trips = query.order_by(models.Trip.departure_time.asc()).all()
     
     # Preload nested structures and filter matching routes (including intermediate stops)
     filtered_trips = []

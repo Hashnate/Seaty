@@ -475,7 +475,32 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
         );
         if (aFav && !bFav) return -1;
         if (!aFav && bFav) return 1;
-        return 0;
+
+        // Both are favourites or both are not favourites -> Sort by early departure first
+        DateTime? parseTripDeparture(dynamic dep) {
+          if (dep == null) return null;
+          final str = dep.toString().trim();
+          if (str.isEmpty) return null;
+          final dt = DateTime.tryParse(str.replaceAll(' ', 'T'));
+          if (dt != null) return dt;
+          return null;
+        }
+
+        final DateTime? aDep = parseTripDeparture(a['departure']);
+        final DateTime? bDep = parseTripDeparture(b['departure']);
+
+        if (aDep != null && bDep != null) {
+          final cmp = aDep.compareTo(bDep);
+          if (cmp != 0) return cmp;
+        } else if (aDep != null && bDep == null) {
+          return -1;
+        } else if (aDep == null && bDep != null) {
+          return 1;
+        }
+
+        final String aDepStr = a['departure']?.toString() ?? '';
+        final String bDepStr = b['departure']?.toString() ?? '';
+        return aDepStr.compareTo(bDepStr);
       });
 
     final double topPadding = MediaQuery.of(context).padding.top;
@@ -1302,26 +1327,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     if (categoryLabel.isEmpty || categoryLabel == 'BUS') {
       final bool isAc = (trip['is_ac'] == true) || (vehicleObj?['is_ac'] == true);
       categoryLabel = isAc ? 'A/C SLEEPER' : 'EXPRESS';
-    }
-
-    dynamic rawSeatLayout = trip['seat_layout'] ?? vehicleObj?['seat_layout'];
-    String seatLayout = '2 + 2';
-    if (rawSeatLayout != null) {
-      if (rawSeatLayout is Map) {
-        final type = rawSeatLayout['type']?.toString();
-        if (type != null && type.isNotEmpty && !type.startsWith('{')) {
-          seatLayout = type;
-        } else {
-          seatLayout = '2 + 2';
-        }
-      } else {
-        final s = rawSeatLayout.toString();
-        if (s.startsWith('{') || s.startsWith('[')) {
-          seatLayout = '2 + 2';
-        } else {
-          seatLayout = s;
-        }
-      }
     }
 
     // ── Dynamic Available Seats calculation ──
