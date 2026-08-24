@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/providers/active_trips_provider.dart';
+import 'package:seaty/providers/gps_tracking_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -106,7 +109,37 @@ class BoldGradientHeroHeading extends StatelessWidget {
 }
 
 // =====================================================================
-// LIVE TRACKER SCREEN — OpenStreetMap (Free, No API Key)
+// PROXIMITY STATUS MODELS & CITY COORDINATES
+// =====================================================================
+enum BusProximityStatus {
+  approaching,
+  arriving,
+  passed,
+  unknown,
+}
+
+class BusProximityInfo {
+  final double distanceMeters;
+  final String formattedDistance;
+  final BusProximityStatus status;
+  final String statusLabel;
+  final Color statusColor;
+  final IconData statusIcon;
+  final String? etaText;
+
+  const BusProximityInfo({
+    required this.distanceMeters,
+    required this.formattedDistance,
+    required this.status,
+    required this.statusLabel,
+    required this.statusColor,
+    required this.statusIcon,
+    this.etaText,
+  });
+}
+
+// =====================================================================
+// LIVE TRACKER SCREEN — OpenStreetMap + Real-time User & Bus Location
 // =====================================================================
 class PassengerTrackingTab extends ConsumerStatefulWidget {
   final Map<String, dynamic>? trip;
@@ -128,6 +161,12 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   bool _autoTrackStarted = false;
   Timer? _activeTripsRefreshTimer;
 
+  // Passenger's Live Location State
+  Position? _userPosition;
+  bool _isLocationPermissionGranted = false;
+  bool _isFetchingLocation = false;
+  StreamSubscription<Position>? _userPositionStream;
+
   @override
   void initState() {
     super.initState();
@@ -139,6 +178,9 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
         () => ref.read(activeTripsProvider.notifier).loadActiveTrips(),
       );
     }
+    // Initialize passenger's own GPS location for distance & arrival calculation
+    _initUserLocation();
+
     // Keeps the "last update Xs ago" / stale badge fresh without new GPS data arriving.
     _staleTicker = Timer.periodic(const Duration(seconds: 5), (_) {
       if (mounted) setState(() {});
@@ -155,15 +197,45 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
   void dispose() {
     _staleTicker?.cancel();
     _activeTripsRefreshTimer?.cancel();
+    _userPositionStream?.cancel();
     super.dispose();
   }
 
   final MapController _mapController = MapController();
   bool _isDarkModeMap = false;
-  String? _activeTooltip; // ID of marker currently showing popup ('bus', 'origin', 'destination', 'stop_X')
+  String? _activeTooltip; // ID of marker currently showing popup ('bus', 'user', 'origin', 'destination', 'stop_X')
 
   // Sri Lanka center
   static final LatLng _sriLankaCenter = LatLng(7.8731, 80.7718);
+
+  // Sri Lankan city coordinates for reliable arrival/pass computation
+  static const Map<String, LatLng> _sriLankanCities = {
+    'colombo': LatLng(6.9271, 79.8612),
+    'kandy': LatLng(7.2906, 80.6337),
+    'galle': LatLng(6.0535, 80.2210),
+    'matara': LatLng(5.9549, 80.5550),
+    'ella': LatLng(6.8667, 81.0466),
+    'jaffna': LatLng(9.6615, 80.0255),
+    'kurunegala': LatLng(7.4863, 80.3623),
+    'negombo': LatLng(7.2008, 79.8737),
+    'anuradhapura': LatLng(8.3114, 80.4037),
+    'trincomalee': LatLng(8.5874, 81.2152),
+    'batticaloa': LatLng(7.7102, 81.6924),
+    'badulla': LatLng(6.9934, 81.0550),
+    'nuwara eliya': LatLng(6.9497, 80.7891),
+    'ratnapura': LatLng(6.6828, 80.4037),
+    'hikkaduwa': LatLng(6.1405, 80.1001),
+    'bentota': LatLng(6.4218, 79.9984),
+    'kalutara': LatLng(6.5854, 79.9607),
+    'panadura': LatLng(6.7132, 79.9074),
+    'nittambuwa': LatLng(7.1444, 80.0956),
+    'kegalle': LatLng(7.2513, 80.3464),
+    'peradeniya': LatLng(7.2600, 80.5960),
+    'dambulla': LatLng(7.8742, 80.6511),
+    'sigiriya': LatLng(7.9570, 80.7603),
+    'tangalle': LatLng(6.0244, 80.7941),
+    'hambantota': LatLng(6.1248, 81.1185),
+  };
 
   // Predefined route coordinates for common Sri Lankan bus routes
   static final Map<String, List<LatLng>> _routeCoordinates = {
@@ -189,6 +261,154 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       LatLng(6.8667, 81.0466), // Ella
     ],
   };
+
+  Future<void> _initUserLocation() async {
+    if (_isFetchingLocation) return;
+    setState(() => _isFetchingLocation = true);
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        setState(() {
+          _isLocationPermissionGranted = false;
+          _isFetchingLocation = false;
+        });
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+          setState(() {
+            _isLocationPermissionGranted = false;
+            _isFetchingLocation = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+        setState(() => _isLocationPermissionGranted = true);
+
+        final pos = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 8),
+        ).catchError((_) => Geolocator.getLastKnownPosition());
+
+        if (mounted && pos != null) {
+          setState(() {
+            _userPosition = pos;
+            _isFetchingLocation = false;
+          });
+        }
+
+        // Live passenger location stream with 5m filter
+        _userPositionStream?.cancel();
+        _userPositionStream = Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 5,
+          ),
+        ).listen((newPos) {
+          if (mounted) {
+            setState(() => _userPosition = newPos);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint('Error initializing user location: $e');
+      if (mounted) {
+        setState(() => _isFetchingLocation = false);
+      }
+    }
+  }
+
+  BusProximityInfo? _calculateProximityInfo({
+    required LatLng busPos,
+    required LatLng userPos,
+    required double busSpeedKmh,
+    required String? destinationCity,
+    required List<LatLng> routePoints,
+  }) {
+    final distanceMeters = Geolocator.distanceBetween(
+      userPos.latitude,
+      userPos.longitude,
+      busPos.latitude,
+      busPos.longitude,
+    );
+
+    final formattedDist = distanceMeters < 1000
+        ? '${distanceMeters.round()} m'
+        : '${(distanceMeters / 1000).toStringAsFixed(1)} km';
+
+    // ETA calculation based on current bus speed (fallback to 28 km/h city avg if stationary)
+    final effectiveSpeed = busSpeedKmh > 6.0 ? busSpeedKmh : 28.0;
+    final etaMinutes = ((distanceMeters / 1000) / effectiveSpeed * 60).round();
+    final etaText = etaMinutes <= 1 ? '< 1 min' : '~$etaMinutes mins';
+
+    // Determine destination coordinates to know the directional flow
+    LatLng? destCoord;
+    if (routePoints.isNotEmpty) {
+      destCoord = routePoints.last;
+    } else if (destinationCity != null && destinationCity.isNotEmpty) {
+      final key = destinationCity.toLowerCase().trim();
+      destCoord = _sriLankanCities[key];
+    }
+
+    BusProximityStatus status = BusProximityStatus.approaching;
+    String statusLabel = 'Approaching You • $formattedDist';
+    Color statusColor = const Color(0xFF10B981); // Emerald
+    IconData statusIcon = Icons.directions_bus_rounded;
+
+    if (distanceMeters <= 200) {
+      status = BusProximityStatus.arriving;
+      statusLabel = 'Arriving Now • Within 200m';
+      statusColor = const Color(0xFF059669);
+      statusIcon = Icons.near_me_rounded;
+    } else if (destCoord != null) {
+      final busToDest = Geolocator.distanceBetween(
+        busPos.latitude,
+        busPos.longitude,
+        destCoord.latitude,
+        destCoord.longitude,
+      );
+      final userToDest = Geolocator.distanceBetween(
+        userPos.latitude,
+        userPos.longitude,
+        destCoord.latitude,
+        destCoord.longitude,
+      );
+
+      // If bus is closer to the destination than the user by > 250m, it has passed the user's stop
+      if (busToDest < userToDest - 250) {
+        status = BusProximityStatus.passed;
+        statusLabel = 'Bus Passed You • $formattedDist ahead';
+        statusColor = const Color(0xFFE11D48); // Rose/Red
+        statusIcon = Icons.history_rounded;
+      } else {
+        status = BusProximityStatus.approaching;
+        statusLabel = 'Approaching You • $formattedDist ($etaText)';
+        statusColor = const Color(0xFF10B981);
+        statusIcon = Icons.directions_bus_rounded;
+      }
+    } else {
+      status = BusProximityStatus.approaching;
+      statusLabel = 'Approaching You • $formattedDist ($etaText)';
+      statusColor = const Color(0xFF10B981);
+      statusIcon = Icons.directions_bus_rounded;
+    }
+
+    return BusProximityInfo(
+      distanceMeters: distanceMeters,
+      formattedDistance: formattedDist,
+      status: status,
+      statusLabel: statusLabel,
+      statusColor: statusColor,
+      statusIcon: statusIcon,
+      etaText: etaText,
+    );
+  }
 
   List<LatLng> _getRouteForTrip(List<Map<String, dynamic>> trips, String? selectedBusId) {
     if (selectedBusId == null) return [];
@@ -236,24 +456,40 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     _mapController.move(LatLng(centerLat, centerLng), 9.0);
   }
 
+  void _fitBusAndUser(LatLng bus, LatLng user) {
+    final minLat = math.min(bus.latitude, user.latitude);
+    final maxLat = math.max(bus.latitude, user.latitude);
+    final minLng = math.min(bus.longitude, user.longitude);
+    final maxLng = math.max(bus.longitude, user.longitude);
+    final center = LatLng((minLat + maxLat) / 2, (minLng + maxLng) / 2);
+
+    final dist = Geolocator.distanceBetween(bus.latitude, bus.longitude, user.latitude, user.longitude);
+    double zoom = 14.0;
+    if (dist > 80000) {
+      zoom = 8.5;
+    } else if (dist > 40000) {
+      zoom = 9.8;
+    } else if (dist > 15000) {
+      zoom = 11.2;
+    } else if (dist > 5000) {
+      zoom = 12.5;
+    } else if (dist > 2000) {
+      zoom = 13.8;
+    } else {
+      zoom = 14.8;
+    }
+
+    _mapController.move(center, zoom);
+  }
+
   @override
   Widget build(BuildContext context) {
     final gpsState = ref.watch(gpsTrackingProvider);
 
-    // Sourced from `GET /trips/my-active`, not the home-search list. That list
-    // deliberately hides buses departing within 30 minutes (they can no longer
-    // be booked) - which is precisely the window tracking needs. The server
-    // already restricts this to the caller's own ticketed trips inside the
-    // boarding-to-arrival window, so no further filtering is needed here.
+    // Sourced from `GET /trips/my-active`, not the home-search list.
     final activeTripsState = ref.watch(activeTripsProvider);
     final trackableTrips = activeTripsState.trips;
 
-    // A single bus can legitimately appear more than once in trackableTrips
-    // (e.g. two different routes/trips scheduled on the same vehicle) but the
-    // selector and route lookup below are keyed by bus reg alone, so collapse
-    // to at most one entry per reg - otherwise the dropdown can be handed
-    // duplicate-valued items (a Flutter assertion failure) and the wrong
-    // trip's route can be drawn.
     final Map<String, Map<String, dynamic>> trackableByReg = {};
     for (final t in trackableTrips) {
       final reg = t['reg']?.toString();
@@ -266,6 +502,11 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     final hasSelected = trackableTrips.any((t) => t['reg'] == _selectedBusId);
     final String? selectedValue = hasSelected ? _selectedBusId : null;
 
+    final Map<String, dynamic> currentTrip = dedupedTrackableTrips.firstWhere(
+      (t) => t['reg'] == _selectedBusId,
+      orElse: () => <String, dynamic>{},
+    );
+
     if (_selectedBusId != null && !hasSelected) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(gpsTrackingProvider.notifier).stopTracking();
@@ -275,15 +516,9 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
       });
     }
 
-    // Opened from a ticket or notification: the bus is pre-selected but nothing
-    // has opened the socket, so the map would sit idle until the user re-picked
-    // it by hand. Start once the trackable list has arrived and confirms it.
+    // Opened from a ticket or notification: auto-start socket
     if (hasSelected && !gpsState.isTracking && !_autoTrackStarted) {
-      final selected = dedupedTrackableTrips.firstWhere(
-        (t) => t['reg'] == _selectedBusId,
-        orElse: () => <String, dynamic>{},
-      );
-      final vehicleId = selected['vehicle_id']?.toString() ?? '';
+      final vehicleId = currentTrip['vehicle_id']?.toString() ?? '';
       if (vehicleId.isNotEmpty) {
         _autoTrackStarted = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -302,17 +537,33 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
     final isStaleUpdate = secondsSinceUpdate != null && secondsSinceUpdate > 30;
 
     LatLng? busPosition;
+    double busSpeed = 0.0;
     if (isTracking) {
-      // JSON numbers arrive as int when the value has no fractional part, so a
-      // hard `as double` cast would throw on a whole-number coordinate.
       final lat = (gpsState.trackedBusLocation!['latitude'] as num?)?.toDouble();
       final lng = (gpsState.trackedBusLocation!['longitude'] as num?)?.toDouble();
+      busSpeed = (gpsState.trackedBusLocation!['speed'] as num?)?.toDouble() ?? 0.0;
       if (lat != null && lng != null) {
         busPosition = LatLng(lat, lng);
       }
     }
 
+    LatLng? userLatLng = _userPosition != null
+        ? LatLng(_userPosition!.latitude, _userPosition!.longitude)
+        : null;
+
     final routePoints = _getRouteForTrip(dedupedTrackableTrips, selectedValue);
+
+    // Compute real-time proximity info (distance, approaching vs passed status, ETA)
+    BusProximityInfo? proximityInfo;
+    if (busPosition != null && userLatLng != null) {
+      proximityInfo = _calculateProximityInfo(
+        busPos: busPosition,
+        userPos: userLatLng,
+        busSpeedKmh: busSpeed,
+        destinationCity: currentTrip['destination']?.toString(),
+        routePoints: routePoints,
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -322,13 +573,13 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
           children: [
             // ── Bold Gradient Hero Heading ──
             const Padding(
-              padding: EdgeInsets.only(left: 20, right: 20, top: 20),
+              padding: EdgeInsets.only(left: 20, right: 20, top: 16),
               child: BoldGradientHeroHeading(
                 title: 'Live Tracker',
-                subtitle: 'Track buses in real-time on the map.',
+                subtitle: 'Track buses and your live proximity on the map.',
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // ── Bus Selector Card ──
             Padding(
@@ -428,12 +679,6 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                             _activeTooltip = 'bus';
                           });
                           if (val != null) {
-                            // The dropdown is keyed by registration number for
-                            // display, but the tracking socket is keyed by the
-                            // vehicle's UUID - the same channel the conductor
-                            // broadcasts on. Passing the reg here subscribed the
-                            // passenger to a channel no driver ever joins, so no
-                            // position could arrive.
                             final selected = dedupedTrackableTrips.firstWhere(
                               (t) => t['reg'] == val,
                               orElse: () => <String, dynamic>{},
@@ -455,16 +700,11 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                 ),
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             // ── Interactive OpenStreetMap Container ──
             Expanded(
               child: Padding(
-                // PassengerMainScreen uses extendBody:true, so Scaffold already
-                // reports the floating nav pill's height as bottom padding and
-                // the SafeArea above has consumed it. Only a small visual gap is
-                // needed here - adding the pill's height again (the old 110)
-                // stacked two clearances and left a large dead strip.
                 padding: const EdgeInsets.only(
                   left: 16,
                   right: 16,
@@ -489,10 +729,8 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                       FlutterMap(
                         mapController: _mapController,
                         options: MapOptions(
-                          initialCenter: busPosition ?? _sriLankaCenter,
+                          initialCenter: busPosition ?? userLatLng ?? _sriLankaCenter,
                           initialZoom: isTracking ? 14.0 : 7.6,
-                          // Stop pinch-zoom from stranding the user in grey
-                          // space far outside the island's tile coverage.
                           minZoom: 6.0,
                           maxZoom: 18.0,
                           onTap: (tapPosition, point) {
@@ -508,9 +746,6 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                             subdomains: const ['a', 'b', 'c', 'd'],
                             userAgentPackageName: 'lk.seaty.app',
                             maxZoom: 19,
-                            // Render a ring of tiles beyond the viewport and
-                            // hold them while panning, so the map doesn't show
-                            // half-drawn blank edges as it loads.
                             keepBuffer: 4,
                           ),
 
@@ -522,6 +757,21 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                   points: routePoints,
                                   color: const Color(0xFF2563EB),
                                   strokeWidth: 4.5,
+                                ),
+                              ],
+                            ),
+
+                          // Dotted Live Guide Line between Passenger and Bus
+                          if (busPosition != null && userLatLng != null)
+                            PolylineLayer(
+                              polylines: <Polyline<Object>>[
+                                Polyline(
+                                  points: [userLatLng, busPosition],
+                                  color: proximityInfo?.statusColor.withValues(alpha: 0.6) ?? const Color(0xFF0284C7).withValues(alpha: 0.6),
+                                  strokeWidth: 2.5,
+                                  pattern: const StrokePattern.dotted(
+                                    spacingFactor: 2.0,
+                                  ),
                                 ),
                               ],
                             ),
@@ -642,7 +892,70 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                               ],
                             ),
 
-                          // Live Bus Marker + Pulse Effect
+                          // ── Live Passenger Location Marker ──
+                          if (userLatLng != null)
+                            MarkerLayer(
+                              markers: [
+                                // Radar pulse ring
+                                Marker(
+                                  point: userLatLng,
+                                  width: 58,
+                                  height: 58,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFF0284C7).withValues(alpha: 0.16),
+                                      border: Border.all(
+                                        color: const Color(0xFF0284C7).withValues(alpha: 0.4),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ).animate(onPlay: (c) => c.repeat())
+                                   .scale(begin: const Offset(0.75, 0.75), end: const Offset(1.2, 1.2), duration: 1400.ms, curve: Curves.easeOut),
+                                ),
+                                // Inner user avatar dot
+                                Marker(
+                                  point: userLatLng,
+                                  width: 36,
+                                  height: 36,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _activeTooltip = _activeTooltip == 'user' ? null : 'user';
+                                      });
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFF0284C7), Color(0xFF38BDF8)],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 2.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFF0284C7).withValues(alpha: 0.5),
+                                            blurRadius: 10,
+                                            spreadRadius: 1,
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Icon(
+                                        Icons.person_rounded,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                          // ── Live Bus Marker + Pulse Effect ──
                           if (busPosition != null)
                             MarkerLayer(
                               markers: [
@@ -730,11 +1043,13 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                 Icon(
                                   _activeTooltip == 'bus'
                                       ? Icons.directions_bus_filled_rounded
-                                      : _activeTooltip == 'origin'
-                                          ? Icons.play_circle_fill_rounded
-                                          : _activeTooltip == 'destination'
-                                              ? Icons.flag_circle_rounded
-                                              : Icons.location_on_rounded,
+                                      : _activeTooltip == 'user'
+                                          ? Icons.person_pin_circle_rounded
+                                          : _activeTooltip == 'origin'
+                                              ? Icons.play_circle_fill_rounded
+                                              : _activeTooltip == 'destination'
+                                                  ? Icons.flag_circle_rounded
+                                                  : Icons.location_on_rounded,
                                   color: const Color(0xFF60A5FA),
                                   size: 20,
                                 ),
@@ -747,11 +1062,13 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       Text(
                                         _activeTooltip == 'bus'
                                             ? 'Bus ${_selectedBusId ?? "Active"}'
-                                            : _activeTooltip == 'origin'
-                                                ? 'Trip Origin'
-                                                : _activeTooltip == 'destination'
-                                                    ? 'Final Destination'
-                                                    : 'Intermediate Stop',
+                                            : _activeTooltip == 'user'
+                                                ? 'Your Current Location'
+                                                : _activeTooltip == 'origin'
+                                                    ? 'Trip Origin'
+                                                    : _activeTooltip == 'destination'
+                                                        ? 'Final Destination'
+                                                        : 'Intermediate Stop',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w800,
@@ -762,13 +1079,17 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                       Text(
                                         _activeTooltip == 'bus'
                                             ? (gpsState.trackedBusLocation != null
-                                                ? 'Live speed: ${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? "0"} km/h • Tracking Active'
+                                                ? 'Live speed: ${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? "0"} km/h${proximityInfo != null ? " • ${proximityInfo.formattedDistance} from you" : ""}'
                                                 : 'Waiting for driver to start broadcasting…')
-                                            : _activeTooltip == 'origin'
-                                                ? 'Journey Start Point'
-                                                : _activeTooltip == 'destination'
-                                                    ? 'Final Dropoff Station'
-                                                    : 'Passenger boarding & dropoff station',
+                                            : _activeTooltip == 'user'
+                                                ? (proximityInfo != null
+                                                    ? '${proximityInfo.statusLabel} • Lat ${_userPosition?.latitude.toStringAsFixed(4)}, Lng ${_userPosition?.longitude.toStringAsFixed(4)}'
+                                                    : 'GPS Fix Active • Accuracy within 10m')
+                                                : _activeTooltip == 'origin'
+                                                    ? 'Journey Start Point'
+                                                    : _activeTooltip == 'destination'
+                                                        ? 'Final Dropoff Station'
+                                                        : 'Passenger boarding & dropoff station',
                                         style: const TextStyle(
                                           color: Color(0xFF94A3B8),
                                           fontSize: 11,
@@ -790,52 +1111,90 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                           ).animate().fadeIn(duration: 200.ms).slideY(begin: -0.2, end: 0, duration: 200.ms),
                         ),
 
-                      // Status Badge — Top Left
+                      // ── Live Status & Proximity Badge (Top Left) ──
                       Positioned(
                         top: 12,
                         left: 12,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isTracking
-                                ? const Color(0xFF10B981).withValues(alpha: 0.95)
-                                : const Color(0xFF0A2540).withValues(alpha: 0.85),
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.15),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
+                        child: proximityInfo != null
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: isTracking ? Colors.white : const Color(0xFF64748B),
-                                  shape: BoxShape.circle,
+                                  color: proximityInfo.statusColor.withValues(alpha: 0.95),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.18),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      proximityInfo.statusIcon,
+                                      color: Colors.white,
+                                      size: 13,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      proximityInfo.statusLabel,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ).animate().fadeIn(duration: 250.ms)
+                            : Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isTracking
+                                      ? const Color(0xFF10B981).withValues(alpha: 0.95)
+                                      : const Color(0xFF0A2540).withValues(alpha: 0.85),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isTracking ? Colors.white : const Color(0xFF64748B),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isTracking ? 'LIVE TRACKING' : 'IDLE',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.1,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                isTracking ? 'LIVE TRACKING' : 'IDLE',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
 
                       // ── Floating Interactive Map Control Bar — Top Right ──
@@ -861,12 +1220,44 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                               // Recenter on Bus
                               if (isTracking && busPosition != null) ...[
                                 _buildMapControlButton(
-                                  icon: Icons.my_location_rounded,
+                                  icon: Icons.directions_bus_rounded,
                                   tooltip: 'Center on Bus',
                                   color: const Color(0xFF2563EB),
                                   onTap: () {
-                                    _mapController.move(busPosition!, 14.0);
+                                    _mapController.move(busPosition!, 14.5);
                                   },
+                                ),
+                                const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              ],
+                              // Fit Both Bus & User
+                              if (isTracking && busPosition != null && userLatLng != null) ...[
+                                _buildMapControlButton(
+                                  icon: Icons.swap_calls_rounded,
+                                  tooltip: 'Fit Bus & My Location',
+                                  color: const Color(0xFF0284C7),
+                                  onTap: () {
+                                    _fitBusAndUser(busPosition!, userLatLng);
+                                  },
+                                ),
+                                const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              ],
+                              // Recenter on Passenger Location
+                              if (userLatLng != null) ...[
+                                _buildMapControlButton(
+                                  icon: Icons.my_location_rounded,
+                                  tooltip: 'Center on Me',
+                                  color: const Color(0xFF0284C7),
+                                  onTap: () {
+                                    _mapController.move(userLatLng, 15.0);
+                                  },
+                                ),
+                                const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                              ] else ...[
+                                _buildMapControlButton(
+                                  icon: Icons.location_searching_rounded,
+                                  tooltip: 'Enable My Location',
+                                  color: const Color(0xFF64748B),
+                                  onTap: _initUserLocation,
                                 ),
                                 const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
                               ],
@@ -953,20 +1344,22 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            _selectedBusId ?? 'Bus',
+                                            '${currentTrip['bus_name'] ?? "Bus"} (${_selectedBusId ?? "Active"})',
                                             style: const TextStyle(
                                               fontWeight: FontWeight.w800,
-                                              fontSize: 14,
+                                              fontSize: 13.5,
                                               color: Color(0xFF0A2540),
                                             ),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            '${gpsState.trackedBusLocation!['latitude']?.toStringAsFixed(4)}, ${gpsState.trackedBusLocation!['longitude']?.toStringAsFixed(4)}',
+                                            currentTrip['origin'] != null && currentTrip['destination'] != null
+                                                ? '${currentTrip['origin']} → ${currentTrip['destination']}'
+                                                : '${gpsState.trackedBusLocation!['latitude']?.toStringAsFixed(4)}, ${gpsState.trackedBusLocation!['longitude']?.toStringAsFixed(4)}',
                                             style: const TextStyle(
-                                              fontFamily: 'monospace',
                                               fontSize: 11,
-                                              color: Color(0xFF94A3B8),
+                                              color: Color(0xFF64748B),
+                                              fontWeight: FontWeight.w500,
                                             ),
                                           ),
                                         ],
@@ -975,15 +1368,7 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                     // Contact Conductor Quick Action Button
                                     GestureDetector(
                                       onTap: () async {
-                                        // Was a toast that only *looked* like it
-                                        // dialled. Opens the real dialer now,
-                                        // using the conductor running this trip.
-                                        final selected =
-                                            dedupedTrackableTrips.firstWhere(
-                                          (t) => t['reg'] == _selectedBusId,
-                                          orElse: () => <String, dynamic>{},
-                                        );
-                                        final phone = selected['conductor_phone']
+                                        final phone = currentTrip['conductor_phone']
                                                 ?.toString()
                                                 .trim() ??
                                             '';
@@ -1033,41 +1418,70 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                 const SizedBox(height: 12),
                                 Row(
                                   children: [
-                                    _buildStatChip(
-                                      Icons.speed_rounded,
-                                      '${gpsState.trackedBusLocation!['speed']?.toStringAsFixed(0) ?? '0'}',
-                                      'km/h',
-                                      const Color(0xFF2563EB),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _buildStatChip(
-                                      Icons.explore_rounded,
-                                      '${gpsState.trackedBusLocation!['heading']?.toStringAsFixed(0) ?? '0'}°',
-                                      'bearing',
-                                      const Color(0xFF0A2540),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    if (gpsState.isReconnecting)
+                                    if (proximityInfo != null) ...[
                                       _buildStatChip(
-                                        Icons.sync_rounded,
-                                        'Reconnecting',
-                                        'connection',
-                                        const Color(0xFFF59E0B),
-                                      )
-                                    else if (isStaleUpdate)
-                                      _buildStatChip(
-                                        Icons.warning_amber_rounded,
-                                        '${secondsSinceUpdate}s ago',
-                                        'stale',
-                                        const Color(0xFFF59E0B),
-                                      )
-                                    else
-                                      _buildStatChip(
-                                        Icons.signal_cellular_alt_rounded,
-                                        'Live',
-                                        'connection',
-                                        const Color(0xFF10B981),
+                                        Icons.place_rounded,
+                                        proximityInfo.formattedDistance,
+                                        'to you',
+                                        const Color(0xFF0284C7),
                                       ),
+                                      const SizedBox(width: 8),
+                                      _buildStatChip(
+                                        Icons.speed_rounded,
+                                        '${busSpeed.toStringAsFixed(0)}',
+                                        'km/h',
+                                        const Color(0xFF2563EB),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _buildStatChip(
+                                        proximityInfo.status == BusProximityStatus.passed
+                                            ? Icons.history_rounded
+                                            : Icons.timer_outlined,
+                                        proximityInfo.status == BusProximityStatus.passed
+                                            ? 'Passed'
+                                            : (proximityInfo.etaText ?? 'Live'),
+                                        proximityInfo.status == BusProximityStatus.passed
+                                            ? 'status'
+                                            : 'arrival',
+                                        proximityInfo.statusColor,
+                                      ),
+                                    ] else ...[
+                                      _buildStatChip(
+                                        Icons.speed_rounded,
+                                        '${busSpeed.toStringAsFixed(0)}',
+                                        'km/h',
+                                        const Color(0xFF2563EB),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      _buildStatChip(
+                                        Icons.explore_rounded,
+                                        '${gpsState.trackedBusLocation!['heading']?.toStringAsFixed(0) ?? '0'}°',
+                                        'bearing',
+                                        const Color(0xFF0A2540),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      if (gpsState.isReconnecting)
+                                        _buildStatChip(
+                                          Icons.sync_rounded,
+                                          'Reconnecting',
+                                          'connection',
+                                          const Color(0xFFF59E0B),
+                                        )
+                                      else if (isStaleUpdate)
+                                        _buildStatChip(
+                                          Icons.warning_amber_rounded,
+                                          '${secondsSinceUpdate}s ago',
+                                          'stale',
+                                          const Color(0xFFF59E0B),
+                                        )
+                                      else
+                                        _buildStatChip(
+                                          Icons.signal_cellular_alt_rounded,
+                                          'Live',
+                                          'connection',
+                                          const Color(0xFF10B981),
+                                        ),
+                                    ],
                                   ],
                                 ),
                               ],
@@ -1092,15 +1506,15 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                 ),
                               ],
                             ),
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(
+                                const Icon(
                                   Icons.info_outline_rounded,
                                   color: Color(0xFF94A3B8),
                                   size: 20,
                                 ),
-                                SizedBox(width: 10),
-                                Expanded(
+                                const SizedBox(width: 10),
+                                const Expanded(
                                   child: Text(
                                     'Select a bus from the dropdown above to start live tracking.',
                                     style: TextStyle(
@@ -1110,6 +1524,33 @@ class _PassengerTrackingTabState extends ConsumerState<PassengerTrackingTab> {
                                     ),
                                   ),
                                 ),
+                                if (_userPosition == null) ...[
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: _initUserLocation,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0284C7).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Row(
+                                        children: [
+                                          Icon(Icons.my_location_rounded, size: 14, color: Color(0xFF0284C7)),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'My GPS',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF0284C7),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
