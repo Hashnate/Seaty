@@ -1032,7 +1032,6 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                   ),
                 ),
               ),
-            ),
 
             // ─── Scrollable Rides Section Only ───
             Expanded(
