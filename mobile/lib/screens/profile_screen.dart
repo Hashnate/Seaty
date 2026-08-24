@@ -603,28 +603,6 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-
-                      // Delete Account Action
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: _isSaving ? null : () => _showDeleteAccountDialog(context),
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            color: Color(0xFFEF4444),
-                            size: 16,
-                          ),
-                          label: const Text(
-                            'Delete Account',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFEF4444),
-                            ),
-                          ),
-                        ),
-                      ),
-
                       // Bottom clearance for floating nav bar
                       const SizedBox(height: 100),
                     ],
