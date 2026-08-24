@@ -29,6 +29,7 @@ services:
       # backend/.env only — do not reintroduce them here.
       GOOGLE_APPLICATION_CREDENTIALS: /app/firebase-service-account.json
     volumes:
+      - ./backend/app:/app/app
       - ./backend/firebase-service-account.json:/app/firebase-service-account.json:ro
       - seaty-uploads:/app/uploads
     depends_on:
