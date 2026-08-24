@@ -235,14 +235,13 @@ All three keep connection state in a module-level dict, which means **the backen
 scaled beyond one process** — a second worker would hold a disjoint set of sockets. Any move to
 multiple replicas needs a shared broker (Redis pub/sub or similar) first.
 
-> [!WARNING]
-> **Each authenticated socket also pins a database connection for its entire lifetime.** Both
-> `tracking.py` and `notifications.py` open a `SessionLocal()` and close it only on disconnect,
-> and the engine is created with SQLAlchemy's defaults — `pool_size=5, max_overflow=10`, so
-> **15 connections total**. Every signed-in app holds the notifications socket open, so the
-> ceiling is roughly 15 concurrent users before the pool is exhausted and *all* REST traffic
-> starts timing out. This is the binding capacity limit today, ahead of CPU, memory, or the
-> single-process constraint above. See [CODE_QUALITY.md](CODE_QUALITY.md) P1.
+> [!IMPORTANT]
+> **A socket must never hold a database session.** Both handlers authenticate inside a
+> `with session_scope() as db:` that closes before the socket starts running, and the GPS driver
+> loop opens one scope per fix. This used to be one `SessionLocal()` per socket, closed only on
+> disconnect, which pinned a pooled connection and an open transaction for every signed-in user
+> and capped the platform at ~15 of them. Keep new socket code to the same shape: no session
+> lives across an `await`.
 
 Tracking authorises drivers as: vehicle owner, a conductor in the same company, or an admin.
 Passenger listeners are authenticated but not restricted — any logged-in user can watch any

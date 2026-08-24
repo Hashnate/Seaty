@@ -5,7 +5,9 @@ from uuid import UUID
 import json
 import datetime
 
-from app.database import get_db, SessionLocal
+from starlette.concurrency import run_in_threadpool
+
+from app.database import get_db, session_scope
 from app import models, schemas, auth
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -124,7 +126,11 @@ async def create_and_send_notification(
             fcm_data["booking_id"] = str(booking_id)
         if vehicle_id:
             fcm_data["vehicle_id"] = str(vehicle_id)
-        send_fcm_push(user.fcm_token, title, message, fcm_data)
+        # `send_fcm_push` is a blocking HTTPS round-trip to Google. One event
+        # loop serves every WebSocket in this process, so calling it directly
+        # from an `async def` stalls every socket and every in-flight request
+        # until Firebase answers.
+        await run_in_threadpool(send_fcm_push, user.fcm_token, title, message, fcm_data)
 
     return db_noti
 
@@ -136,9 +142,11 @@ async def notifications_websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="JWT authentication token")
 ):
-    db: Session = SessionLocal()
-    user_id_str = None
-    try:
+    # The session lives exactly as long as the authentication query. Holding it
+    # for the life of the socket - as this did - kept a pooled connection and an
+    # open transaction per signed-in user, so the pool ran out long before the
+    # server did. See `session_scope`.
+    with session_scope() as db:
         try:
             user = auth.get_current_user(token=token, db=db)
             user_id_str = str(user.id)
@@ -146,16 +154,18 @@ async def notifications_websocket_endpoint(
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication failed")
             return
 
-        await manager.connect(user_id_str, websocket)
-        try:
-            while True:
-                # Keep socket alive by listening to incoming texts (e.g. pings)
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            if user_id_str:
-                manager.disconnect(user_id_str, websocket)
+    await manager.connect(user_id_str, websocket)
+    try:
+        while True:
+            # Keep socket alive by listening to incoming texts (e.g. pings)
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
     finally:
-        db.close()
+        # In `finally`, not just on WebSocketDisconnect: any other error left
+        # the socket registered in the manager, and every later notification
+        # tried to write to it.
+        manager.disconnect(user_id_str, websocket)
 
 # =====================================================================
 # REST Endpoints for History and Marking Read
@@ -246,7 +256,13 @@ async def broadcast_notification(
         # Trigger native FCM push
         user_obj = next((u for u in users if u.id == db_noti.user_id), None)
         if user_obj and user_obj.fcm_token:
-            send_fcm_push(user_obj.fcm_token, payload.title, payload.message, {"type": "system", "id": str(db_noti.id)})
+            await run_in_threadpool(
+                send_fcm_push,
+                user_obj.fcm_token,
+                payload.title,
+                payload.message,
+                {"type": "system", "id": str(db_noti.id)},
+            )
 
     return {"status": "success", "message": f"Notification broadcasted to {len(users)} users"}
 

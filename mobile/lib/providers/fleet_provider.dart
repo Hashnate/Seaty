@@ -25,7 +25,7 @@ class FleetState {
 class FleetNotifier extends Notifier<FleetState> {
   @override
   FleetState build() {
-    final auth = ref.watch(authProvider);
+    final session = ref.watch(sessionProvider);
 
     // Initial local fallback vehicles
     final initialVehicles = [
@@ -59,7 +59,7 @@ class FleetNotifier extends Notifier<FleetState> {
       }
     }
 
-    if (auth.isAuthenticated) {
+    if (session.isAuthenticated) {
       Future.microtask(() {
         loadVehicles();
         loadConductors();

@@ -45,9 +45,9 @@ class BookingsState {
 class BookingsNotifier extends Notifier<BookingsState> {
   @override
   BookingsState build() {
-    final auth = ref.watch(authProvider);
+    final session = ref.watch(sessionProvider);
 
-    if (auth.isAuthenticated) {
+    if (session.isAuthenticated) {
       Future.microtask(() => loadBookings());
     }
 

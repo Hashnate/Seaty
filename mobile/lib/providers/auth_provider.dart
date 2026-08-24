@@ -1,3 +1,4 @@
+import 'dart:async' show TimeoutException;
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -409,9 +410,13 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<void> loadProfile() async {
-    if (state.token.isEmpty || state.token.startsWith('simulated')) return;
-    syncFcmToken();
+  /// Reads the signed-in user's profile from the server.
+  ///
+  /// `null` means "we did not get an answer", which is deliberately not the
+  /// same as "the server disagrees with us" - [_confirmProfileUpdate] needs to
+  /// tell those two apart.
+  Future<Map<String, dynamic>?> _fetchProfile(Duration timeout) async {
+    if (state.token.isEmpty || state.token.startsWith('simulated')) return null;
     final settings = ref.read(settingsProvider);
     try {
       final response = await http
@@ -419,49 +424,58 @@ class AuthNotifier extends Notifier<AuthState> {
             Uri.parse('${settings.apiBaseUrl}/auth/me'),
             headers: {'Authorization': 'Bearer ${state.token}'},
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(timeout);
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final newState = state.copyWith(
-          userName: data['full_name'] ?? state.userName,
-          userPhone: data['phone_number'] ?? state.userPhone,
-          userNic: data['nic_number'] ?? '',
-          userGender: data['gender'] ?? '',
-          role: (data['role'] != null && data['role'].toString().isNotEmpty)
-              ? data['role'].toString()
-              : state.role,
-        );
-        state = newState;
-        await _saveSession(newState);
-      }
+      if (response.statusCode != 200) return null;
+      final data = json.decode(response.body);
+      return data is Map<String, dynamic> ? data : null;
     } catch (e) {
-      debugPrint('Error loading profile: $e');
+      debugPrint('Error reading profile: ${e.runtimeType}: $e');
+      return null;
     }
   }
 
-  Future<Map<String, dynamic>> updateProfile(
+  /// Copies a server profile payload into the session, in memory and on disk.
+  ///
+  /// Never throws. It runs after the server has already accepted a change, so
+  /// a failure to cache the result locally must not be reported as the change
+  /// having failed.
+  Future<void> _adoptProfile(Map<String, dynamic> data) async {
+    try {
+      final newState = state.copyWith(
+        userName: data['full_name']?.toString() ?? state.userName,
+        userPhone: data['phone_number']?.toString() ?? state.userPhone,
+        userNic: data['nic_number']?.toString() ?? '',
+        userGender: data['gender']?.toString() ?? '',
+        role: (data['role'] != null && data['role'].toString().isNotEmpty)
+            ? data['role'].toString()
+            : state.role,
+      );
+      state = newState;
+      await _saveSession(newState);
+    } catch (e) {
+      debugPrint('Profile could not be cached locally: ${e.runtimeType}: $e');
+    }
+  }
+
+  Future<void> loadProfile() async {
+    if (state.token.isEmpty || state.token.startsWith('simulated')) return;
+    syncFcmToken();
+    final data = await _fetchProfile(const Duration(seconds: 3));
+    if (data != null) await _adoptProfile(data);
+  }
+
+  /// Sends the update. `null` means the response never arrived - which is not
+  /// the same as the update failing, see [_confirmProfileUpdate].
+  Future<http.Response?> _putProfile(
     String name,
     String nic,
     String gender,
     String phone,
   ) async {
     final settings = ref.read(settingsProvider);
-
-    if (state.token.isEmpty || state.token.startsWith('simulated')) {
-      final localState = state.copyWith(
-        userName: name,
-        userNic: nic,
-        userGender: gender,
-        userPhone: phone,
-      );
-      state = localState;
-      await _saveSession(localState);
-      return {'success': true, 'message': 'Profile updated successfully!'};
-    }
-
     try {
-      final response = await http
+      return await http
           .put(
             Uri.parse('${settings.apiBaseUrl}/auth/profile'),
             headers: {
@@ -476,35 +490,120 @@ class AuthNotifier extends Notifier<AuthState> {
             }),
           )
           .timeout(const Duration(seconds: 15));
+    } on TimeoutException catch (e) {
+      debugPrint('Profile update: no response in time ($e). The request was not '
+          'cancelled and may still have been applied.');
+      return null;
+    } catch (e) {
+      debugPrint('Profile update transport error: ${e.runtimeType}: $e');
+      return null;
+    }
+  }
 
-      if (response.statusCode == 200) {
+  /// Saves the profile server-side, then brings the local session up to date.
+  ///
+  /// The two halves are kept apart on purpose. `PUT /auth/profile` commits
+  /// before it replies, so once a 200 comes back the change *is* saved and
+  /// nothing after that point may report it as a failure. The previous version
+  /// wrapped the request, the JSON decode, the state assignment and the
+  /// SharedPreferences write in one `catch` that answered "Network timeout or
+  /// connection error" to every exception - so a failure in any of the local
+  /// steps was shown to the user as a network timeout over a change the server
+  /// had already committed. That is the "it says it failed but it saved" bug.
+  ///
+  /// A real timeout does not mean failure either: `Future.timeout` stops
+  /// waiting for the response, it does not cancel the request, so the write
+  /// usually still lands. That case asks the server what it actually holds
+  /// instead of guessing.
+  Future<Map<String, dynamic>> updateProfile(
+    String name,
+    String nic,
+    String gender,
+    String phone,
+  ) async {
+    if (state.token.isEmpty || state.token.startsWith('simulated')) {
+      final localState = state.copyWith(
+        userName: name,
+        userNic: nic,
+        userGender: gender,
+        userPhone: phone,
+      );
+      state = localState;
+      await _saveSession(localState);
+      return {'success': true, 'message': 'Profile updated successfully!'};
+    }
+
+    final response = await _putProfile(name, nic, gender, phone);
+    if (response == null) {
+      return _confirmProfileUpdate(name, nic, gender, phone);
+    }
+
+    if (response.statusCode == 401) {
+      await logout();
+      return {'success': false, 'message': 'Session expired. Please sign in again.'};
+    }
+
+    if (response.statusCode != 200) {
+      String errorMsg = 'Failed to update profile. Please try again.';
+      try {
         final data = json.decode(response.body);
-        final serverState = state.copyWith(
-          userName: data['full_name'] ?? name,
-          userNic: data['nic_number'] ?? nic,
-          userGender: data['gender'] ?? gender,
-          userPhone: data['phone_number'] ?? phone,
-        );
-        state = serverState;
-        await _saveSession(serverState);
-        return {'success': true, 'message': 'Profile updated successfully!'};
-      } else if (response.statusCode == 401) {
-        await logout();
-        return {'success': false, 'message': 'Session expired. Please sign in again.'};
-      } else {
-        String errorMsg = 'Failed to update profile. Please try again.';
-        try {
-          final data = json.decode(response.body);
-          if (data is Map && data['detail'] != null) {
-            errorMsg = data['detail'] is String ? data['detail'] : json.encode(data['detail']);
-          }
-        } catch (_) {}
-        return {'success': false, 'message': errorMsg};
+        if (data is Map && data['detail'] != null) {
+          errorMsg = data['detail'] is String ? data['detail'] : json.encode(data['detail']);
+        }
+      } catch (_) {}
+      return {'success': false, 'message': errorMsg};
+    }
+
+    // Saved. Everything below only refreshes the local copy, and none of it can
+    // turn a committed change back into an error.
+    try {
+      final data = json.decode(response.body);
+      if (data is Map<String, dynamic>) {
+        await _adoptProfile(data);
       }
     } catch (e) {
-      debugPrint('Error updating profile: $e');
-      return {'success': false, 'message': 'Network timeout or connection error. Please try again.'};
+      debugPrint('Profile saved, but the response could not be read: '
+          '${e.runtimeType}: $e');
     }
+    return {'success': true, 'message': 'Profile updated successfully!'};
+  }
+
+  /// Decides what to tell the user when the update's response never arrived.
+  ///
+  /// Re-reads the profile and compares it with what was submitted, so the
+  /// answer reflects what the server actually has rather than assuming the
+  /// worst. Only a request we cannot get an answer to at all is reported as a
+  /// connection problem, and it says the outcome is unknown - not that the
+  /// save failed.
+  Future<Map<String, dynamic>> _confirmProfileUpdate(
+    String name,
+    String nic,
+    String gender,
+    String phone,
+  ) async {
+    final data = await _fetchProfile(const Duration(seconds: 10));
+    if (data == null) {
+      return {
+        'success': false,
+        'message': 'Connection problem. We could not confirm whether your '
+            'changes were saved, so please reopen this screen to check.',
+      };
+    }
+
+    await _adoptProfile(data);
+
+    final applied =
+        (data['full_name'] ?? '').toString().trim() == name.trim() &&
+            (data['nic_number'] ?? '').toString().trim().toUpperCase() ==
+                nic.trim().toUpperCase() &&
+            (data['gender'] ?? '').toString().trim() == gender.trim() &&
+            normalizePhone((data['phone_number'] ?? '').toString()) ==
+                normalizePhone(phone);
+
+    if (applied) {
+      return {'success': true, 'message': 'Profile updated successfully!'};
+    }
+    return {'success': false, 'message': 'Could not save your changes. Please try again.'};
   }
 
   /// Signs out and waits for it to actually be on disk.
@@ -629,3 +728,29 @@ class AuthNotifier extends Notifier<AuthState> {
 }
 
 final authProvider = NotifierProvider<AuthNotifier, AuthState>(() => AuthNotifier());
+
+/// The identity of the signed-in session, and nothing else.
+///
+/// Session-scoped providers must watch this rather than [authProvider]. They
+/// only need to know whether someone is signed in and who, but watching the
+/// whole [AuthState] rebuilds them whenever *any* field changes - so editing a
+/// name on the profile screen disposed the notifications notifier, closed its
+/// WebSocket, reconnected and refetched the list, on a screen that has nothing
+/// to do with notifications.
+///
+/// Records compare structurally, so `select` only notifies when one of these
+/// three values actually changes. Add a field here only if a provider needs to
+/// reload when it changes.
+typedef SessionKey = ({bool isAuthenticated, String role, String token});
+
+final sessionProvider = Provider<SessionKey>(
+  (ref) => ref.watch(
+    authProvider.select(
+      (auth) => (
+        isAuthenticated: auth.isAuthenticated,
+        role: auth.role,
+        token: auth.token,
+      ),
+    ),
+  ),
+);

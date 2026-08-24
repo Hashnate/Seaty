@@ -42,9 +42,9 @@ class FavouritesState {
 class FavouritesNotifier extends Notifier<FavouritesState> {
   @override
   FavouritesState build() {
-    final auth = ref.watch(authProvider);
+    final session = ref.watch(sessionProvider);
 
-    if (auth.isAuthenticated) {
+    if (session.isAuthenticated) {
       Future.microtask(() => loadFavourites());
     }
 

@@ -49,10 +49,13 @@ a change is verified by tests — verify by reading the affected paths, or by ru
   breaks fresh deploys.
 - **The backend must run single-process.** All three WebSocket managers and the OTP store are
   module-level dicts. Never suggest `--workers > 1` or replicas without a shared broker.
-- **Each authenticated WebSocket pins a DB connection for its whole lifetime**
-  (`tracking.py`, `notifications.py` both hold a `SessionLocal()`), and the engine uses
-  SQLAlchemy's defaults — 15 connections total. That caps the platform at ~15 concurrent
-  signed-in users. Don't add another long-lived-session socket without fixing this.
+- **Nothing may hold a DB session across an `await`.** A `Session` keeps its pooled connection
+  from its first query until commit/rollback/close, so a socket that authenticates once and then
+  waits in `receive_text()` used to pin a connection — and an open transaction — for as long as
+  the user stayed signed in. That, not the hardware, was the ~15-concurrent-user ceiling. Outside
+  a request use `with session_scope() as db:` (`database.py`) around the shortest span that does
+  the work: authenticate in one scope, do each message's work in its own. `tracking.py` and
+  `notifications.py` are the worked examples.
 - **`ENVIRONMENT=development` makes every OTP `123456`** and echoes it in the send response. It is
   the default in `config.py`. Verification itself is never skipped, in any environment.
 - **`TEST_OTP_ACCOUNTS` holds fixed-OTP accounts for App Store / Play review** (`phone:code,…`,
@@ -104,8 +107,11 @@ When adding an endpoint:
 - Never trust a client-supplied price, role, or total — recompute server-side.
 - Check ownership, not just role, before mutating a booking or payment (`initiate_payment` is the
   cautionary example — its docstring claims it does; it doesn't).
-- Don't call blocking I/O (`send_sms`, `messaging.send`) from an `async def` — one event loop
-  serves every WebSocket in the process.
+- Don't call blocking I/O (`send_sms`, `send_fcm_push`, `messaging.send`) from an `async def` —
+  one event loop serves every WebSocket in the process, so a 10-second SMS freezes all of them.
+  Wrap it: `await run_in_threadpool(send_sms, …)` from `starlette.concurrency`. A plain `def`
+  endpoint already runs in the threadpool and needs no wrapper — that is why `send_otp` calls
+  `send_sms` directly and `_send_booking_notifications` may not.
 
 ## Conventions
 
@@ -113,6 +119,11 @@ When adding an endpoint:
   Money is `Numeric(10,2)`, IDs are UUIDs, timestamps are `DateTime(timezone=True)`.
 - **Mobile**: Riverpod `NotifierProvider`, no code generation. Theme values come from
   `theme/app_colors.dart` and `theme/app_text_styles.dart` — don't hard-code colours.
+- **Mobile session-scoped providers watch `sessionProvider`, never `authProvider`.** It exposes
+  only `(isAuthenticated, role, token)`, so a provider reloads when the session changes and not
+  when the user edits their name — watching the whole `AuthState` made a profile save tear down
+  the notifications WebSocket and refetch everything. `ref.read(authProvider)` inside a method is
+  fine; it does not subscribe.
 - **Admin**: function components, inline styles referencing CSS variables, no UI library, no
   state library beyond context.
 - **Commits**: Conventional Commits, optionally scoped — `feat(mobile):`, `fix(ios):`,

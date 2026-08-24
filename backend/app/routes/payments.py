@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 from decimal import Decimal, InvalidOperation
 from typing import List, Optional
 from uuid import UUID
@@ -123,7 +124,11 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
                         f"Support: {support_tel}\n\n"
                         "Present SMS / QR code upon boarding. Thank you!"
                     )
-                    send_sms(passenger.phone_number, sms_text)
+                    # Blocking urllib call with a 10 s timeout. This function
+                    # is `async`, so calling it directly held the event loop -
+                    # and every WebSocket in the process - for the duration of
+                    # the SMS, on every booking confirmation.
+                    await run_in_threadpool(send_sms, passenger.phone_number, sms_text)
                 except Exception as sms_err:
                     print(f"SMS Dispatch Error: {sms_err}")
 

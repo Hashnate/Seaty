@@ -48,13 +48,13 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
 
   @override
   NotificationsState build() {
-    final auth = ref.watch(authProvider);
+    final session = ref.watch(sessionProvider);
 
     ref.onDispose(() {
       _notificationsChannel?.sink.close();
     });
 
-    if (auth.isAuthenticated) {
+    if (session.isAuthenticated) {
       Future.microtask(() {
         fetchNotifications();
         startNotificationsListener();

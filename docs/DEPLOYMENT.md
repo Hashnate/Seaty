@@ -244,19 +244,17 @@ Still absent: HSTS (belongs at the TLS terminator in front of this container) an
 
 ## Capacity and scaling
 
-**The current hard ceiling is roughly 15 concurrent signed-in users**, and it is a database
-connection limit, not a CPU or memory one.
+Connection use is now proportional to *concurrent work*, not to how many people are signed in.
+The engine runs `pool_size=10, max_overflow=20` (30 total) with `pool_pre_ping=True` and
+`pool_recycle=1800`, and no handler holds a session across an `await`: WebSockets authenticate in
+a `session_scope()` that closes before the socket starts, and the GPS driver loop opens one scope
+per fix.
 
-`database.py` creates the engine with SQLAlchemy's defaults — `pool_size=5`, `max_overflow=10`,
-15 total — and both authenticated WebSocket handlers hold a session open for the whole life of
-the socket. Every signed-in app keeps the notifications socket connected, so each user consumes a
-pooled connection until they close the app. Past 15, requests block for `pool_timeout` (30 s) and
-then fail with `QueuePool limit of size 5 overflow 10 reached`. The symptom is a total API outage
-that looks like a database fault and clears on its own as users disconnect.
-
-If you see that error, the immediate mitigation is to raise the pool
-(`create_engine(..., pool_size=20, max_overflow=30, pool_pre_ping=True)`); the real fix is to stop
-holding a session across the socket lifetime. See [CODE_QUALITY.md](CODE_QUALITY.md) P1.
+Until this changed the ceiling was roughly **15 concurrent signed-in users** — each open
+notifications socket pinned one of 15 pooled connections, and past that every REST request
+blocked for `pool_timeout` (30 s) and then failed with `QueuePool limit of size 5 overflow 10
+reached`. If that error ever reappears, look for a new session held across an `await` before
+reaching for a bigger pool.
 
 Separately, the backend must run as a **single process**. All three WebSocket managers (seat
 updates, GPS tracking, notifications) hold connections in module-level dictionaries, and the OTP

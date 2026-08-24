@@ -281,50 +281,60 @@ by several ORM round trips.
 
 ## Performance and scalability
 
-### P1 — Long-lived WebSockets exhaust the database pool (hard ceiling: ~15)
+### P1 — Long-lived WebSockets exhausted the database pool — **fixed**
 
-The single most severe scaling limit in the system, and it is not in any current doc.
+Was the single most severe scaling limit in the system: a hard ceiling of ~15 concurrent
+signed-in users.
 
-[`database.py:7`](../backend/app/database.py#L7) creates the engine with no pool arguments, so
-SQLAlchemy's `QueuePool` defaults apply: **`pool_size=5`, `max_overflow=10` — 15 connections
-total.** Both authenticated WebSocket handlers open a session and hold it for the entire life of
-the socket:
+Both authenticated WebSocket handlers opened a `SessionLocal()` and held it for the entire life
+of the socket, against an engine built with SQLAlchemy's defaults (`pool_size=5`,
+`max_overflow=10` — 15 connections total). A `Session` holds its pooled connection from its first
+query until commit/rollback/close, so every signed-in app and admin tab pinned one connection and
+one idle transaction. The 16th user blocked for `pool_timeout` (30 s) and then every REST request
+failed with `TimeoutError: QueuePool limit of size 5 overflow 10 reached` — a total API outage
+that looked like a database fault and cleared when users closed the app.
 
-- [`tracking.py:97`](../backend/app/routes/tracking.py#L97) — `db: Session = SessionLocal()`,
-  closed in `finally` when the driver or passenger disconnects.
-- [`notifications.py:139`](../backend/app/routes/notifications.py#L139) — same, and **every
-  signed-in app and admin browser tab holds one of these open continuously**.
+The standard now:
 
-So the 16th concurrent connected user blocks for `pool_timeout` (30 s) and then every REST
-request starts failing with `TimeoutError: QueuePool limit of size 5 overflow 10 reached`. The
-symptom is a total API outage that looks like a database problem and clears when users close
-the app.
+- [`database.py`](../backend/app/database.py) exposes `session_scope()` — the `get_db` lifecycle
+  as a context manager — for code that has no dependency injection to hand, and configures the
+  pool explicitly: `pool_size=10`, `max_overflow=20`, `pool_pre_ping=True` (stale connections
+  after a Postgres restart no longer fail the first request on each), `pool_recycle=1800`.
+- [`notifications.py`](../backend/app/routes/notifications.py) and
+  [`tracking.py`](../backend/app/routes/tracking.py) authenticate inside a scope that closes
+  before the socket starts; the GPS driver loop opens one scope per fix and the passenger branch
+  reads the last known location into a plain dict before its scope closes.
+- **The rule: no session lives across an `await`.** Connection use is proportional to concurrent
+  work, not to how many people are signed in.
 
-There is also no `pool_pre_ping=True`, so after a Postgres restart the pooled connections are
-stale and the first request on each fails.
+Still open: putting fan-out behind Redis so the socket layer stops needing the ORM at all — the
+precondition for running more than one process (see [DEPLOYMENT.md](DEPLOYMENT.md#scaling)).
 
-**Fix, in order**: (1) don't hold a session across the socket lifetime — open one per message or
-use a short-lived session for the initial read and the writes; (2) raise `pool_size` and set
-`pool_pre_ping=True`; (3) put fan-out behind Redis so the socket layer stops needing the ORM at
-all (also the precondition for running more than one process — see
-[DEPLOYMENT.md](DEPLOYMENT.md#scaling)).
-
-### P2 — Blocking I/O inside async handlers stalls the whole server
+### P2 — Blocking I/O inside async handlers stalled the whole server — **fixed**
 
 The backend is one process with one event loop, so any synchronous network call inside an
-`async def` freezes **everything**, including all live GPS streams and seat updates.
+`async def` freezes **everything**, including all live GPS streams and seat updates. These three
+did:
 
 | Call | Where | Blocking for |
 | ---- | ----- | ------------ |
-| `send_sms` — `urllib.request.urlopen` | [`sms_service.py:57`](../backend/app/services/sms_service.py#L57), awaited via `_send_booking_notifications` | up to its 10 s timeout, on every booking confirmation and every OTP |
-| `messaging.send` — Firebase HTTP | [`notifications.py:75`](../backend/app/routes/notifications.py#L75) | one round trip per notification |
-| the broadcast loop | [`notifications.py:249`](../backend/app/routes/notifications.py#L249) | one blocking FCM call **per user, sequentially** |
+| `send_sms` — `urllib.request.urlopen` | [`payments.py`](../backend/app/routes/payments.py), inside the `async` `_send_booking_notifications` | up to its 10 s timeout, on every booking confirmation |
+| `send_fcm_push` → `messaging.send` | [`notifications.py`](../backend/app/routes/notifications.py), inside the `async` `create_and_send_notification` | one Firebase round trip per notification |
+| the broadcast loop | [`notifications.py`](../backend/app/routes/notifications.py) | one blocking FCM call **per user, sequentially** — a 1,000-user broadcast froze the process for ~1,000 HTTPS calls |
 
-An admin broadcast to 1,000 users is ~1,000 sequential HTTPS calls on the event loop. Nothing
-else in the process runs until it finishes.
+(`send_otp` in `auth.py` also calls `send_sms`, but it is a plain `def` endpoint, so FastAPI
+already runs it in the threadpool. That one was never a problem.)
 
-**Fix**: `run_in_threadpool` (or `httpx.AsyncClient`) for both, and `messaging.send_each_for_multicast`
-for broadcasts.
+All three now go through `run_in_threadpool`. An admin broadcast is still one FCM call per user,
+but each runs off the loop.
+
+**The standard**: blocking I/O called from an `async def` goes through
+`await run_in_threadpool(fn, …)` (`starlette.concurrency`). A plain `def` endpoint already runs in
+the threadpool and needs no wrapper — which is why `send_otp` calls `send_sms` directly while
+`_send_booking_notifications` must not.
+
+Still worth doing: `messaging.send_each_for_multicast` for broadcasts, so a 1,000-user broadcast
+is one call rather than 1,000 threadpool round trips.
 
 ### P3 — Every phone login reads the entire users table
 

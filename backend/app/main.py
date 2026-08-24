@@ -77,7 +77,7 @@ def public_log_root(payload: dict = Body(...)):
 
 import asyncio
 import datetime
-from app.database import SessionLocal
+from app.database import session_scope
 from app import models
 from app.timezone_utils import now_sl, to_sl
 
@@ -85,8 +85,7 @@ async def trip_reminder_scheduler():
     """Background task to send reminders 30 minutes before a trip starts."""
     while True:
         try:
-            db = SessionLocal()
-            try:
+            with session_scope() as db:
                 now = now_sl()
                 thirty_mins_from_now = now + datetime.timedelta(minutes=30)
                 
@@ -128,8 +127,6 @@ async def trip_reminder_scheduler():
                             noti_type="trip_reminder",
                             booking_id=booking.id
                         )
-            finally:
-                db.close()
         except Exception as e:
             print(f"Error in trip_reminder_scheduler: {e}")
             
@@ -140,8 +137,7 @@ async def auto_expire_bookings_scheduler():
     """Background task to auto-expire past bookings periodically."""
     while True:
         try:
-            db = SessionLocal()
-            try:
+            with session_scope() as db:
                 now = now_sl()
                 candidates = db.query(models.Booking).join(models.Trip).filter(
                     models.Booking.booking_status == "confirmed",
@@ -157,8 +153,6 @@ async def auto_expire_bookings_scheduler():
                         b.booking_status = "expired"
 
                 db.commit()
-            finally:
-                db.close()
         except Exception as e:
             print(f"Error in auto_expire_bookings_scheduler: {e}")
 
@@ -190,31 +184,29 @@ async def payment_reconciliation_sweeper():
         except Exception:
             continue  # misconfigured; initiate_payment reports it properly
 
-        db = SessionLocal()
-        try:
-            now = datetime.datetime.now(datetime.timezone.utc)
-            # Give the normal return path a couple of minutes before stepping
-            # in, and stop once Bancstac's session has expired.
-            candidates = db.query(models.Payment).filter(
-                models.Payment.status == "pending",
-                models.Payment.gateway_transaction_id.isnot(None),
-                models.Payment.created_at <= now - datetime.timedelta(minutes=2),
-                models.Payment.created_at >= now - datetime.timedelta(minutes=35),
-            ).all()
+        with session_scope() as db:
+            try:
+                now = datetime.datetime.now(datetime.timezone.utc)
+                # Give the normal return path a couple of minutes before stepping
+                # in, and stop once Bancstac's session has expired.
+                candidates = db.query(models.Payment).filter(
+                    models.Payment.status == "pending",
+                    models.Payment.gateway_transaction_id.isnot(None),
+                    models.Payment.created_at <= now - datetime.timedelta(minutes=2),
+                    models.Payment.created_at >= now - datetime.timedelta(minutes=35),
+                ).all()
 
-            if candidates:
-                from app.routes.payments import finalise_payment
-                print(f"[payment-sweeper] re-checking {len(candidates)} pending payment(s)")
-                for payment in candidates:
-                    try:
-                        if await finalise_payment(db, payment):
-                            print(f"[payment-sweeper] recovered payment {payment.id}")
-                    except Exception as e:
-                        print(f"[payment-sweeper] {payment.id}: {e}")
-        except Exception as e:
-            print(f"Error in payment_reconciliation_sweeper: {e}")
-        finally:
-            db.close()
+                if candidates:
+                    from app.routes.payments import finalise_payment
+                    print(f"[payment-sweeper] re-checking {len(candidates)} pending payment(s)")
+                    for payment in candidates:
+                        try:
+                            if await finalise_payment(db, payment):
+                                print(f"[payment-sweeper] recovered payment {payment.id}")
+                        except Exception as e:
+                            print(f"[payment-sweeper] {payment.id}: {e}")
+            except Exception as e:
+                print(f"Error in payment_reconciliation_sweeper: {e}")
 
 
 @app.on_event("startup")
