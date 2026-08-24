@@ -560,6 +560,56 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// Permanently deletes the user account on the server and clears all local session data.
+  /// Complies with Apple App Store Guideline 5.1.1(v).
+  Future<bool> deleteAccount() async {
+    final oldToken = state.token;
+    bool serverSuccess = false;
+
+    if (oldToken.isNotEmpty && !oldToken.startsWith('simulated')) {
+      try {
+        final settings = ref.read(settingsProvider);
+        final response = await http
+            .delete(
+              Uri.parse('${settings.apiBaseUrl}/auth/me'),
+              headers: {
+                'Authorization': 'Bearer $oldToken',
+                'Content-Type': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 10));
+
+        serverSuccess = response.statusCode == 200 || response.statusCode == 204;
+      } catch (e) {
+        debugPrint('Error deleting account on server: $e');
+      }
+    } else {
+      serverSuccess = true;
+    }
+
+    // Always wipe local session state completely
+    final newState = AuthState(
+      isAuthenticated: false,
+      role: 'passenger',
+      userName: 'Guest User',
+      token: '',
+      userNic: '',
+      userGender: '',
+      userPhone: '',
+    );
+    state = newState;
+    clearSessionScopedCaches();
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    try {
+      await Future.wait([for (final k in _kSessionKeys) prefs.remove(k)]);
+    } catch (e) {
+      debugPrint('Error clearing session on account delete: $e');
+    }
+
+    return serverSuccess;
+  }
+
   /// Drops every provider holding data belonging to the signed-out account.
   ///
   /// These providers live for the lifetime of the app, so without this the next

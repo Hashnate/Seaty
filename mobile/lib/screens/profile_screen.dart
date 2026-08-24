@@ -87,6 +87,202 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     }
   }
 
+  void _showMoreOptionsMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'More Options',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF0A2540),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: Color(0xFFDC2626),
+                    size: 20,
+                  ),
+                ),
+                title: const Text(
+                  'Delete Account',
+                  style: TextStyle(
+                    color: Color(0xFFDC2626),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Permanently remove your account and personal data',
+                  style: TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 12,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showDeleteAccountDialog(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDeleteAccountDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: Colors.white,
+        titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
+        contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Color(0xFFFEE2E2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.delete_forever_rounded,
+                color: Color(0xFFDC2626),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Delete Account?',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0A2540),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to permanently delete your account? All your profile information, booking history, notifications, and preferences will be permanently erased.\n\nThis action cannot be undone.',
+          style: TextStyle(
+            fontSize: 13,
+            color: Color(0xFF475569),
+            height: 1.5,
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                  ),
+                  child: const Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: Color(0xFF475569),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    _performAccountDeletion();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDC2626),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Delete',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _performAccountDeletion() async {
+    setState(() => _isSaving = true);
+
+    final success = await ref.read(authProvider.notifier).deleteAccount();
+
+    if (mounted) {
+      setState(() => _isSaving = false);
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      SeatyNotifications.show(
+        context,
+        success
+            ? 'Your account has been deleted.'
+            : 'Account deletion initiated. Local session cleared.',
+        isError: !success,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
@@ -107,6 +303,8 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                 child: BoldGradientHeroHeading(
                   title: 'Profile',
                   subtitle: 'Manage your personal details and preferences.',
+                  trailingIcon: Icons.more_vert_rounded,
+                  onTrailingTap: () => _showMoreOptionsMenu(context),
                 ),
               ),
               const SizedBox(height: 12),
@@ -418,6 +616,27 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
                               alpha: 0.04,
                             ),
                             elevation: 0,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Delete Account Action
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: _isSaving ? null : () => _showDeleteAccountDialog(context),
+                          icon: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: Color(0xFFEF4444),
+                            size: 16,
+                          ),
+                          label: const Text(
+                            'Delete Account',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFEF4444),
+                            ),
                           ),
                         ),
                       ),
