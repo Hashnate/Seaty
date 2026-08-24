@@ -240,28 +240,14 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
               }
             },
           ),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Text(
-                'Secure Checkout',
-                style: TextStyle(
-                  color: Color(0xFF0A2540),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.3,
-                ),
-              ),
-              Text(
-                'Commercial Bank of Ceylon',
-                style: TextStyle(
-                  color: Color(0xFF64748B),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+          title: const Text(
+            'Secure Checkout',
+            style: TextStyle(
+              color: Color(0xFF0A2540),
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.3,
+            ),
           ),
           actions: [
             TextButton(
@@ -365,7 +351,7 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
               child: Stack(
                 children: [
                   WebViewWidget(controller: _controller),
-                  if (_loading && _progress < 0.5)
+                  if (_loading && _progress < 0.25)
                     Container(
                       color: pageBgColor,
                       child: const Center(
