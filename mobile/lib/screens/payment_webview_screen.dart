@@ -52,7 +52,7 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
     super.initState();
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.white)
+      ..setBackgroundColor(const Color(0xFFEAEFF5))
       ..setNavigationDelegate(
         NavigationDelegate(
           onProgress: (progress) {
@@ -194,6 +194,7 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
   @override
   Widget build(BuildContext context) {
     final formattedAmount = _formatAmount(widget.amount);
+    const pageBgColor = Color(0xFFEAEFF5);
 
     return PopScope(
       canPop: false,
@@ -204,19 +205,27 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: pageBgColor,
         appBar: AppBar(
           systemOverlayStyle: SystemUiOverlayStyle.dark,
-          backgroundColor: Colors.white,
+          backgroundColor: pageBgColor,
           elevation: 0,
           scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
           centerTitle: false,
           leading: IconButton(
             icon: Container(
               padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF1F5F9),
+              decoration: BoxDecoration(
+                color: Colors.white,
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
               child: const Icon(
                 Icons.arrow_back_ios_new_rounded,
@@ -278,8 +287,8 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
             // Prominent, high-contrast Payable Amount Card
             Container(
               width: double.infinity,
-              margin: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
                 color: const Color(0xFF0A2540),
                 borderRadius: BorderRadius.circular(14),
@@ -293,77 +302,48 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF10B981),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          const Text(
-                            'AMOUNT TO PAY',
-                            style: TextStyle(
-                              color: Color(0xFF93C5FD),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF10B981),
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                      const SizedBox(height: 2),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            const TextSpan(
-                              text: 'LKR ',
-                              style: TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            TextSpan(
-                              text: formattedAmount,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                          ],
+                      const SizedBox(width: 8),
+                      const Text(
+                        'AMOUNT TO PAY',
+                        style: TextStyle(
+                          color: Color(0xFF93C5FD),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
                         ),
                       ),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.15)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.lock_rounded, color: Color(0xFF60A5FA), size: 13),
-                        SizedBox(width: 4),
-                        Text(
-                          '256-Bit SSL',
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        const TextSpan(
+                          text: 'LKR ',
                           style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
+                            color: Color(0xFF94A3B8),
+                            fontSize: 13,
                             fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        TextSpan(
+                          text: formattedAmount,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.3,
                           ),
                         ),
                       ],
@@ -376,12 +356,10 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
             if (_loading)
               LinearProgressIndicator(
                 value: _progress > 0 ? _progress : null,
-                backgroundColor: const Color(0xFFE2E8F0),
+                backgroundColor: const Color(0xFFCBD5E1),
                 valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
                 minHeight: 2.5,
-              )
-            else
-              const Divider(height: 1, thickness: 1, color: Color(0xFFE2E8F0)),
+              ),
             // WebView host
             Expanded(
               child: Stack(
@@ -389,7 +367,7 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
                   WebViewWidget(controller: _controller),
                   if (_loading && _progress < 0.5)
                     Container(
-                      color: Colors.white,
+                      color: pageBgColor,
                       child: const Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
