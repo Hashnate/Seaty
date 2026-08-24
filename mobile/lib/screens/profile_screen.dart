@@ -47,26 +47,42 @@ class _ProfileEditScreenState extends ConsumerState<ProfileEditScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final success = await ref.read(authProvider.notifier).updateProfile(
-      _nameController.text.trim(),
-      _nicController.text.trim().toUpperCase(),
-      _gender,
-      _phoneController.text.trim(),
-    );
-
-    if (mounted) {
-      setState(() => _isSaving = false);
-      SeatyNotifications.show(
-        context,
-        success
-            ? 'Profile updated successfully!'
-            : 'Failed to update profile. Please try again.',
-        isError: !success,
+    try {
+      final res = await ref.read(authProvider.notifier).updateProfile(
+        _nameController.text.trim(),
+        _nicController.text.trim().toUpperCase(),
+        _gender,
+        _phoneController.text.trim(),
       );
-      if (success) {
-        if (Navigator.canPop(context)) {
-          Navigator.pop(context);
+
+      if (mounted) {
+        final bool success = res['success'] == true;
+        final String message = res['message'] ??
+            (success
+                ? 'Profile updated successfully!'
+                : 'Failed to update profile. Please try again.');
+        SeatyNotifications.show(
+          context,
+          message,
+          isError: !success,
+        );
+        if (success) {
+          if (Navigator.canPop(context)) {
+            Navigator.pop(context);
+          }
         }
+      }
+    } catch (e) {
+      if (mounted) {
+        SeatyNotifications.show(
+          context,
+          'An error occurred while saving profile. Please try again.',
+          isError: true,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
       }
     }
   }

@@ -41,7 +41,7 @@ class SeatyNotifications {
         elevation: 0,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        margin: const EdgeInsets.fromLTRB(24, 0, 24, 96),
         padding: EdgeInsets.zero,
         duration: duration,
         content: Container(

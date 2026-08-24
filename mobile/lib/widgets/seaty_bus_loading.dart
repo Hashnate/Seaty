@@ -200,7 +200,7 @@ class _SideViewBusPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill;
     final innerHubPaint = Paint()
-      ..color = Colors.white
+      ..color = (color == Colors.white) ? const Color(0xFF2563EB) : Colors.white
       ..style = PaintingStyle.fill;
     final centerDotPaint = Paint()
       ..color = color
@@ -221,7 +221,7 @@ class _SideViewBusPainter extends CustomPainter {
     final windowBottom = h * 0.52;
     
     final windowPaint = Paint()
-      ..color = Colors.white
+      ..color = (color == Colors.white) ? const Color(0xFF2563EB) : Colors.white
       ..style = PaintingStyle.fill;
 
     final windowAreaStart = w * 0.08;

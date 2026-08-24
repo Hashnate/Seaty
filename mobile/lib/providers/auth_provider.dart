@@ -440,23 +440,25 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<bool> updateProfile(
+  Future<Map<String, dynamic>> updateProfile(
     String name,
     String nic,
     String gender,
     String phone,
   ) async {
     final settings = ref.read(settingsProvider);
-    final localState = state.copyWith(
-      userName: name,
-      userNic: nic,
-      userGender: gender,
-      userPhone: phone,
-    );
-    state = localState;
-    await _saveSession(localState);
 
-    if (state.token.isEmpty || state.token.startsWith('simulated')) return true;
+    if (state.token.isEmpty || state.token.startsWith('simulated')) {
+      final localState = state.copyWith(
+        userName: name,
+        userNic: nic,
+        userGender: gender,
+        userPhone: phone,
+      );
+      state = localState;
+      await _saveSession(localState);
+      return {'success': true, 'message': 'Profile updated successfully!'};
+    }
 
     try {
       final response = await http
@@ -473,26 +475,36 @@ class AuthNotifier extends Notifier<AuthState> {
               'phone_number': phone,
             }),
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final serverState = state.copyWith(
-          userName: data['full_name'] ?? state.userName,
-          userNic: data['nic_number'] ?? state.userNic,
-          userGender: data['gender'] ?? state.userGender,
-          userPhone: data['phone_number'] ?? state.userPhone,
+          userName: data['full_name'] ?? name,
+          userNic: data['nic_number'] ?? nic,
+          userGender: data['gender'] ?? gender,
+          userPhone: data['phone_number'] ?? phone,
         );
         state = serverState;
         await _saveSession(serverState);
-        return true;
+        return {'success': true, 'message': 'Profile updated successfully!'};
       } else if (response.statusCode == 401) {
         await logout();
+        return {'success': false, 'message': 'Session expired. Please sign in again.'};
+      } else {
+        String errorMsg = 'Failed to update profile. Please try again.';
+        try {
+          final data = json.decode(response.body);
+          if (data is Map && data['detail'] != null) {
+            errorMsg = data['detail'] is String ? data['detail'] : json.encode(data['detail']);
+          }
+        } catch (_) {}
+        return {'success': false, 'message': errorMsg};
       }
     } catch (e) {
       debugPrint('Error updating profile: $e');
+      return {'success': false, 'message': 'Network timeout or connection error. Please try again.'};
     }
-    return false;
   }
 
   /// Signs out and waits for it to actually be on disk.
