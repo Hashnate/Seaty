@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/theme/app_theme.dart';
@@ -226,6 +227,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   int _heroImageIndex = 0;
   late final ScrollController _scrollController;
   double _headerOpacity = 0.0;
+  bool _isHeroVisible = true;
 
   /// How far ahead a journey date can be picked.
   ///
@@ -320,10 +322,20 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
   }
 
   void _onFocusChange() {
+    if (_fromFocusNode.hasFocus || _toFocusNode.hasFocus) {
+      if (!_isHeroVisible) {
+        setState(() => _isHeroVisible = true);
+      }
+    }
     setState(() {});
   }
 
   void _onScroll() {
+    if (_scrollController.hasClients && _scrollController.offset <= 10 && !_isHeroVisible) {
+      setState(() {
+        _isHeroVisible = true;
+      });
+    }
     final offset = _scrollController.offset;
     final newOpacity = (offset / 100.0).clamp(0.0, 1.0);
     if (newOpacity != _headerOpacity) {
@@ -504,7 +516,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       });
 
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double heroHeight = 310.0 + topPadding;
+    final double heroHeight = 275.0 + topPadding;
 
     // The welcome text + search card are bottom-anchored inside the fixed-height
     // hero, so anything added to that block grows *upwards*. The "Clear all
@@ -515,485 +527,508 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
 
     final double cardWidth = MediaQuery.of(context).size.width - 40;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Column(
-          children: [
-            // ─── Fixed Non-Scrollable Auto-Sliding 3-Image Carousel Hero Header ───
-            SizedBox(
-              height: heroHeight,
-              width: double.infinity,
-              child: ClipRRect(
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(32),
-                  bottomRight: Radius.circular(32),
-                ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 1. Full-bleed Auto-sliding 3-Image Carousel Background (3s interval)
-                    PageView.builder(
-                      controller: _heroPageController,
-                      itemCount: _heroImages.length,
-                      onPageChanged: (index) {
-                        setState(() {
-                          _heroImageIndex = index;
-                        });
-                      },
-                      itemBuilder: (context, index) {
-                        final source = _heroImages[index];
-                        final isRemote = source.startsWith('http');
-                        // A broken/unreachable admin banner must not leave a
-                        // blank hero, so both paths fall back to the branded
-                        // placeholder below.
-                        Widget placeholder() => Container(
-                              color: const Color(0xFF0F172A),
-                              child: const Center(
-                                child: Icon(
-                                  Icons.directions_bus_rounded,
-                                  color: Colors.white24,
-                                  size: 64,
-                                ),
-                              ),
-                            );
-
-                        if (isRemote) {
-                          // Banners are precached before adoption, so this
-                          // normally paints immediately. If the cache was
-                          // evicted, show the bundled artwork rather than a
-                          // dark box - that dark frame was the visible flicker.
-                          Widget bundledStandIn() => Image.asset(
-                                _bundledHeroImages[index % _bundledHeroImages.length],
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                height: double.infinity,
-                                errorBuilder: (context, error, stackTrace) => placeholder(),
-                              );
-                          return Image.network(
-                            source,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
-                            // Hold the branded backdrop while bytes arrive
-                            // rather than flashing white.
-                            loadingBuilder: (context, child, progress) =>
-                                progress == null ? child : bundledStandIn(),
-                            errorBuilder: (context, error, stackTrace) => bundledStandIn(),
-                          );
-                        }
-
-                        return Image.asset(
-                          source,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          height: double.infinity,
-                          errorBuilder: (context, error, stackTrace) => placeholder(),
-                        );
-                      },
-                    ),
-
-                    // Sheer Gradient Overlay for contrast while preserving 100% image visibility
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.black.withValues(alpha: 0.55),
-                            Colors.black.withValues(alpha: 0.15),
-                            Colors.black.withValues(alpha: 0.6),
-                          ],
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
+    return NotificationListener<UserScrollNotification>(
+      onNotification: (notification) {
+        if (notification.direction == ScrollDirection.reverse) {
+          // User scrolling down: hide hero for full view of trips
+          if (_isHeroVisible && _scrollController.hasClients && _scrollController.offset > 20) {
+            setState(() => _isHeroVisible = false);
+          }
+        } else if (notification.direction == ScrollDirection.forward) {
+          // User scrolling up: show hero again
+          if (!_isHeroVisible) {
+            setState(() => _isHeroVisible = true);
+          }
+        }
+        return false;
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            children: [
+              // ─── Collapsible Auto-Sliding Hero Header ───
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeInOutCubic,
+                height: _isHeroVisible ? heroHeight : 0,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _isHeroVisible ? 1.0 : 0.0,
+                  child: SingleChildScrollView(
+                    physics: const NeverScrollableScrollPhysics(),
+                    child: SizedBox(
+                      height: heroHeight,
+                      width: double.infinity,
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(28),
+                          bottomRight: Radius.circular(28),
                         ),
-                      ),
-                    ),
-
-                    // 2. Fixed App Bar (Seaty logo & Bell icon)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Row(
-                                children: [
-                                  Image.asset(
-                                    'assets/images/app_icon.png',
-                                    width: 28,
-                                    height: 28,
-                                    color: Colors.white,
-                                    fit: BoxFit.contain,
-                                    errorBuilder: (context, error, stackTrace) => Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF2563EB),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: const Icon(
-                                        Icons.directions_bus_rounded,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'Seaty',
-                                    style: TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // 3. Welcome text (brought VERY CLOSE to cart) + Search Card
-                    SafeArea(
-                      bottom: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.end,
+                        child: Stack(
+                          fit: StackFit.expand,
                           children: [
-                            // Welcome line and the clear-filters chip share one
-                            // row, so toggling the chip never changes this
-                            // block's height (it is bottom-anchored, and any
-                            // extra height pushes the text under the app bar).
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                const Expanded(
-                                  child: Text(
-                                    'Where are you traveling today?',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w900,
-                                      color: Colors.white,
-                                      letterSpacing: -0.4,
-                                      shadows: [
-                                        Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0, 1)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                if (hasActiveFilters) ...[
-                                  const SizedBox(width: 8),
-                                  TextButton(
-                                    onPressed: () {
-                                      setState(() {
-                                        _selectedFrom = '';
-                                        _selectedTo = '';
-                                        _selectedDate = null;
-                                        _fromController.text = '';
-                                        _toController.text = '';
-                                        _dateController.text = 'All Dates';
-                                      });
-                                      ref.read(tripsProvider.notifier).loadTrips();
-                                    },
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      backgroundColor: Colors.black.withValues(alpha: 0.5),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    ),
-                                    child: const Text(
-                                      'Clear all filters',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 11,
+                            // 1. Full-bleed Auto-sliding 3-Image Carousel Background (3s interval)
+                            PageView.builder(
+                              controller: _heroPageController,
+                              itemCount: _heroImages.length,
+                              onPageChanged: (index) {
+                                setState(() {
+                                  _heroImageIndex = index;
+                                });
+                              },
+                              itemBuilder: (context, index) {
+                                final source = _heroImages[index];
+                                final isRemote = source.startsWith('http');
+                                // A broken/unreachable admin banner must not leave a
+                                // blank hero, so both paths fall back to the branded
+                                // placeholder below.
+                                Widget placeholder() => Container(
+                                      color: const Color(0xFF0F172A),
+                                      child: const Center(
+                                        child: Icon(
+                                          Icons.directions_bus_rounded,
+                                          color: Colors.white24,
+                                          size: 64,
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: 8),
+                                    );
 
-                            // Main Search Input Card ("from to card") - Anchored at bottom of image
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Glassmorphic / Clean White Search Card
-                                Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.96),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: Colors.white, width: 1.5),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.18),
-                                        blurRadius: 20,
-                                        offset: const Offset(0, 6),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
+                                if (isRemote) {
+                                  // Banners are precached before adoption, so this
+                                  // normally paints immediately. If the cache was
+                                  // evicted, show the bundled artwork rather than a
+                                  // dark box - that dark frame was the visible flicker.
+                                  Widget bundledStandIn() => Image.asset(
+                                        _bundledHeroImages[index % _bundledHeroImages.length],
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        errorBuilder: (context, error, stackTrace) => placeholder(),
+                                      );
+                                  return Image.network(
+                                    source,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: double.infinity,
+                                    // Hold the branded backdrop while bytes arrive
+                                    // rather than flashing white.
+                                    loadingBuilder: (context, child, progress) =>
+                                        progress == null ? child : bundledStandIn(),
+                                    errorBuilder: (context, error, stackTrace) => bundledStandIn(),
+                                  );
+                                }
+
+                                return Image.asset(
+                                  source,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  errorBuilder: (context, error, stackTrace) => placeholder(),
+                                );
+                              },
+                            ),
+
+                            // Sheer Gradient Overlay for contrast while preserving 100% image visibility
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.black.withValues(alpha: 0.55),
+                                    Colors.black.withValues(alpha: 0.15),
+                                    Colors.black.withValues(alpha: 0.6),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+
+                            // 2. Fixed App Bar (Seaty logo & Bell icon)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: SafeArea(
+                                bottom: false,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      // From & To Inputs + Swap Button
-                                      Stack(
-                                        clipBehavior: Clip.none,
+                                      Row(
                                         children: [
-                                          Column(
-                                            children: [
-                                              CompositedTransformTarget(
-                                                link: _fromLayerLink,
-                                                child: _buildSearchInputRow(
-                                                  icon: Icons.directions_bus_filled_outlined,
-                                                  hint: 'From',
-                                                  controller: _fromController,
-                                                  focusNode: _fromFocusNode,
-                                                  onChanged: (val) {
-                                                    setState(() {
-                                                      _selectedFrom = val;
-                                                    });
-                                                  },
-                                                  onTap: () {
-                                                    if (_fromController.text == 'All') {
-                                                      _fromController.clear();
-                                                      setState(() {
-                                                        _selectedFrom = '';
-                                                      });
-                                                    }
-                                                  },
-                                                ),
+                                          Image.asset(
+                                            'assets/images/app_icon.png',
+                                            width: 26,
+                                            height: 26,
+                                            color: Colors.white,
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (context, error, stackTrace) => Container(
+                                              padding: const EdgeInsets.all(5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF2563EB),
+                                                borderRadius: BorderRadius.circular(10),
                                               ),
-                                              const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                                              CompositedTransformTarget(
-                                                link: _toLayerLink,
-                                                child: _buildSearchInputRow(
-                                                  icon: Icons.directions_bus_filled_outlined,
-                                                  hint: 'To',
-                                                  controller: _toController,
-                                                  focusNode: _toFocusNode,
-                                                  onChanged: (val) {
-                                                    setState(() {
-                                                      _selectedTo = val;
-                                                    });
-                                                  },
-                                                  onTap: () {
-                                                    if (_toController.text == 'All') {
-                                                      _toController.clear();
-                                                      setState(() {
-                                                        _selectedTo = '';
-                                                      });
-                                                    }
-                                                  },
-                                                ),
+                                              child: const Icon(
+                                                Icons.directions_bus_rounded,
+                                                color: Colors.white,
+                                                size: 15,
                                               ),
-                                            ],
+                                            ),
                                           ),
-                                          Positioned(
-                                            right: 16,
-                                            top: 27,
-                                            child: GestureDetector(
-                                              onTap: () {
-                                                setState(() {
-                                                  final temp = _selectedFrom;
-                                                  _selectedFrom = _selectedTo;
-                                                  _selectedTo = temp;
-                                                  _fromController.text = _selectedFrom;
-                                                  _toController.text = _selectedTo;
-                                                });
-                                              },
-                                              child: Container(
-                                                padding: const EdgeInsets.all(7),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.white,
-                                                  shape: BoxShape.circle,
-                                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                                  boxShadow: [
-                                                    BoxShadow(
-                                                      color: Colors.black.withValues(alpha: 0.1),
-                                                      blurRadius: 4,
-                                                      offset: const Offset(0, 2),
-                                                    ),
-                                                  ],
-                                                ),
-                                                child: const Icon(
-                                                  Icons.swap_vert_rounded,
-                                                  color: Color(0xFF2563EB),
-                                                  size: 18,
-                                                ),
-                                              ),
+                                          const SizedBox(width: 8),
+                                          const Text(
+                                            'Seaty',
+                                            style: TextStyle(
+                                              fontSize: 19,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                              letterSpacing: 0.5,
                                             ),
                                           ),
                                         ],
                                       ),
-                                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
 
-                                      // Date Row
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        child: Row(
-                                          children: [
-                                            const Icon(
-                                              Icons.calendar_month_outlined,
-                                              color: Color(0xFF64748B),
-                                              size: 20,
+                            // 3. Welcome text + Search Card
+                            SafeArea(
+                              bottom: false,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    // Welcome line and the clear-filters chip
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        const Expanded(
+                                          child: Text(
+                                            'Where are you traveling today?',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white,
+                                              letterSpacing: -0.4,
+                                              shadows: [
+                                                Shadow(blurRadius: 6, color: Colors.black54, offset: Offset(0, 1)),
+                                              ],
                                             ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: GestureDetector(
-                                                behavior: HitTestBehavior.opaque,
-                                                onTap: () async {
-                                                  final now = DateTime.now();
-                                                  final today = DateTime(now.year, now.month, now.day);
-                                                  final lastSelectable = today.add(
-                                                    const Duration(days: _bookingHorizonDays),
-                                                  );
-                                                  // showDatePicker asserts if initialDate falls
-                                                  // outside the range, so clamp a previously
-                                                  // chosen (possibly stale) date into it.
-                                                  final desired = _selectedDate ?? today;
-                                                  final initial = desired.isBefore(today)
-                                                      ? today
-                                                      : (desired.isAfter(lastSelectable)
-                                                          ? lastSelectable
-                                                          : desired);
+                                          ),
+                                        ),
+                                        if (hasActiveFilters) ...[
+                                          const SizedBox(width: 8),
+                                          TextButton(
+                                            onPressed: () {
+                                              setState(() {
+                                                _selectedFrom = '';
+                                                _selectedTo = '';
+                                                _selectedDate = null;
+                                                _fromController.text = '';
+                                                _toController.text = '';
+                                                _dateController.text = 'All Dates';
+                                              });
+                                              ref.read(tripsProvider.notifier).loadTrips();
+                                            },
+                                            style: TextButton.styleFrom(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              backgroundColor: Colors.black.withValues(alpha: 0.5),
+                                              minimumSize: Size.zero,
+                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            child: const Text(
+                                              'Clear all filters',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 10.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
 
-                                                  final DateTime? picked = await showDatePicker(
-                                                    context: context,
-                                                    initialDate: initial,
-                                                    firstDate: today,
-                                                    lastDate: lastSelectable,
-                                                    helpText: 'Select journey date',
-                                                  );
-                                                  if (picked != null) {
-                                                    final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
-                                                    setState(() {
-                                                      _selectedDate = picked;
-                                                      _dateController.text = dateStr;
-                                                    });
-                                                    ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                                  }
-                                                },
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    const Text(
-                                                      'Date of journey',
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        fontWeight: FontWeight.w600,
-                                                        color: Color(0xFF64748B),
+                                    // Main Search Input Card ("from to card") - Anchored at bottom of image
+                                    Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Glassmorphic / Clean White Search Card
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.96),
+                                            borderRadius: BorderRadius.circular(18),
+                                            border: Border.all(color: Colors.white, width: 1.5),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: Colors.black.withValues(alpha: 0.18),
+                                                blurRadius: 20,
+                                                offset: const Offset(0, 6),
+                                              ),
+                                            ],
+                                          ),
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              // From & To Inputs + Swap Button
+                                              Stack(
+                                                clipBehavior: Clip.none,
+                                                children: [
+                                                  Column(
+                                                    children: [
+                                                      CompositedTransformTarget(
+                                                        link: _fromLayerLink,
+                                                        child: _buildSearchInputRow(
+                                                          icon: Icons.directions_bus_filled_outlined,
+                                                          hint: 'From',
+                                                          controller: _fromController,
+                                                          focusNode: _fromFocusNode,
+                                                          onChanged: (val) {
+                                                            setState(() {
+                                                              _selectedFrom = val;
+                                                            });
+                                                          },
+                                                          onTap: () {
+                                                            if (_fromController.text == 'All') {
+                                                              _fromController.clear();
+                                                              setState(() {
+                                                                _selectedFrom = '';
+                                                              });
+                                                            }
+                                                          },
+                                                        ),
+                                                      ),
+                                                      const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                                      CompositedTransformTarget(
+                                                        link: _toLayerLink,
+                                                        child: _buildSearchInputRow(
+                                                          icon: Icons.directions_bus_filled_outlined,
+                                                          hint: 'To',
+                                                          controller: _toController,
+                                                          focusNode: _toFocusNode,
+                                                          onChanged: (val) {
+                                                            setState(() {
+                                                              _selectedTo = val;
+                                                            });
+                                                          },
+                                                          onTap: () {
+                                                            if (_toController.text == 'All') {
+                                                              _toController.clear();
+                                                              setState(() {
+                                                                _selectedTo = '';
+                                                              });
+                                                            }
+                                                          },
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Positioned(
+                                                    right: 16,
+                                                    top: 20,
+                                                    child: GestureDetector(
+                                                      onTap: () {
+                                                        setState(() {
+                                                          final temp = _selectedFrom;
+                                                          _selectedFrom = _selectedTo;
+                                                          _selectedTo = temp;
+                                                          _fromController.text = _selectedFrom;
+                                                          _toController.text = _selectedTo;
+                                                        });
+                                                      },
+                                                      child: Container(
+                                                        padding: const EdgeInsets.all(6),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.white,
+                                                          shape: BoxShape.circle,
+                                                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                                                          boxShadow: [
+                                                            BoxShadow(
+                                                              color: Colors.black.withValues(alpha: 0.1),
+                                                              blurRadius: 4,
+                                                              offset: const Offset(0, 2),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        child: const Icon(
+                                                          Icons.swap_vert_rounded,
+                                                          color: Color(0xFF2563EB),
+                                                          size: 16,
+                                                        ),
                                                       ),
                                                     ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      _formatDateOfJourney(_selectedDate),
-                                                      style: const TextStyle(
-                                                        color: Color(0xFF0F172A),
-                                                        fontSize: 13,
-                                                        fontWeight: FontWeight.bold,
+                                                  ),
+                                                ],
+                                              ),
+                                              const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+                                              // Date Row
+                                              Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(
+                                                      Icons.calendar_month_outlined,
+                                                      color: Color(0xFF64748B),
+                                                      size: 18,
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: GestureDetector(
+                                                        behavior: HitTestBehavior.opaque,
+                                                        onTap: () async {
+                                                          final now = DateTime.now();
+                                                          final today = DateTime(now.year, now.month, now.day);
+                                                          final lastSelectable = today.add(
+                                                            const Duration(days: _bookingHorizonDays),
+                                                          );
+                                                          // showDatePicker asserts if initialDate falls
+                                                          // outside the range, so clamp a previously
+                                                          // chosen (possibly stale) date into it.
+                                                          final desired = _selectedDate ?? today;
+                                                          final initial = desired.isBefore(today)
+                                                              ? today
+                                                              : (desired.isAfter(lastSelectable)
+                                                                  ? lastSelectable
+                                                                  : desired);
+
+                                                          final DateTime? picked = await showDatePicker(
+                                                            context: context,
+                                                            initialDate: initial,
+                                                            firstDate: today,
+                                                            lastDate: lastSelectable,
+                                                            helpText: 'Select journey date',
+                                                          );
+                                                          if (picked != null) {
+                                                            final dateStr = "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+                                                            setState(() {
+                                                              _selectedDate = picked;
+                                                              _dateController.text = dateStr;
+                                                            });
+                                                            ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                                          }
+                                                        },
+                                                        child: Column(
+                                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                                          children: [
+                                                            const Text(
+                                                              'Date of journey',
+                                                              style: TextStyle(
+                                                                fontSize: 9.5,
+                                                                fontWeight: FontWeight.w600,
+                                                                color: Color(0xFF64748B),
+                                                              ),
+                                                            ),
+                                                            const SizedBox(height: 1),
+                                                            Text(
+                                                              _formatDateOfJourney(_selectedDate),
+                                                              style: const TextStyle(
+                                                                color: Color(0xFF0F172A),
+                                                                fontSize: 12.5,
+                                                                fontWeight: FontWeight.bold,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
                                                       ),
+                                                    ),
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        _buildDateQuickPill('Today', () {
+                                                          final now = DateTime.now();
+                                                          final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+                                                          setState(() {
+                                                            _selectedDate = now;
+                                                            _dateController.text = dateStr;
+                                                          });
+                                                          ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                                        }),
+                                                        const SizedBox(width: 5),
+                                                        _buildDateQuickPill('Tomorrow', () {
+                                                          final tomorrow = DateTime.now().add(const Duration(days: 1));
+                                                          final dateStr = "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
+                                                          setState(() {
+                                                            _selectedDate = tomorrow;
+                                                            _dateController.text = dateStr;
+                                                          });
+                                                          ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                                        }),
+                                                      ],
                                                     ),
                                                   ],
                                                 ),
                                               ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        // Red Search Buses Button inside slider container
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: double.infinity,
+                                          height: 42,
+                                          child: ElevatedButton(
+                                            onPressed: () {
+                                              _fromFocusNode.unfocus();
+                                              _toFocusNode.unfocus();
+                                              final dateStr = _selectedDate != null
+                                                  ? "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}"
+                                                  : null;
+                                              ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
+                                              SeatyNotifications.show(
+                                                context,
+                                                'Searching buses from $_selectedFrom to $_selectedTo...',
+                                                isInfo: true,
+                                                duration: const Duration(seconds: 1),
+                                              );
+                                            },
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: const Color(0xFFEF4444),
+                                              foregroundColor: Colors.white,
+                                              elevation: 4,
+                                              shadowColor: Colors.black45,
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(22),
+                                              ),
                                             ),
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
+                                            child: const Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                _buildDateQuickPill('Today', () {
-                                                  final now = DateTime.now();
-                                                  final dateStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-                                                  setState(() {
-                                                    _selectedDate = now;
-                                                    _dateController.text = dateStr;
-                                                  });
-                                                  ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                                }),
-                                                const SizedBox(width: 6),
-                                                _buildDateQuickPill('Tomorrow', () {
-                                                  final tomorrow = DateTime.now().add(const Duration(days: 1));
-                                                  final dateStr = "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
-                                                  setState(() {
-                                                    _selectedDate = tomorrow;
-                                                    _dateController.text = dateStr;
-                                                  });
-                                                  ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                                }),
+                                                Icon(Icons.search_rounded, size: 17),
+                                                SizedBox(width: 6),
+                                                Text(
+                                                  'Search buses',
+                                                  style: TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 0.2,
+                                                  ),
+                                                ),
                                               ],
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // Red Search Buses Button inside slider container
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  width: double.infinity,
-                                  height: 48,
-                                  child: ElevatedButton(
-                                    onPressed: () {
-                                      _fromFocusNode.unfocus();
-                                      _toFocusNode.unfocus();
-                                      final dateStr = _selectedDate != null
-                                          ? "${_selectedDate!.year}-${_selectedDate!.month.toString().padLeft(2, '0')}-${_selectedDate!.day.toString().padLeft(2, '0')}"
-                                          : null;
-                                      ref.read(tripsProvider.notifier).loadTrips(date: dateStr);
-                                      SeatyNotifications.show(
-                                        context,
-                                        'Searching buses from $_selectedFrom to $_selectedTo...',
-                                        isInfo: true,
-                                        duration: const Duration(seconds: 1),
-                                      );
-                                    },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFFEF4444),
-                                      foregroundColor: Colors.white,
-                                      elevation: 4,
-                                      shadowColor: Colors.black45,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(24),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.search_rounded, size: 18),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Search buses',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.2,
                                           ),
                                         ),
                                       ],
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ],
                         ),
                       ),
                     ),
-                  ],
-                ),
               ),
             ),
 
@@ -1161,6 +1196,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
             ),
           ),
       ],
+      ),
     );
   }
 
@@ -1773,15 +1809,15 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     Widget? suffix,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Row(
         children: [
           Icon(
             icon,
             color: const Color(0xFF64748B),
-            size: 22,
+            size: 20,
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: TextField(
               controller: controller,
