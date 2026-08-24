@@ -1029,6 +1029,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                         ),
                       ),
                     ),
+                  ),
+                ),
               ),
             ),
 
