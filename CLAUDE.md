@@ -11,7 +11,8 @@ React admin dashboard (`admin/`), and a Postgres image that ships the schema (`d
 Deeper background lives in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); endpoints in
 [docs/API.md](docs/API.md); tables, state machines and schema drift in
 [docs/DATA_MODEL.md](docs/DATA_MODEL.md); known non-security defects in
-[docs/CODE_QUALITY.md](docs/CODE_QUALITY.md).
+[docs/CODE_QUALITY.md](docs/CODE_QUALITY.md); FCM setup and the ways it fails silently in
+[docs/PUSH_NOTIFICATIONS.md](docs/PUSH_NOTIFICATIONS.md).
 
 ## Commands
 

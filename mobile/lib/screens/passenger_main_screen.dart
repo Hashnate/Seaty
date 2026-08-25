@@ -516,7 +516,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       });
 
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double heroHeight = 275.0 + topPadding;
+    final double heroHeight = 305.0 + topPadding;
 
     // The welcome text + search card are bottom-anchored inside the fixed-height
     // hero, so anything added to that block grows *upwards*. The "Clear all
