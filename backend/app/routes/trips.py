@@ -7,11 +7,38 @@ import uuid
 import datetime
 import asyncio
 
+from starlette.concurrency import run_in_threadpool
+
 from app.database import get_db
 from app import models, schemas, auth
+from app.services.sms_service import send_sms
 from app.timezone_utils import SRI_LANKA_TZ, now_sl, to_sl
 
 router = APIRouter(prefix="/trips", tags=["Trips"])
+
+
+def _cancellation_sms(db: Session, origin: str, destination: str,
+                      departure, paid: bool) -> str:
+    """The cancellation text. Kept tight - Notify.lk bills per 160 characters."""
+    dep = to_sl(departure)
+    when = dep.strftime("%d/%m %I:%M%p") if dep else "your scheduled time"
+    support = db.query(models.PlatformSetting).filter(
+        models.PlatformSetting.key == "support_phone"
+    ).first()
+    support_tel = support.value if support else "0262237803"
+    tail = "You will be refunded in full." if paid else "You have not been charged."
+
+    # Long terminal names ("Bandaranaike International Airport") push the text
+    # over 160 characters, which Notify.lk bills as two messages. Trim the
+    # place names rather than the instruction.
+    def _short(place: str, limit: int = 20) -> str:
+        place = (place or "").strip()
+        return place if len(place) <= limit else place[:limit - 1].rstrip() + "."
+
+    return (
+        f"SEATY: Your trip {_short(origin)} to {_short(destination)} on {when} "
+        f"is CANCELLED. {tail} Support: {support_tel}"
+    )
 
 class ConnectionManager:
     def __init__(self):
@@ -430,13 +457,69 @@ async def update_trip_status(
     trip.status = status
     db.commit()
     db.refresh(trip)
+
+    # An operator cancelling a trip is the one case that earns a refund.
+    # Passenger-initiated cancellations do not - bookings are sold
+    # non-refundable - but a passenger who did nothing wrong and lost their bus
+    # is owed their money back.
+    #
+    # There is no refund call in the gateway (docs/AUDIT.md B4), so this cannot
+    # move money. What it can do is stop the trip's tickets looking valid, and
+    # put every affected payment into a queue a human can work, instead of the
+    # notification that used to promise "a refund has been initiated" while
+    # nothing was initiated and the bookings stayed confirmed on a dead trip.
+    refunds_due = []
+    affected = []
+    if status == "cancelled" and old_status != "cancelled":
+        # Everyone holding a booking on this bus, not only the ones who have
+        # already paid. A passenger sitting on the card page ("pending" /
+        # "awaiting_payment") is the one who most needs to hear this: left
+        # alone they will finish paying for a bus that is not running.
+        affected = db.query(models.Booking).filter(
+            models.Booking.trip_id == trip.id,
+            models.Booking.booking_status.notin_(["cancelled", "expired"]),
+        ).all()
+        for b in affected:
+            b.booking_status = "cancelled"
+            if b.payment_status in ("pending", "awaiting_payment"):
+                # No money has moved, so nothing to refund - just make sure the
+                # session cannot be completed later.
+                b.payment_status = "failed"
+            if b.payment_status == "paid":
+                # payment_status stays "paid": the money is still ours until
+                # somebody actually sends it back. "refunded" would be a lie.
+                for pay in db.query(models.Payment).filter(
+                    models.Payment.booking_id == b.id,
+                    models.Payment.status == "completed",
+                ).all():
+                    pay.gateway_response = {
+                        **(pay.gateway_response or {}),
+                        "refund_due": True,
+                        "refund_reason": "trip cancelled by operator",
+                        "refund_flagged_at": datetime.datetime.now(
+                            datetime.timezone.utc).isoformat(),
+                    }
+                    refunds_due.append((b, pay))
+
+        db.query(models.SeatHold).filter(
+            models.SeatHold.trip_id == trip.id,
+            models.SeatHold.is_released == False,
+        ).update({"is_released": True})
+        db.commit()
     
     # Notify passengers if status goes from scheduled -> ongoing / cancelled
     if status != old_status and status in ["ongoing", "cancelled"]:
-        bookings = db.query(models.Booking).filter(
-            models.Booking.trip_id == trip.id,
-            models.Booking.booking_status == "confirmed"
-        ).all()
+        # For a cancellation the bookings were just moved to "cancelled" above,
+        # so re-querying for confirmed ones would find nobody to tell. Use the
+        # list captured before the mutation.
+        if status == "cancelled":
+            bookings = affected
+        else:
+            bookings = db.query(models.Booking).filter(
+                models.Booking.trip_id == trip.id,
+                models.Booking.booking_status == "confirmed"
+            ).all()
+        sms_jobs = {}
         for b in bookings:
             try:
                 from app.routes.notifications import create_and_send_notification
@@ -447,7 +530,19 @@ async def update_trip_status(
 
                 title = f"Trip {status.capitalize()}!"
                 if status == "cancelled":
-                    msg = f"Your trip from {origin} to {destination} scheduled for {date_str} has been cancelled. A refund has been initiated."
+                    if b.payment_status == "paid":
+                        msg = (
+                            f"Your trip from {origin} to {destination} scheduled for "
+                            f"{date_str} has been cancelled by the operator. You will "
+                            f"be refunded in full - our team will contact you shortly."
+                        )
+                    else:
+                        msg = (
+                            f"Your trip from {origin} to {destination} scheduled for "
+                            f"{date_str} has been cancelled by the operator, so your "
+                            f"booking could not be completed. You have not been "
+                            f"charged. Please choose another bus."
+                        )
                     noti_type = "trip_cancelled"
                 else: # ongoing
                     msg = f"Your trip from {origin} to {destination} is now active (ongoing)! Safe travels."
@@ -461,8 +556,64 @@ async def update_trip_status(
                     noti_type=noti_type,
                     booking_id=b.id
                 )
+
+                # A cancellation is the one message a passenger cannot afford to
+                # miss - push and in-app both depend on the app being installed,
+                # permitted and online, and none of that is true of somebody
+                # already on their way to the halt. Keyed by number so a
+                # passenger with two bookings on the same bus gets one text.
+                if status == "cancelled":
+                    phone = None
+                    passenger = db.query(models.User).filter(
+                        models.User.id == b.passenger_id
+                    ).first()
+                    if passenger and passenger.phone_number:
+                        phone = passenger.phone_number.strip()
+                    if not phone:
+                        primary = (b.passenger_details or {}).get("primary", {})
+                        phone = (primary.get("phone") or "").strip() or None
+                    if phone:
+                        sms_jobs[phone] = _cancellation_sms(
+                            db, origin, destination, trip.departure_time,
+                            paid=(b.payment_status == "paid"),
+                        )
             except Exception as noti_err:
                 print(f"Notification Error: {noti_err}")
+
+        # Sent after the loop and all at once. Notify.lk is a blocking HTTP
+        # call of roughly a second; a full 40-seat bus done one at a time would
+        # hold this request - and the event loop's threadpool - for the best
+        # part of a minute.
+        if sms_jobs:
+            results = await asyncio.gather(
+                *(run_in_threadpool(send_sms, phone, text)
+                  for phone, text in sms_jobs.items()),
+                return_exceptions=True,
+            )
+            failed = sum(1 for r in results
+                         if isinstance(r, Exception) or not (r and r[0]))
+            print(f"[trip-cancelled] SMS: {len(sms_jobs) - failed}/{len(sms_jobs)} accepted"
+                  + (f", {failed} rejected" if failed else ""))
+
+    if refunds_due:
+        total = sum(float(p.amount or 0) for _, p in refunds_due)
+        try:
+            from app.routes.notifications import create_and_send_notification
+            for admin in db.query(models.User).filter(models.User.role == "admin").all():
+                await create_and_send_notification(
+                    db=db,
+                    user_id=admin.id,
+                    title="Refunds owed - trip cancelled",
+                    message=(
+                        f"{len(refunds_due)} paid booking(s) totalling LKR {total:,.2f} "
+                        f"were cancelled with the trip on "
+                        f"{to_sl(trip.departure_time).strftime('%Y-%m-%d %H:%M')}. "
+                        f"See GET /payments/refunds/pending."
+                    ),
+                    noti_type="system",
+                )
+        except Exception as noti_err:
+            print(f"Notification Error: {noti_err}")
 
     trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
     trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()

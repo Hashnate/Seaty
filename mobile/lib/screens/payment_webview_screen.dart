@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +16,20 @@ import 'package:seaty/widgets/seaty_notifications.dart';
 /// of payment. [PaymentOutcome.abandoned] in particular says nothing: the
 /// customer may well have paid, and the backend's reconciliation sweeper will
 /// pick that up within a minute or two.
-enum PaymentOutcome { success, failed, abandoned }
+enum PaymentOutcome { success, failed, abandoned, expired }
+
+/// How long the card page stays open.
+///
+/// Must match `seat_hold_duration_minutes` on the backend, which is what the
+/// seat hold and the payment window are both driven by: the backend releases
+/// the seats at that mark and refuses to confirm anything that arrives after
+/// it, so leaving the page open past here can only end in a charge we cannot
+/// honour. Bancstac's own session runs 30 minutes and cannot be shortened by
+/// us, so this timer is the only thing that stops a customer paying too late.
+///
+/// Real payments settle in well under this - the slowest observed in
+/// production took 2m05s - so the cutoff is generous, not tight.
+const Duration kPaymentWindow = Duration(minutes: 10);
 
 /// Hosts the gateway's card page and watches for the redirect that ends it.
 ///
@@ -46,6 +61,8 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
   bool _loading = true;
   double _progress = 0.0;
   bool _finished = false;
+  Timer? _windowTimer;
+  Duration _remaining = kPaymentWindow;
 
   @override
   void initState() {
@@ -101,11 +118,39 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
         ),
       )
       ..loadRequest(Uri.parse(widget.paymentUrl));
+
+    _startWindowCountdown();
+  }
+
+  /// Close the card page when the booking window runs out.
+  ///
+  /// The seats are released at this point and the backend will not confirm a
+  /// payment made after it, so the kindest thing is to stop the customer
+  /// before they enter a card we cannot honour.
+  void _startWindowCountdown() {
+    _windowTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return;
+      final left = _remaining - const Duration(seconds: 1);
+      if (left <= Duration.zero) {
+        timer.cancel();
+        setState(() => _remaining = Duration.zero);
+        _finish(PaymentOutcome.expired);
+      } else {
+        setState(() => _remaining = left);
+      }
+    });
+  }
+
+  String get _remainingLabel {
+    final m = _remaining.inMinutes;
+    final sec = _remaining.inSeconds % 60;
+    return '$m:${sec.toString().padLeft(2, '0')}';
   }
 
   Future<void> _finish(PaymentOutcome outcome) async {
     if (_finished) return; // the delegate can fire more than once
     _finished = true;
+    _windowTimer?.cancel();
 
     if (outcome == PaymentOutcome.success) {
       // The booking is already confirmed server-side; this just pulls the new
@@ -113,6 +158,12 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
       await ref.read(bookingsProvider.notifier).loadBookings();
     }
     if (mounted) Navigator.of(context).pop(outcome);
+  }
+
+  @override
+  void dispose() {
+    _windowTimer?.cancel();
+    super.dispose();
   }
 
   /// Leaving mid-payment is ambiguous, so say so rather than claiming failure.
@@ -240,14 +291,55 @@ class _PaymentWebViewScreenState extends ConsumerState<PaymentWebViewScreen> {
               }
             },
           ),
-          title: const Text(
-            'Secure Checkout',
-            style: TextStyle(
-              color: Color(0xFF0A2540),
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.3,
-            ),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Secure Checkout',
+                style: TextStyle(
+                  color: Color(0xFF0A2540),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(width: 10),
+              // The customer can see how long the seats are theirs. Under two
+              // minutes it turns amber, because that is when it stops being
+              // background information and starts being a deadline.
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _remaining.inMinutes < 2
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 13,
+                      color: _remaining.inMinutes < 2
+                          ? const Color(0xFF92400E)
+                          : const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _remainingLabel,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: _remaining.inMinutes < 2
+                            ? const Color(0xFF92400E)
+                            : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -435,6 +527,13 @@ void showPaymentOutcome(BuildContext context, PaymentOutcome outcome) {
         context,
         'Payment not confirmed yet. If you completed it, your ticket will '
         'appear shortly.',
+        isWarning: true,
+      );
+    case PaymentOutcome.expired:
+      SeatyNotifications.show(
+        context,
+        'Your 10-minute booking window expired and the seats were released. '
+        'You have not been charged — please start the booking again.',
         isWarning: true,
       );
   }

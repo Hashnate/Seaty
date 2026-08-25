@@ -170,10 +170,22 @@ async def payment_reconciliation_sweeper():
     unconfirmed, seat released. On mobile data that is routine.
 
     This is the replacement for the webhook. Every pending payment gets
-    re-asked until the gateway gives a verdict or its 30-minute session
-    expires. See docs/PAYMENTS.md.
+    re-asked until the gateway gives a verdict. The chase runs a little past
+    the booking window on purpose: `finalise_payment` refuses to confirm
+    anything that arrives late, but we still need to *ask*, because a card
+    charged after the window closed has to be discovered and refunded rather
+    than left unresolved. See docs/PAYMENTS.md.
     """
     from app.services.payment_gateway import get_gateway, PaymentGatewayUnavailable
+
+    def _payment_window_minutes_setting(db):
+        row = db.query(models.PlatformSetting).filter(
+            models.PlatformSetting.key == "seat_hold_duration_minutes"
+        ).first()
+        try:
+            return int(row.value) if row else 10
+        except (TypeError, ValueError):
+            return 10
 
     while True:
         await asyncio.sleep(60)
@@ -187,13 +199,17 @@ async def payment_reconciliation_sweeper():
         with session_scope() as db:
             try:
                 now = datetime.datetime.now(datetime.timezone.utc)
-                # Give the normal return path a couple of minutes before stepping
-                # in, and stop once Bancstac's session has expired.
+                # Give the normal return path a couple of minutes before
+                # stepping in. The far edge is the booking window plus a short
+                # grace: long enough to catch a charge that landed just after
+                # the window and flag it for refund, short enough that we are
+                # not chasing sessions nobody can be waiting on.
+                window = int(_payment_window_minutes_setting(db))
                 candidates = db.query(models.Payment).filter(
                     models.Payment.status == "pending",
                     models.Payment.gateway_transaction_id.isnot(None),
                     models.Payment.created_at <= now - datetime.timedelta(minutes=2),
-                    models.Payment.created_at >= now - datetime.timedelta(minutes=35),
+                    models.Payment.created_at >= now - datetime.timedelta(minutes=window + 5),
                 ).all()
 
                 if candidates:

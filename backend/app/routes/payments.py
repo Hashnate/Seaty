@@ -27,6 +27,63 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 
 CURRENCY = "LKR"
 
+# A payment session lasts exactly as long as the seat hold, and not a minute
+# more. Bancstac's own page stays open for 30 minutes, but we stop honouring it
+# at ours: once the window closes the seats go back on sale, so accepting the
+# payment after that would confirm a seat we may already have sold. The payer is
+# told to start again instead.
+#
+# Driven by `seat_hold_duration_minutes` so the hold and the payment window can
+# never drift apart - there is one number, and the admin console owns it.
+def _payment_window_minutes(db: Session) -> int:
+    return int(_get_platform_setting(db, "seat_hold_duration_minutes", "10"))
+
+
+def _payment_expired(db: Session, payment: "models.Payment") -> bool:
+    """Has this payment session outlived its window?"""
+    created = payment.created_at
+    if created is None:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=datetime.timezone.utc)
+    age = datetime.datetime.now(datetime.timezone.utc) - created
+    return age > datetime.timedelta(minutes=_payment_window_minutes(db))
+
+
+def _seats_taken_by_others(db: Session, booking: "models.Booking") -> set:
+    """Seats on this booking that somebody else has already paid for or holds.
+
+    The check `finalise_payment` never had. A payment can come back long after
+    it was started - a backgrounded app, a dropped connection, the sweeper
+    retrying - and confirming it blindly is how one seat ends up sold twice,
+    with both passengers charged.
+    """
+    wanted = set(booking.selected_seats or [])
+    if not wanted:
+        return set()
+
+    taken = set()
+
+    rival_bookings = db.query(models.Booking).filter(
+        models.Booking.trip_id == booking.trip_id,
+        models.Booking.id != booking.id,
+        models.Booking.booking_status.in_(models.OCCUPIED_BOOKING_STATUSES),
+        models.Booking.payment_status == "paid",
+    ).all()
+    for other in rival_bookings:
+        taken |= wanted.intersection(other.selected_seats or [])
+
+    rival_holds = db.query(models.SeatHold).filter(
+        models.SeatHold.trip_id == booking.trip_id,
+        models.SeatHold.user_id != booking.passenger_id,
+        models.SeatHold.is_released == False,
+        models.SeatHold.expires_at > datetime.datetime.utcnow(),
+    ).all()
+    for hold in rival_holds:
+        taken |= wanted.intersection(hold.seat_labels or [])
+
+    return taken
+
 # The WebView in the mobile app watches for these paths to know the flow is
 # over. Keep them stable - changing one silently strands users on a blank page
 # inside the app. Mirrored in mobile/lib/screens/payment_webview_screen.dart.
@@ -58,6 +115,149 @@ def _is_past_booking_cutoff(trip: "models.Trip | None") -> bool:
         return False
     dep_time = to_sl(trip.departure_time)
     return now_sl() >= (dep_time - datetime.timedelta(minutes=30))
+
+
+async def _notify_departed_payment(db: Session, booking: models.Booking):
+    """The bus left before the payment cleared. Money owed back."""
+    try:
+        from app.routes.notifications import create_and_send_notification
+        await create_and_send_notification(
+            db=db,
+            user_id=booking.passenger_id,
+            title="Bus departed - refund owed",
+            message=(
+                "Your payment completed after the bus had already departed, so your "
+                "booking was not confirmed. You will be refunded in full - our team "
+                f"will contact you shortly. Booking ID: {booking.id}"
+            ),
+            noti_type="booking",
+            booking_id=booking.id,
+        )
+        for admin in db.query(models.User).filter(models.User.role == "admin").all():
+            await create_and_send_notification(
+                db=db,
+                user_id=admin.id,
+                title="Refund owed - paid after departure",
+                message=(
+                    f"Booking {booking.id} was paid after its bus departed. The "
+                    f"passenger has been charged and is owed a refund."
+                ),
+                noti_type="system",
+                booking_id=booking.id,
+            )
+    except Exception as e:
+        logger.error("Could not send departed-payment notice for %s: %s", booking.id, e)
+
+
+async def _notify_trip_cancelled_payment(db: Session, booking: models.Booking):
+    """The payment landed after the operator pulled the bus. Money owed back."""
+    try:
+        from app.routes.notifications import create_and_send_notification
+        await create_and_send_notification(
+            db=db,
+            user_id=booking.passenger_id,
+            title="Trip cancelled - refund owed",
+            message=(
+                "Your payment completed but the operator had already cancelled this "
+                "trip, so your booking was not confirmed. You will be refunded in "
+                f"full - our team will contact you shortly. Booking ID: {booking.id}"
+            ),
+            noti_type="trip_cancelled",
+            booking_id=booking.id,
+        )
+        for admin in db.query(models.User).filter(models.User.role == "admin").all():
+            await create_and_send_notification(
+                db=db,
+                user_id=admin.id,
+                title="Refund owed - paid for a cancelled trip",
+                message=(
+                    f"Booking {booking.id} was paid after its trip was cancelled. "
+                    f"The passenger has been charged and is owed a refund."
+                ),
+                noti_type="system",
+                booking_id=booking.id,
+            )
+    except Exception as e:
+        logger.error("Could not send trip-cancelled payment notice for %s: %s", booking.id, e)
+
+
+async def _notify_payment_expired(db: Session, booking: models.Booking):
+    """Tell the passenger the window closed, and the admins that money moved.
+
+    Reached when the gateway approved a payment after our ten minutes were up.
+    The seats are already back on sale, so the only honest thing to say is:
+    your card was charged, it is coming back, book again.
+    """
+    try:
+        from app.routes.notifications import create_and_send_notification
+        await create_and_send_notification(
+            db=db,
+            user_id=booking.passenger_id,
+            title="Payment window expired",
+            message=(
+                "Your payment completed after the 10-minute booking window closed, so "
+                "the seats were released and your booking could not be confirmed. "
+                "Our team is reviewing this and will contact you. Please do not "
+                f"book again until you hear from us. Booking ID: {booking.id}"
+            ),
+            noti_type="booking",
+            booking_id=booking.id,
+        )
+        for admin in db.query(models.User).filter(models.User.role == "admin").all():
+            await create_and_send_notification(
+                db=db,
+                user_id=admin.id,
+                title="Action needed - charged, no seat",
+                message=(
+                    f"Booking {booking.id} was paid after its 10-minute window expired. "
+                    f"The passenger has been charged and has no seat. Needs a decision."
+                ),
+                noti_type="system",
+                booking_id=booking.id,
+            )
+    except Exception as e:
+        logger.error("Could not send payment-expiry notification for %s: %s", booking.id, e)
+
+
+async def _notify_seat_conflict(db: Session, booking: models.Booking, seats: set):
+    """Tell the passenger, and every admin, that money moved without a seat.
+
+    Reached only when a payment succeeded for a seat that was sold in the
+    meantime. Bookings are non-refundable by policy, but that policy covers a
+    passenger who changes their mind - not a charge we took and could not
+    honour. Nothing here can move money either way, so the point is simply that
+    it is never silent: somebody has to decide what happens.
+    """
+    try:
+        from app.routes.notifications import create_and_send_notification
+        seat_str = ", ".join(sorted(seats))
+        await create_and_send_notification(
+            db=db,
+            user_id=booking.passenger_id,
+            title="Payment received, seat unavailable",
+            message=(
+                f"Seat(s) {seat_str} were taken before your payment completed, so your "
+                f"booking could not be confirmed. Our team is reviewing this and will "
+                f"contact you. Please do not book again until you hear from us. "
+                f"Booking ID: {booking.id}"
+            ),
+            noti_type="booking",
+            booking_id=booking.id,
+        )
+        for admin in db.query(models.User).filter(models.User.role == "admin").all():
+            await create_and_send_notification(
+                db=db,
+                user_id=admin.id,
+                title="Action needed - charged, no seat",
+                message=(
+                    f"Booking {booking.id} was paid but seat(s) {seat_str} were already "
+                    f"sold. The passenger has been charged and has no seat. Needs a decision."
+                ),
+                noti_type="system",
+                booking_id=booking.id,
+            )
+    except Exception as e:
+        logger.error("Could not send seat-conflict notification for %s: %s", booking.id, e)
 
 
 async def _send_booking_notifications(db: Session, booking: models.Booking):
@@ -188,7 +388,25 @@ async def initiate_payment(
             models.Payment.status.in_(["pending", "processing"])
         ).first()
         if existing_payment:
-            return existing_payment
+            if not _payment_expired(db, existing_payment):
+                return existing_payment
+            # The window has closed on the previous attempt. Retire it rather
+            # than handing back a payment page the gateway will refuse, and let
+            # the passenger start a fresh booking.
+            existing_payment.status = "failed"
+            booking.payment_status = "failed"
+            booking.booking_status = "cancelled"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Your payment window has expired and the seats have been "
+                       "released. Please start the booking again.",
+            )
         if booking.payment_status == "paid":
             raise HTTPException(status_code=400, detail="Booking is already paid")
 
@@ -255,15 +473,42 @@ async def initiate_payment(
     booking.platform_fee = platform_fee
     booking.payment_status = "awaiting_payment"
 
-    hold_minutes = int(_get_platform_setting(db, "seat_hold_duration_minutes", "10"))
+    # The hold and the payment window are the same ten minutes, deliberately.
+    # The seats stay reserved for exactly as long as the payment is honoured,
+    # so there is never a period where the seats are back on sale but a stale
+    # payment could still confirm them.
+    hold_minutes = _payment_window_minutes(db)
     expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=hold_minutes)
 
-    # Release any existing holds by this user for this trip
-    db.query(models.SeatHold).filter(
+    # Same lock as create_booking, for the same reason.
+    db.query(models.Trip).filter(
+        models.Trip.id == booking.trip_id
+    ).with_for_update().first()
+
+    # Refuse to open a payment for seats that now belong to somebody else.
+    # This used to release the caller's holds and mint a fresh one with no
+    # check at all, which handed the seats back to whoever paid last.
+    taken = _seats_taken_by_others(db, booking)
+    if taken:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Seat(s) {', '.join(sorted(taken))} are no longer available. "
+                   "Please choose different seats.",
+        )
+
+    # Release only this booking's own earlier holds, not every hold the
+    # passenger has on the trip - they may have another booking pending.
+    # Compared in Python: `seat_labels == <python list>` renders as
+    # `text[] = varchar[]`, which Postgres has no operator for.
+    booked_seats = set(booking.selected_seats or [])
+    for prior in db.query(models.SeatHold).filter(
         models.SeatHold.trip_id == booking.trip_id,
         models.SeatHold.user_id == current_user.id,
-        models.SeatHold.is_released == False
-    ).update({"is_released": True})
+        models.SeatHold.is_released == False,
+    ).all():
+        if set(prior.seat_labels or []) == booked_seats:
+            prior.is_released = True
 
     db.add(models.SeatHold(
         id=uuid.uuid4(),
@@ -380,6 +625,131 @@ async def finalise_payment(db: Session, payment: models.Payment) -> bool:
     if result.approved:
         payment.status = "completed"
         payment.paid_at = datetime.datetime.now(datetime.timezone.utc)
+
+        # Last gate before a seat is handed over. The gateway's approval says
+        # the card was charged; it says nothing about whether the seat is still
+        # ours. A session that returns late - backgrounded app, dead phone, the
+        # sweeper retrying at minute 34 - could otherwise confirm a seat that
+        # has since been sold, leaving two passengers holding a paid ticket for
+        # it. The money has already moved, so this cannot be undone here: flag
+        # it loudly for a human decision instead of quietly double-selling.
+        # The ten-minute window is the rule, and it is enforced here rather
+        # than trusted to the gateway: once it closes the seats went back on
+        # sale, so an approval arriving afterwards is for a seat we no longer
+        # own. The card has been charged either way - the gateway does not ask
+        # our permission - so this cannot be undone here. Never confirm it, and
+        # never let it pass silently.
+        expired = _payment_expired(db, payment)
+        conflict = _seats_taken_by_others(db, booking) if booking else set()
+
+        # The bus is not running. Whatever the gateway says, there is no seat
+        # to hand over - and if the card was charged anyway the passenger is
+        # owed it back, because this cancellation was not theirs.
+        trip_cancelled = False
+        if booking:
+            _trip = db.query(models.Trip).filter(models.Trip.id == booking.trip_id).first()
+            trip_cancelled = bool(_trip and _trip.status == "cancelled")
+
+        # The bus has already left. Normally unreachable - booking closes 30
+        # minutes before departure and the payment window is 10 - but an
+        # operator rescheduling a trip earlier moves the departure under a
+        # payment that is already in flight.
+        #
+        # Deliberately checks actual departure, not `_is_past_booking_cutoff`:
+        # a booking made just over the 30-minute line legitimately settles
+        # inside that window, and refusing it would break the normal path.
+        departed = False
+        if booking and _trip and _trip.departure_time:
+            departed = now_sl() >= to_sl(_trip.departure_time)
+
+        if departed and not trip_cancelled:
+            logger.error(
+                "PAYMENT %s APPROVED AFTER DEPARTURE of trip %s - booking %s not "
+                "confirmed, refund owed", payment.id, booking.trip_id, booking.id,
+            )
+            payment.gateway_response = {
+                **(payment.gateway_response or {}),
+                "departed_before_payment": True,
+                "refund_due": True,
+                "refund_reason": "bus departed before payment completed",
+            }
+            booking.payment_status = "paid"
+            booking.booking_status = "cancelled"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+            db.commit()
+            await _notify_departed_payment(db, booking)
+            return False
+
+        if trip_cancelled:
+            logger.error(
+                "PAYMENT %s APPROVED FOR CANCELLED TRIP %s - booking %s not confirmed, "
+                "refund owed", payment.id, booking.trip_id, booking.id,
+            )
+            payment.gateway_response = {
+                **(payment.gateway_response or {}),
+                "trip_cancelled": True,
+                "refund_due": True,
+                "refund_reason": "trip cancelled by operator",
+            }
+            booking.payment_status = "paid"
+            booking.booking_status = "cancelled"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+            db.commit()
+            await _notify_trip_cancelled_payment(db, booking)
+            return False
+
+        if expired and booking:
+            logger.error(
+                "PAYMENT %s APPROVED AFTER ITS %s-MINUTE WINDOW (booking %s) - "
+                "not confirmed, charge unfulfilled",
+                payment.id, _payment_window_minutes(db), booking.id,
+            )
+            payment.gateway_response = {
+                **(payment.gateway_response or {}),
+                "expired_window": True,
+                "unfulfilled_charge": True,
+            }
+            booking.payment_status = "paid"
+            booking.booking_status = "cancelled"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+            db.commit()
+            await _notify_payment_expired(db, booking)
+            return False
+
+        if conflict:
+            logger.error(
+                "PAYMENT %s TAKEN BUT SEAT(S) %s ALREADY SOLD on trip %s - "
+                "booking %s NOT confirmed, charge unfulfilled",
+                payment.id, sorted(conflict), booking.trip_id, booking.id,
+            )
+            payment.gateway_response = {
+                **(payment.gateway_response or {}),
+                "seat_conflict": sorted(conflict),
+                "unfulfilled_charge": True,
+            }
+            booking.payment_status = "paid"
+            booking.booking_status = "cancelled"
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id == booking.trip_id,
+                models.SeatHold.user_id == booking.passenger_id,
+                models.SeatHold.is_released == False
+            ).update({"is_released": True})
+            db.commit()
+            await _notify_seat_conflict(db, booking, conflict)
+            return False
+
         if booking:
             booking.payment_status = "paid"
             booking.booking_status = "confirmed"
@@ -603,13 +973,74 @@ def get_payments_for_booking(
     return db.query(models.Payment).filter(models.Payment.booking_id == booking_id).all()
 
 
+@router.get("/refunds/pending")
+def list_pending_refunds(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(["admin"]))
+):
+    """Payments that are owed back but have not been sent back yet.
+
+    The gateway has no refund call, so a refund is a human action: somebody
+    moves the money in Bancstac's portal and then marks it here. Without a list
+    to work from, the flags written when a trip is cancelled - or when a charge
+    could not be honoured - are invisible, and the passenger simply never hears
+    back. Declared above `/{payment_id}` so the literal path is not swallowed
+    as a UUID.
+    """
+    rows = db.query(models.Payment).filter(
+        models.Payment.status == "completed",
+        models.Payment.gateway_response.isnot(None),
+    ).order_by(models.Payment.created_at.desc()).all()
+
+    out = []
+    for pay in rows:
+        meta = pay.gateway_response or {}
+        if not (meta.get("refund_due") or meta.get("unfulfilled_charge")):
+            continue
+        booking = db.query(models.Booking).filter(
+            models.Booking.id == pay.booking_id
+        ).first()
+        passenger = db.query(models.User).filter(
+            models.User.id == booking.passenger_id
+        ).first() if booking else None
+        out.append({
+            "payment_id": str(pay.id),
+            "booking_id": str(pay.booking_id),
+            "gateway_transaction_id": pay.gateway_transaction_id,
+            "amount": float(pay.amount or 0),
+            "currency": pay.currency,
+            "paid_at": pay.paid_at.isoformat() if pay.paid_at else None,
+            "reason": meta.get("refund_reason")
+                      or ("charged but no seat" if meta.get("unfulfilled_charge") else "unknown"),
+            "passenger_name": passenger.full_name if passenger else None,
+            "passenger_phone": passenger.phone_number if passenger else None,
+            "seats": (booking.selected_seats if booking else None),
+        })
+
+    return {
+        "count": len(out),
+        "total_amount": round(sum(r["amount"] for r in out), 2),
+        "payments": out,
+    }
+
+
 @router.post("/{payment_id}/refund", response_model=schemas.PaymentResponse)
 def refund_payment(
     payment_id: UUID,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["admin"]))
 ):
-    """Process a refund for a completed payment (admin only)."""
+    """Record that a refund has been sent, and clear it from the queue.
+
+    This does **not** move money - Bancstac exposes no refund operation, so the
+    transfer happens by hand in their portal. Calling this is the admin saying
+    "I have done that", which is why it is the only thing that clears
+    `refund_due`. It used to be presented as processing the refund itself.
+
+    Bookings are non-refundable when a passenger cancels; this exists for the
+    cases where Seaty owes the money back - an operator cancelling a trip, or a
+    charge that could not be honoured.
+    """
     payment = db.query(models.Payment).filter(models.Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
@@ -619,6 +1050,13 @@ def refund_payment(
 
     payment.status = "refunded"
     payment.refunded_at = datetime.datetime.utcnow()
+    payment.gateway_response = {
+        **(payment.gateway_response or {}),
+        "refund_due": False,
+        "unfulfilled_charge": False,
+        "refund_recorded_by": str(current_user.id),
+        "refund_recorded_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
 
     # Update booking
     booking = db.query(models.Booking).filter(models.Booking.id == payment.booking_id).first()

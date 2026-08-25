@@ -64,6 +64,14 @@ def create_booking(
             detail="Online booking for this bus closed 30 minutes prior to departure."
         )
 
+    # Serialise every seat operation for this trip. Two requests could
+    # otherwise both pass the availability check below before either had
+    # inserted, and both walk away with the same seat. Locking the trip row is
+    # enough because every seat operation for a trip passes through it.
+    db.query(models.Trip).filter(
+        models.Trip.id == booking_in.trip_id
+    ).with_for_update().first()
+
     # Check seat availability (booked + held seats)
     unavailable = get_unavailable_seats(db, booking_in.trip_id)
     all_unavailable = set(unavailable["booked"]) | set(unavailable["held"])
@@ -105,6 +113,29 @@ def create_booking(
         passenger_details=booking_in.passenger_details
     )
     db.add(db_booking)
+
+    # Hold the seats for this booking, now, in the same transaction.
+    #
+    # A pending booking blocks nothing by itself - `get_unavailable_seats`
+    # counts only paid bookings and live holds - and the mobile app never calls
+    # POST /seat-holds. Until this existed the seats stayed free from the moment
+    # they were chosen until payment was initiated, so several passengers could
+    # each book the same seat and each go on to pay for it.
+    #
+    # Booking *is* seat selection in this product, so the ten-minute window
+    # starts here. Existing holds are deliberately left alone: releasing them
+    # would free the seats of an earlier booking the passenger has not paid for
+    # yet.
+    hold_minutes = _get_hold_duration(db)
+    db.add(models.SeatHold(
+        id=uuid.uuid4(),
+        trip_id=booking_in.trip_id,
+        user_id=current_user.id,
+        seat_labels=booking_in.selected_seats,
+        expires_at=datetime.datetime.utcnow() + datetime.timedelta(minutes=hold_minutes),
+        is_released=False,
+    ))
+
     db.commit()
     db.refresh(db_booking)
 
