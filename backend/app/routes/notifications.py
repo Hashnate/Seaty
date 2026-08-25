@@ -66,6 +66,30 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
                 print(f"WARNING: Firebase credentials not found at {cred_path}. FCM push will fail.")
                 return
         
+        # Configure high-priority delivery and system tray alerts for Android
+        android_config = messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                sound="default",
+                priority="high",
+                default_vibrate_timings=True,
+                default_sound=True,
+            ),
+        )
+
+        # Configure high-priority delivery, sound and badges for iOS APNs
+        apns_config = messaging.APNSConfig(
+            headers={"apns-priority": "10"},
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(
+                    alert=messaging.ApsAlert(title=title, body=message),
+                    sound="default",
+                    badge=1,
+                    content_available=True,
+                )
+            ),
+        )
+
         msg = messaging.Message(
             notification=messaging.Notification(
                 title=title,
@@ -73,6 +97,8 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
             ),
             data={k: str(v) for k, v in (data or {}).items()},
             token=fcm_token,
+            android=android_config,
+            apns=apns_config,
         )
         response = messaging.send(msg)
         print(f"FCM Push sent successfully: {response}")

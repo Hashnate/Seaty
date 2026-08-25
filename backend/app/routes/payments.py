@@ -356,7 +356,20 @@ async def _send_booking_notifications(db: Session, booking: models.Booking):
                 except Exception as sms_err:
                     print(f"SMS Dispatch Error: {sms_err}")
 
-            # 2. Notify Owner
+            # 2. Notify Passenger
+            if booking.passenger_id:
+                bus_label = vehicle.registration_number if vehicle else "your bus"
+                await create_and_send_notification(
+                    db=db,
+                    user_id=booking.passenger_id,
+                    title="Booking Confirmed! 🎟️",
+                    message=f"Your booking (Ref: {booking.reference_code or str(booking.id)[:8]}) for seat(s) {seats_str} on {bus_label} is confirmed.",
+                    noti_type="booking",
+                    booking_id=booking.id,
+                    vehicle_id=vehicle.id if vehicle else None
+                )
+
+            # 3. Notify Owner
             if vehicle and vehicle.owner_id:
                 pass_name = passenger.full_name if passenger else "A passenger"
                 reg_num = vehicle.registration_number

@@ -199,24 +199,23 @@ void setupPushNotifications() async {
   }
 }
 
-Future<void>? _firebaseInit;
+final Completer<void> _firebaseInitCompleter = Completer<void>();
 
 /// Completes once [initFirebaseMessaging] has finished, successfully or not.
-///
-/// `main()` no longer awaits Firebase before `runApp` — registering the
-/// background handler boots a second, headless FlutterEngine and registers
-/// every plugin into it, which used to happen before the first frame existed.
-/// Anything that touches `FirebaseMessaging` must await this first, or it can
-/// run against an uninitialised Firebase and burn a retry.
-///
-/// Safe to await before `main()` has called [initFirebaseMessaging]: that call
-/// happens synchronously after `runApp`, so `_firebaseInit` is always assigned
-/// before the first widget builds.
-Future<void> get firebaseReady => _firebaseInit ?? Future<void>.value();
+Future<void> get firebaseReady => _firebaseInitCompleter.future;
 
 /// Idempotent — repeat calls return the in-flight or completed future rather
 /// than initialising Firebase (and a second background engine) again.
-Future<void> initFirebaseMessaging() => _firebaseInit ??= _initFirebaseMessaging();
+Future<void> initFirebaseMessaging() async {
+  if (_firebaseInitCompleter.isCompleted) return;
+  try {
+    await _initFirebaseMessaging();
+  } finally {
+    if (!_firebaseInitCompleter.isCompleted) {
+      _firebaseInitCompleter.complete();
+    }
+  }
+}
 
 Future<void> _initFirebaseMessaging() async {
   try {
