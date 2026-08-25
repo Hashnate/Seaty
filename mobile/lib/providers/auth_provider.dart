@@ -1,11 +1,8 @@
 import 'dart:async' show TimeoutException;
 import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/active_trips_provider.dart';
 import 'package:seaty/providers/bookings_provider.dart';
@@ -14,7 +11,6 @@ import 'package:seaty/providers/fleet_provider.dart';
 import 'package:seaty/providers/gps_tracking_provider.dart';
 import 'package:seaty/providers/notifications_provider.dart';
 import 'package:seaty/providers/trips_provider.dart';
-import 'package:seaty/utils/safe_text.dart';
 
 /// A sign-in failure with a message already fit to show the user — typically
 /// the backend's `detail` for a wrong, expired, or rate-limited OTP.
@@ -368,63 +364,11 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> syncFcmToken() async {
-    if (state.token.isEmpty || state.token.startsWith('simulated')) return;
-    await firebaseReady;
     final settings = ref.read(settingsProvider);
-
-    try {
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    } catch (permErr) {
-      debugPrint('Notification permission error: $permErr');
-    }
-
-    for (int attempt = 0; attempt < 5; attempt++) {
-      try {
-        // On iOS, poll briefly for APNs token readiness before requesting FCM token
-        if (!kIsWeb && Platform.isIOS) {
-          String? apnsToken;
-          for (int i = 0; i < 5; i++) {
-            apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-            if (apnsToken != null) break;
-            await Future.delayed(const Duration(seconds: 1));
-          }
-          if (apnsToken == null) {
-            debugPrint('syncFcmToken: APNs token still null on attempt ${attempt + 1}');
-          }
-        }
-
-        final fcmToken = await FirebaseMessaging.instance.getToken();
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          final res = await http.post(
-            Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${state.token}',
-            },
-            body: json.encode({'fcm_token': fcmToken}),
-          );
-          debugPrint('FCM Token synced from AuthProvider [${res.statusCode}]: ${shortId(fcmToken, 20)}...');
-          if (res.statusCode == 200) break;
-        } else {
-          debugPrint('FCM token is null/empty on syncFcmToken attempt ${attempt + 1}');
-        }
-      } catch (e) {
-        debugPrint('FCM token sync attempt ${attempt + 1} failed: $e');
-        // Report native diagnostic error to backend
-        try {
-          await http.post(
-            Uri.parse('${settings.apiBaseUrl}/public/log'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'message': '[fcm-sync-error] attempt ${attempt + 1}: $e'}),
-          );
-        } catch (_) {}
-      }
-      await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
-    }
+    await registerFcmToken(
+      authToken: state.token,
+      apiBaseUrl: settings.apiBaseUrl,
+    );
   }
 
   /// Reads the signed-in user's profile from the server.

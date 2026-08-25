@@ -6,11 +6,11 @@ import 'package:flutter/foundation.dart';
 
 /// Crash reporting for Seaty.
 ///
-/// `main()` deliberately does not await Firebase before `runApp` (see
-/// `firebaseReady`), so Crashlytics is not available during early startup -
-/// which is exactly when the nastiest crashes happen. Handlers are therefore
-/// installed immediately and errors raised before Firebase is up are buffered,
-/// then flushed once [enableCrashReporting] is called.
+/// Crashlytics is not available until Firebase finishes initialising - which
+/// is exactly when the nastiest crashes happen, and Firebase may fail to
+/// initialise at all. Handlers are therefore installed immediately and errors
+/// raised before Firebase is up are buffered, then flushed once
+/// [enableCrashReporting] is called.
 ///
 /// This only *observes* errors. It never swallows one or alters control flow:
 /// every error is still passed to Flutter's normal presentation path.

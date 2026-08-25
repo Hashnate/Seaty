@@ -1,16 +1,12 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
 import 'package:seaty/providers/bookings_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
-import 'package:seaty/utils/safe_text.dart';
 
 const Set<String> _kBookingAffectingNotificationTypes = {
   'booking',
@@ -72,64 +68,11 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
 
   Future<void> registerFcmTokenWithBackend() async {
     final auth = ref.read(authProvider);
-    if (auth.token.isEmpty || auth.token.startsWith('simulated')) return;
-    // main() starts Firebase after runApp, so this can be reached first.
-    await firebaseReady;
     final settings = ref.read(settingsProvider);
-
-    try {
-      await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    } catch (_) {}
-
-    for (int attempt = 0; attempt < 5; attempt++) {
-      try {
-        // On iOS, poll briefly for APNs token readiness before requesting FCM token
-        if (!kIsWeb && Platform.isIOS) {
-          String? apnsToken;
-          for (int i = 0; i < 5; i++) {
-            apnsToken = await FirebaseMessaging.instance.getAPNSToken();
-            if (apnsToken != null) {
-              debugPrint('iOS APNs token ready on attempt ${i + 1}');
-              break;
-            }
-            await Future.delayed(const Duration(seconds: 1));
-          }
-          if (apnsToken == null) {
-            debugPrint('FCM registration notice: APNs token still null on attempt ${attempt + 1}');
-          }
-        }
-
-        final fcmToken = await FirebaseMessaging.instance.getToken();
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          final response = await http.post(
-            Uri.parse('${settings.apiBaseUrl}/notifications/fcm-token'),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${auth.token}',
-            },
-            body: json.encode({'fcm_token': fcmToken}),
-          );
-          debugPrint('FCM token registered with backend [${response.statusCode}]: ${shortId(fcmToken, 20)}...');
-          if (response.statusCode == 200) break;
-        } else {
-          debugPrint('FCM token is null/empty on attempt ${attempt + 1}');
-        }
-      } catch (e) {
-        debugPrint('Error registering FCM token (attempt ${attempt + 1}): $e');
-        try {
-          await http.post(
-            Uri.parse('${settings.apiBaseUrl}/public/log'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({'message': '[fcm-register-error] attempt ${attempt + 1}: $e'}),
-          );
-        } catch (_) {}
-      }
-      await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
-    }
+    await registerFcmToken(
+      authToken: auth.token,
+      apiBaseUrl: settings.apiBaseUrl,
+    );
   }
 
   Future<void> fetchNotifications() async {

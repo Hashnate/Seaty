@@ -79,26 +79,58 @@ String buildWebSocketUrl(String baseUrl, String subPath) {
   }
 }
 
-/// Syncs a given FCM token to the backend if user is authenticated.
-/// Called from onTokenRefresh and from setupPushNotifications.
-Future<void> _syncFcmTokenToBackend(String token) async {
+const String _defaultApiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
+
+/// Sends a diagnostic line to the backend.
+///
+/// `debugPrint` is a no-op in release builds, so a failure during startup has
+/// no other way to reach us. A dead Firebase went unnoticed in production for
+/// weeks precisely because its exception was only ever debugPrinted.
+Future<void> reportDiagnostic(String message) async {
+  debugPrint(message);
   try {
     final prefs = await SharedPreferences.getInstance();
-    final authToken = prefs.getString('token') ?? '';
-    if (authToken.isEmpty || authToken.startsWith('simulated')) return;
+    final base = prefs.getString('apiBaseUrl') ?? _defaultApiBaseUrl;
+    await http.post(
+      Uri.parse('$base/public/log'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'message': message}),
+    );
+  } catch (_) {
+    // Diagnostics must never break the app.
+  }
+}
 
-    final apiBaseUrl = prefs.getString('apiBaseUrl') ?? 'https://api.seaty.hashnate.com/api/v1';
+/// Posts an FCM registration token to the backend for the signed-in user.
+///
+/// One implementation for every caller. This existed as three near-identical
+/// copies - here, in `auth_provider` and in `notifications_provider` - and they
+/// drifted, which is how the permission request came to be added to two of
+/// them and not the third.
+Future<bool> postFcmToken(
+  String token, {
+  String? authToken,
+  String? apiBaseUrl,
+}) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final auth = authToken ?? prefs.getString('token') ?? '';
+    if (auth.isEmpty || auth.startsWith('simulated')) return false;
+
+    final base = apiBaseUrl ?? prefs.getString('apiBaseUrl') ?? _defaultApiBaseUrl;
     final res = await http.post(
-      Uri.parse('$apiBaseUrl/notifications/fcm-token'),
+      Uri.parse('$base/notifications/fcm-token'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $authToken',
+        'Authorization': 'Bearer $auth',
       },
       body: json.encode({'fcm_token': token}),
     );
-    debugPrint('FCM token synced from onTokenRefresh [${res.statusCode}]: ${shortId(token, 20)}...');
+    debugPrint('FCM token registered [${res.statusCode}]: ${shortId(token, 20)}...');
+    return res.statusCode == 200;
   } catch (e) {
-    debugPrint('Error syncing FCM token from onTokenRefresh: $e');
+    debugPrint('Error posting FCM token: $e');
+    return false;
   }
 }
 
@@ -112,12 +144,47 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
-void setupPushNotifications() async {
-  try {
-    if (Firebase.apps.isEmpty) return;
-    final messaging = FirebaseMessaging.instance;
+/// Waits for iOS to hand the app an APNs device token.
+///
+/// FCM cannot mint a registration token on iOS until this exists. Asking
+/// anyway yields null - and the old code went on to call `getToken()`
+/// regardless, which is how tokens APNs can never deliver to reached the
+/// database, making every send log "sent successfully" while nothing arrived.
+Future<String?> _waitForApnsToken({int attempts = 10}) async {
+  for (int i = 0; i < attempts; i++) {
+    try {
+      final token = await FirebaseMessaging.instance.getAPNSToken();
+      if (token != null && token.isNotEmpty) return token;
+    } catch (e) {
+      debugPrint('getAPNSToken failed on attempt ${i + 1}: $e');
+    }
+    await Future.delayed(const Duration(seconds: 1));
+  }
+  return null;
+}
 
-    final settings = await messaging.requestPermission(
+Future<bool>? _pendingPermissionRequest;
+
+/// Requests notification authorisation and reports the outcome.
+///
+/// Deliberately separate from [setupPushNotifications]: authorisation is the
+/// one step whose absence is invisible, because iOS hands a perfectly valid
+/// FCM token to an unauthorised app and then silently discards every push sent
+/// to it. Anything that registers a token must gate on this first.
+///
+/// Concurrent callers share one request so the user sees a single prompt.
+Future<bool> ensureNotificationPermission() {
+  final pending = _pendingPermissionRequest;
+  if (pending != null) return pending;
+  final request = _requestNotificationPermission();
+  _pendingPermissionRequest = request;
+  return request.whenComplete(() => _pendingPermissionRequest = null);
+}
+
+Future<bool> _requestNotificationPermission() async {
+  if (!firebaseAvailable) return false;
+  try {
+    final settings = await FirebaseMessaging.instance.requestPermission(
       alert: true,
       announcement: false,
       badge: true,
@@ -126,113 +193,183 @@ void setupPushNotifications() async {
       provisional: false,
       sound: true,
     );
+    final status = settings.authorizationStatus;
+    debugPrint('Notification authorization status: $status');
+    final granted = status == AuthorizationStatus.authorized ||
+        status == AuthorizationStatus.provisional;
+    if (!granted) {
+      await reportDiagnostic('[fcm-permission] not granted: $status');
+    }
+    return granted;
+  } catch (e) {
+    await reportDiagnostic('[fcm-permission-error] $e');
+    return false;
+  }
+}
 
-    debugPrint('User granted permission: ${settings.authorizationStatus}');
+/// Obtains the FCM token and registers it with the backend.
+///
+/// Returns true once the backend has accepted a token. Refuses to register one
+/// the device cannot actually receive on: a token stored for an unauthorised
+/// device is worse than no token at all, because FCM accepts every send
+/// against it and the backend logs "sent successfully" while the OS drops each
+/// message. "No token" at least reads as "cannot deliver".
+Future<bool> registerFcmToken({
+  required String authToken,
+  required String apiBaseUrl,
+  int attempts = 5,
+}) async {
+  if (authToken.isEmpty || authToken.startsWith('simulated')) return false;
 
-    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+  if (!await firebaseReady) {
+    // initFirebaseMessaging has already reported why. Without Firebase there
+    // is nothing to register and retrying here cannot help.
+    return false;
+  }
+
+  if (!await ensureNotificationPermission()) return false;
+
+  for (int attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      if (!kIsWeb && Platform.isIOS && await _waitForApnsToken() == null) {
+        await reportDiagnostic(
+            '[fcm-apns] no APNs token on attempt $attempt; not registering');
+      } else {
+        final token = await FirebaseMessaging.instance.getToken();
+        if (token != null && token.isNotEmpty) {
+          if (await postFcmToken(token,
+              authToken: authToken, apiBaseUrl: apiBaseUrl)) {
+            return true;
+          }
+        } else {
+          await reportDiagnostic('[fcm-token] null/empty on attempt $attempt');
+        }
+      }
+    } catch (e) {
+      await reportDiagnostic('[fcm-register-error] attempt $attempt: $e');
+    }
+    if (attempt < attempts) {
+      await Future.delayed(Duration(seconds: 2 * attempt));
+    }
+  }
+  return false;
+}
+
+Future<void> setupPushNotifications() async {
+  if (!firebaseAvailable) return;
+  final messaging = FirebaseMessaging.instance;
+
+  // Asked for at startup rather than only when a token is wanted, so a user
+  // who is not signed in yet still gets the prompt on first launch.
+  await ensureNotificationPermission();
+
+  try {
+    await messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
     );
-
-    // On iOS, wait for APNs token before requesting FCM token.
-    // FCM token generation requires a valid APNs token on iOS.
-    if (!kIsWeb && Platform.isIOS) {
-      debugPrint('iOS: Waiting for APNs token before requesting FCM token...');
-      String? apnsToken;
-      for (int i = 0; i < 10; i++) {
-        apnsToken = await messaging.getAPNSToken();
-        if (apnsToken != null) {
-          debugPrint('iOS: APNs token received on attempt ${i + 1}');
-          break;
-        }
-        await Future.delayed(const Duration(seconds: 2));
-        debugPrint('iOS: APNs token not ready yet, retry ${i + 1}/10...');
-      }
-      if (apnsToken == null) {
-        debugPrint('iOS: WARNING - APNs token not available after 10 retries. FCM token may be null.');
-      }
-    }
-
-    try {
-      final token = await messaging.getToken();
-      debugPrint('FCM Token: $token');
-      if (token != null && token.isNotEmpty) {
-        _syncFcmTokenToBackend(token);
-      }
-    } catch (e) {
-      debugPrint('Error getting FCM token: $e');
-    }
-
-    // When token refreshes (e.g. app reinstall, new device), sync to backend
-    messaging.onTokenRefresh.listen((newToken) {
-      debugPrint('FCM Token refreshed: $newToken');
-      _syncFcmTokenToBackend(newToken);
-    });
-
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      debugPrint('Got a message whilst in the foreground!');
-      if (message.notification != null) {
-        final context = navigatorKey.currentContext;
-        if (context != null) {
-          SeatyNotifications.show(
-            context,
-            message.notification!.body ??
-                message.notification!.title ??
-                'New Notification',
-            isWarning: false,
-          );
-        }
-      }
-    });
-
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-      debugPrint('Notification clicked (App opened from background): ${message.data}');
-    });
-
-    messaging.getInitialMessage().then((RemoteMessage? message) {
-      if (message != null) {
-        debugPrint('Notification clicked (App opened from terminated state): ${message.data}');
-      }
-    });
   } catch (e) {
-    debugPrint('Push notifications setup skipped: $e');
+    debugPrint('setForegroundNotificationPresentationOptions failed: $e');
   }
+
+  // A token rotates on reinstall, restore or a new device. Until this fires
+  // the backend's copy is stale and every push to it is silently discarded.
+  messaging.onTokenRefresh.listen((newToken) {
+    debugPrint('FCM Token refreshed: ${shortId(newToken, 20)}...');
+    unawaited(postFcmToken(newToken));
+  });
+
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    debugPrint('Got a message whilst in the foreground!');
+    if (message.notification != null) {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        SeatyNotifications.show(
+          context,
+          message.notification!.body ??
+              message.notification!.title ??
+              'New Notification',
+          isWarning: false,
+        );
+      }
+    }
+  });
+
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    debugPrint('Notification clicked (App opened from background): ${message.data}');
+  });
+
+  unawaited(messaging.getInitialMessage().then((RemoteMessage? message) {
+    if (message != null) {
+      debugPrint('Notification clicked (App opened from terminated state): ${message.data}');
+    }
+  }));
 }
 
-final Completer<void> _firebaseInitCompleter = Completer<void>();
+final Completer<bool> _firebaseInitCompleter = Completer<bool>();
 
-/// Completes once [initFirebaseMessaging] has finished, successfully or not.
-Future<void> get firebaseReady => _firebaseInitCompleter.future;
+/// Completes with true once Firebase is up, false if it could not be started.
+///
+/// It never reports success for a failed initialisation. The previous version
+/// completed from a `finally`, so every caller was told "ready" and then walked
+/// straight into `[core/no-app]` - silently, because the only record of the
+/// real exception was a release-mode `debugPrint`.
+Future<bool> get firebaseReady => _firebaseInitCompleter.future;
 
-/// Idempotent — repeat calls return the in-flight or completed future rather
-/// than initialising Firebase (and a second background engine) again.
+/// Ground truth for code that cannot await.
+bool get firebaseAvailable => Firebase.apps.isNotEmpty;
+
+/// Idempotent - repeat calls return rather than initialising Firebase (and a
+/// second background engine) again.
 Future<void> initFirebaseMessaging() async {
   if (_firebaseInitCompleter.isCompleted) return;
-  try {
-    await _initFirebaseMessaging();
-  } finally {
-    if (!_firebaseInitCompleter.isCompleted) {
-      _firebaseInitCompleter.complete();
-    }
+  final ok = await _initFirebaseMessaging();
+  if (!_firebaseInitCompleter.isCompleted) {
+    _firebaseInitCompleter.complete(ok);
   }
 }
 
-Future<void> _initFirebaseMessaging() async {
-  try {
-    // Only initialize FCM on platforms that support it natively (Android, iOS, Web, macOS)
-    if (kIsWeb || (!Platform.isWindows && !Platform.isLinux)) {
+Future<bool> _initFirebaseMessaging() async {
+  // Only Android, iOS, web and macOS have native FCM.
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
+    debugPrint('Firebase messaging safely skipped on desktop platform: '
+        '${Platform.operatingSystem}');
+    return false;
+  }
+
+  // Retried because initialisation can lose a race with plugin registration on
+  // a cold start, and a single failure used to disable push for the entire
+  // install - nothing ever tried again.
+  Object? lastError;
+  for (int attempt = 1; attempt <= 3; attempt++) {
+    try {
       await Firebase.initializeApp();
-      // Firebase is up, so buffered startup errors can now be delivered.
-      await CrashReporting.enableCrashReporting();
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-      setupPushNotifications();
-    } else {
-      debugPrint('Firebase messaging safely skipped on desktop platform: ${Platform.operatingSystem}');
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+      debugPrint('Firebase.initializeApp failed (attempt $attempt/3): $e');
+      if (attempt < 3) {
+        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      }
     }
-  } catch (e) {
-    debugPrint('Firebase initialization notice: $e');
   }
+
+  if (lastError != null || !firebaseAvailable) {
+    // Every push path is dead from here. Say so somewhere readable.
+    await reportDiagnostic('[firebase-init-failed] '
+        '${lastError ?? 'no default app after initializeApp()'}');
+    return false;
+  }
+
+  try {
+    await CrashReporting.enableCrashReporting();
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (e) {
+    await reportDiagnostic('[firebase-post-init-error] $e');
+  }
+
+  unawaited(setupPushNotifications());
+  return true;
 }
-
-

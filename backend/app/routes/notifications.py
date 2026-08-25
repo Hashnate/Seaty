@@ -77,7 +77,12 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
             ),
         )
 
-        # Configure high-priority delivery, sound and badges for iOS APNs
+        # Configure high-priority delivery, sound and badges for iOS APNs.
+        #
+        # No `content_available`: it marks an alert as *also* a silent
+        # background push, which iOS throttles against a per-app budget, and
+        # nothing here consumes a background wake - the handler only logs. It
+        # bought nothing and risked delivery.
         apns_config = messaging.APNSConfig(
             headers={"apns-priority": "10"},
             payload=messaging.APNSPayload(
@@ -85,7 +90,6 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
                     alert=messaging.ApsAlert(title=title, body=message),
                     sound="default",
                     badge=1,
-                    content_available=True,
                 )
             ),
         )

@@ -202,6 +202,15 @@ try:
     except Exception as e:
         print(f"Error adding users.token_version: {e}")
 
+    # 14b. Native push registration token. Present in schema.sql but never in
+    # this file, so any database created before it was added silently lacked the
+    # column - and every attempt to register a device 500'd.
+    print("Adding users.fcm_token...")
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT")
+    except Exception as e:
+        print(f"Error adding users.fcm_token: {e}")
+
     # 15. The reversible "temporarily off" switch, at all three levels a bus can
     # be taken out of sale: one trip instance, one recurring schedule, or the
     # whole vehicle. Defaults to TRUE so every existing row stays on sale.

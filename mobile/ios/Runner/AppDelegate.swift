@@ -11,6 +11,10 @@ import FirebaseMessaging
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
     FirebaseApp.configure()
+    // Restored: 0b9499d removed this, reverting 93cf5af - the commit that made
+    // iOS push work. Without a delegate the plugin has nothing to chain to, so
+    // foreground presentation and notification taps are dropped.
+    UNUserNotificationCenter.current().delegate = self
     application.registerForRemoteNotifications()
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

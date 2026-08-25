@@ -43,7 +43,9 @@ void main() async {
   // finish before the first build.
   globalPrefs = await SharedPreferences.getInstance();
 
-  // Initialize Firebase and notification services before UI starts
+  // Awaited so no provider can build against a half-initialised Firebase.
+  // Never throws: a failed init resolves `firebaseReady` to false and reports
+  // the reason to the backend, rather than leaving push silently dead.
   await initFirebaseMessaging();
 
   runApp(const ProviderScope(child: SeatyApp()));
