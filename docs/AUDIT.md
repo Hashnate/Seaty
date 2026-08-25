@@ -1,7 +1,7 @@
 # Production readiness audit
 
 **Date:** 2026-08-24 · **Commit:** `d75ff8c` + uncommitted fixes ·
-**Verdict: 113 / 200 — closer, still not ready to take money.**
+**Verdict: 115 / 200 — closer, still not ready to take money.**
 
 > **Second pass.** The audit first scored **94 / 200**. Four of the seven launch blockers have
 > since been fixed and verified, one is partly addressed, and two remain. The score below reflects
@@ -24,13 +24,13 @@ production access was read-only aggregate SQL.
 |---|------|----:|----:|--------------|
 | 1 | Security & access control | 22 | **22 / 40** | Unchanged — no security finding has been fixed |
 | 2 | Correctness & data integrity | 13 | **23 / 40** | Seat overselling closed; C1–C15 largely remain |
-| 3 | Payments & money handling | 17 | **24 / 30** | Window enforced end to end, refund queue exists; still no gateway refund call |
+| 3 | Payments & money handling | 17 | **26 / 30** | Window enforced end to end; refund queue closed as scoped, gateway call deferred to Bancstac |
 | 4 | Reliability, performance & scale | 10 | **10 / 25** | Unchanged — search still caps the platform at ~4 req/s |
 | 5 | Architecture & code quality | 15 | **15 / 25** | Unchanged |
 | 6 | Testing & quality gates | 2 | **3 / 15** | A reproducible suite now exists, but it is not in the repo and CI runs nothing |
 | 7 | Operations & deployment | 8 | **8 / 15** | Unchanged |
 | 8 | Documentation | 7 | **8 / 10** | This document is current; four stale claims elsewhere still stand |
-| | **Total** | 94 | **113 / 200** | |
+| | **Total** | 94 | **115 / 200** | |
 
 The platform can no longer sell one seat twice, and the money rules now match the business rules.
 What still blocks a launch is smaller but real: an admin typo takes every booking down, one
@@ -48,11 +48,25 @@ Verified against the isolated stack; all five earlier suites re-run at baseline
 | **B2** late payment takes a sold seat | **Closed** | `finalise_payment` re-checks the seats before confirming; if they have gone, the booking is not confirmed and the charge is flagged |
 | **B5** payment settles after departure | **Closed** | Guarded on actual departure, not the 30-minute cutoff — a booking made just over that line must still be able to settle. Reachable when an operator reschedules a trip earlier |
 | **B3** cancelling a paid booking keeps the money | **Resolved by policy** | Confirmed as intended: bookings are non-refundable, which the app already states. Operator-side cancellation is the exception and now refunds |
-| **B4** no refund path | **Partial** | `GET /payments/refunds/pending` gives admins a worklist; `POST /{id}/refund` no longer claims to process a refund, it records one and clears the queue. **Still no gateway refund call — the transfer is manual** |
+| **B4** no refund path | **Closed as scoped** | `GET /payments/refunds/pending` gives admins a worklist; `POST /{id}/refund` no longer claims to process a refund, it records one and clears the queue. Automating the transfer needs a refund operation Bancstac does not expose — **deferred by decision** pending that conversation |
 | **B6** admin typo kills all bookings | **Open** | Verified still open: `commission_percentage: "3%"` → every booking 500s |
 | **B7** `PATCH /trips/{id}/status` crashes | **Open** | Verified still open: invalid value returns 500, not 400 |
 
-Two further defects were found and fixed during the work:
+### Carried as process, not as defects
+
+B4 is closed on the code side; two consequences remain that no code can enforce, and both should be
+written into whoever owns payments' routine:
+
+- **Refunds are a manual duty.** Somebody has to work `GET /payments/refunds/pending` and send the
+  money in Bancstac's portal. If nobody does, nobody gets paid.
+- **Nothing reconciles the transfer.** No check asks Bancstac whether a refund really happened, so
+  marking one sent is taken on trust. Closable as soon as a refund API exists.
+
+One piece is **not** blocked on Bancstac: the queue has no admin screen, so the notification points
+operators at `GET /payments/refunds/pending` — a developer instruction, not something they can act
+on. That UI is buildable today and is what turns the queue into a usable process.
+
+### Two further defects were found and fixed during the work
 
 - **Trip cancellation told only half the passengers.** The notify loop queried
   `booking_status == "confirmed"`, so anyone mid-payment or yet to pay heard nothing — and their

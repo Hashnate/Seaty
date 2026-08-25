@@ -158,6 +158,105 @@ def get_revenue_analytics(
     return data_points
 
 
+def validate_and_normalize_setting(key: str, raw_value: str) -> str:
+    """Validate and normalize platform configuration values before persisting."""
+    val = raw_value.strip()
+
+    if key == "commission_percentage":
+        clean_val = val
+        if clean_val.endswith("%"):
+            clean_val = clean_val[:-1].strip()
+        try:
+            num = float(clean_val)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="commission_percentage must be a valid number between 0 and 100",
+            )
+        if not (0.0 <= num <= 100.0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="commission_percentage must be between 0 and 100",
+            )
+        return f"{num:.2f}".rstrip("0").rstrip(".") if "." in f"{num:.2f}" else f"{num:.2f}"
+
+    elif key == "commission_fixed_fee":
+        try:
+            num = float(val)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="commission_fixed_fee must be a valid non-negative number",
+            )
+        if num < 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="commission_fixed_fee cannot be negative",
+            )
+        return f"{num:.2f}"
+
+    elif key == "seat_hold_duration_minutes":
+        clean_val = val.lower().strip()
+        for suffix in ("minutes", "minute", "mins", "min", "m"):
+            if clean_val.endswith(suffix):
+                clean_val = clean_val[:-len(suffix)].strip()
+                break
+        try:
+            num = int(clean_val)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="seat_hold_duration_minutes must be an integer (e.g. 10)",
+            )
+        if not (1 <= num <= 120):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="seat_hold_duration_minutes must be between 1 and 120 minutes",
+            )
+        return str(num)
+
+    elif key == "bookings_enabled":
+        lower = val.lower()
+        if lower in ("true", "1", "yes", "on"):
+            return "true"
+        elif lower in ("false", "0", "no", "off"):
+            return "false"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="bookings_enabled must be 'true' or 'false'",
+            )
+
+    elif key == "payment_gateway":
+        lower = val.lower()
+        valid_gateways = {"sandbox", "bancstac", "payhere", "stripe", "off", "test", "live"}
+        if lower not in valid_gateways:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"payment_gateway must be one of: {', '.join(sorted(valid_gateways))}",
+            )
+        return lower
+
+    elif key == "currency":
+        upper = val.upper()
+        if len(upper) != 3 or not upper.isalpha():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="currency must be a 3-letter currency code (e.g. LKR)",
+            )
+        return upper
+
+    elif key == "support_phone":
+        if not val:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="support_phone cannot be empty",
+            )
+        return val
+
+    return val
+
+
 @router.get("/settings", response_model=List[schemas.PlatformSettingResponse])
 def get_platform_settings(
     db: Session = Depends(get_db),
@@ -181,7 +280,8 @@ def update_platform_setting(
     if not setting:
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
 
-    setting.value = setting_in.value
+    validated_value = validate_and_normalize_setting(key, setting_in.value)
+    setting.value = validated_value
     db.commit()
     db.refresh(setting)
     return setting

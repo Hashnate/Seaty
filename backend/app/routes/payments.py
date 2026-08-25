@@ -37,7 +37,13 @@ CURRENCY = "LKR"
 # Driven by `seat_hold_duration_minutes` so the hold and the payment window can
 # never drift apart - there is one number, and the admin console owns it.
 def _payment_window_minutes(db: Session) -> int:
-    return int(_get_platform_setting(db, "seat_hold_duration_minutes", "10"))
+    raw = _get_platform_setting(db, "seat_hold_duration_minutes", "10")
+    try:
+        clean = str(raw).lower().rstrip("minutes").rstrip("mins").rstrip("min").rstrip("m").strip()
+        val = int(clean)
+        return val if val > 0 else 10
+    except (ValueError, TypeError):
+        return 10
 
 
 def _payment_expired(db: Session, payment: "models.Payment") -> bool:
@@ -101,9 +107,26 @@ def _get_platform_setting(db: Session, key: str, default: str = "0") -> str:
 
 
 def _calculate_platform_fee(db: Session, subtotal: float) -> float:
-    """Calculate platform fee = (percentage% of subtotal) + fixed fee."""
-    pct = float(_get_platform_setting(db, "commission_percentage", "3.0"))
-    fixed = float(_get_platform_setting(db, "commission_fixed_fee", "25.0"))
+    """Calculate platform fee = (percentage% of subtotal) + fixed fee with defensive fallback handling."""
+    raw_pct = _get_platform_setting(db, "commission_percentage", "3.0")
+    raw_fixed = _get_platform_setting(db, "commission_fixed_fee", "25.0")
+
+    try:
+        clean_pct = str(raw_pct).replace("%", "").strip()
+        pct = float(clean_pct)
+        if pct < 0:
+            pct = 3.0
+    except (ValueError, TypeError):
+        pct = 3.0
+
+    try:
+        clean_fixed = str(raw_fixed).strip()
+        fixed = float(clean_fixed)
+        if fixed < 0:
+            fixed = 25.0
+    except (ValueError, TypeError):
+        fixed = 25.0
+
     return round((subtotal * pct / 100) + fixed, 2)
 
 

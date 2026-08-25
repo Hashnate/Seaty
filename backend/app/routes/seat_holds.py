@@ -14,11 +14,18 @@ router = APIRouter(prefix="/seat-holds", tags=["Seat Holds"])
 
 
 def _get_hold_duration(db: Session) -> int:
-    """Get configured seat hold duration in minutes."""
+    """Get configured seat hold duration in minutes with defensive fallback handling."""
     setting = db.query(models.PlatformSetting).filter(
         models.PlatformSetting.key == "seat_hold_duration_minutes"
     ).first()
-    return int(setting.value) if setting else 10
+    if not setting or setting.value is None:
+        return 10
+    try:
+        clean_val = str(setting.value).lower().rstrip("minutes").rstrip("mins").rstrip("min").rstrip("m").strip()
+        val = int(clean_val)
+        return val if val > 0 else 10
+    except (ValueError, TypeError):
+        return 10
 
 
 def get_unavailable_seats(db: Session, trip_id: UUID) -> dict:

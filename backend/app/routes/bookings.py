@@ -16,15 +16,30 @@ router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 
 def _get_platform_fee(db: Session, subtotal: float) -> float:
-    """Calculate platform fee from settings."""
+    """Calculate platform fee from settings with defensive fallback handling."""
     pct_setting = db.query(models.PlatformSetting).filter(
         models.PlatformSetting.key == "commission_percentage"
     ).first()
     fixed_setting = db.query(models.PlatformSetting).filter(
         models.PlatformSetting.key == "commission_fixed_fee"
     ).first()
-    pct = float(pct_setting.value) if pct_setting else 3.0
-    fixed = float(fixed_setting.value) if fixed_setting else 25.0
+
+    try:
+        raw_pct = str(pct_setting.value).replace("%", "").strip() if pct_setting and pct_setting.value is not None else "3.0"
+        pct = float(raw_pct)
+        if pct < 0:
+            pct = 3.0
+    except (ValueError, TypeError):
+        pct = 3.0
+
+    try:
+        raw_fixed = str(fixed_setting.value).strip() if fixed_setting and fixed_setting.value is not None else "25.0"
+        fixed = float(raw_fixed)
+        if fixed < 0:
+            fixed = 25.0
+    except (ValueError, TypeError):
+        fixed = 25.0
+
     return round((subtotal * pct / 100) + fixed, 2)
 
 
@@ -155,7 +170,14 @@ def _get_hold_duration(db: Session) -> int:
     setting = db.query(models.PlatformSetting).filter(
         models.PlatformSetting.key == "seat_hold_duration_minutes"
     ).first()
-    return int(setting.value) if setting else 10
+    if not setting or setting.value is None:
+        return 10
+    try:
+        clean_val = str(setting.value).lower().rstrip("minutes").rstrip("mins").rstrip("min").rstrip("m").strip()
+        val = int(clean_val)
+        return val if val > 0 else 10
+    except (ValueError, TypeError):
+        return 10
 
 
 def _auto_update_booking_statuses(db: Session, bookings: List[models.Booking]):

@@ -423,13 +423,13 @@ def get_trip(trip_id: UUID, db: Session = Depends(get_db)):
 @router.patch("/{trip_id}/status", response_model=schemas.TripResponse)
 async def update_trip_status(
     trip_id: UUID, 
-    status: str = Query(..., description="scheduled, ongoing, completed, cancelled"), 
+    new_status: str = Query(..., alias="status", description="scheduled, ongoing, completed, cancelled"), 
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
     trip = permissions.require_operable_trip(db, current_user, trip_id)
 
-    if status not in ["scheduled", "ongoing", "completed", "cancelled"]:
+    if new_status not in ["scheduled", "ongoing", "completed", "cancelled"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid status type."
@@ -438,7 +438,7 @@ async def update_trip_status(
     # A conductor runs the trip they were assigned; they do not cancel it.
     # Cancelling voids every booking on the bus and puts paid passengers into
     # the refund queue, so it stays with the people who answer for the money.
-    if current_user.role == "conductor" and status in ("cancelled", "scheduled"):
+    if current_user.role == "conductor" and new_status in ("cancelled", "scheduled"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the operator or an administrator can cancel or reopen a trip."
@@ -446,7 +446,7 @@ async def update_trip_status(
 
 
     old_status = trip.status
-    trip.status = status
+    trip.status = new_status
     db.commit()
     db.refresh(trip)
 
@@ -462,7 +462,7 @@ async def update_trip_status(
     # nothing was initiated and the bookings stayed confirmed on a dead trip.
     refunds_due = []
     affected = []
-    if status == "cancelled" and old_status != "cancelled":
+    if new_status == "cancelled" and old_status != "cancelled":
         # Everyone holding a booking on this bus, not only the ones who have
         # already paid. A passenger sitting on the card page ("pending" /
         # "awaiting_payment") is the one who most needs to hear this: left
@@ -500,11 +500,11 @@ async def update_trip_status(
         db.commit()
     
     # Notify passengers if status goes from scheduled -> ongoing / cancelled
-    if status != old_status and status in ["ongoing", "cancelled"]:
+    if new_status != old_status and new_status in ["ongoing", "cancelled"]:
         # For a cancellation the bookings were just moved to "cancelled" above,
         # so re-querying for confirmed ones would find nobody to tell. Use the
         # list captured before the mutation.
-        if status == "cancelled":
+        if new_status == "cancelled":
             bookings = affected
         else:
             bookings = db.query(models.Booking).filter(
@@ -520,8 +520,8 @@ async def update_trip_status(
                 destination = route.destination if route else "Destination"
                 date_str = to_sl(trip.departure_time).strftime("%Y-%m-%d %H:%M")
 
-                title = f"Trip {status.capitalize()}!"
-                if status == "cancelled":
+                title = f"Trip {new_status.capitalize()}!"
+                if new_status == "cancelled":
                     if b.payment_status == "paid":
                         msg = (
                             f"Your trip from {origin} to {destination} scheduled for "
@@ -554,7 +554,7 @@ async def update_trip_status(
                 # permitted and online, and none of that is true of somebody
                 # already on their way to the halt. Keyed by number so a
                 # passenger with two bookings on the same bus gets one text.
-                if status == "cancelled":
+                if new_status == "cancelled":
                     phone = None
                     passenger = db.query(models.User).filter(
                         models.User.id == b.passenger_id
