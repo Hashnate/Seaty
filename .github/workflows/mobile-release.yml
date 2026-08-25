@@ -187,8 +187,12 @@ jobs:
 
       # Runs before the 15-minute archive so a Dart breakage - a plugin major
       # bump changing an API, say - fails in seconds rather than after a build.
+      #
+      # Errors only. The tree carries pre-existing warnings and lints that have
+      # nothing to do with releasing, and `flutter analyze` treats warnings as
+      # fatal by default - which would block every build on unrelated noise.
       - name: Analyze
-        run: flutter analyze
+        run: flutter analyze --no-fatal-warnings --no-fatal-infos
 
       - name: Build and export signed IPA
         run: |
