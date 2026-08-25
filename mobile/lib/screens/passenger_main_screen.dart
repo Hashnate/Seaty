@@ -516,7 +516,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
       });
 
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double heroHeight = 305.0 + topPadding;
+    final double heroHeight = 310.0 + topPadding;
 
     // The welcome text + search card are bottom-anchored inside the fixed-height
     // hero, so anything added to that block grows *upwards*. The "Clear all
@@ -562,8 +562,8 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                       width: double.infinity,
                       child: ClipRRect(
                         borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(28),
-                          bottomRight: Radius.circular(28),
+                          bottomLeft: Radius.circular(32),
+                          bottomRight: Radius.circular(32),
                         ),
                         child: Stack(
                           fit: StackFit.expand,
@@ -699,7 +699,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                             SafeArea(
                               bottom: false,
                               child: Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.end,
@@ -767,7 +767,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                         Container(
                                           decoration: BoxDecoration(
                                             color: Colors.white.withValues(alpha: 0.96),
-                                            borderRadius: BorderRadius.circular(18),
+                                            borderRadius: BorderRadius.circular(20),
                                             border: Border.all(color: Colors.white, width: 1.5),
                                             boxShadow: [
                                               BoxShadow(
@@ -835,7 +835,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                                   ),
                                                   Positioned(
                                                     right: 16,
-                                                    top: 20,
+                                                    top: 27,
                                                     child: GestureDetector(
                                                       onTap: () {
                                                         setState(() {
@@ -847,7 +847,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                                         });
                                                       },
                                                       child: Container(
-                                                        padding: const EdgeInsets.all(6),
+                                                        padding: const EdgeInsets.all(7),
                                                         decoration: BoxDecoration(
                                                           color: Colors.white,
                                                           shape: BoxShape.circle,
@@ -863,7 +863,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                                         child: const Icon(
                                                           Icons.swap_vert_rounded,
                                                           color: Color(0xFF2563EB),
-                                                          size: 16,
+                                                          size: 18,
                                                         ),
                                                       ),
                                                     ),
@@ -874,7 +874,7 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
 
                                               // Date Row
                                               Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                                 child: Row(
                                                   children: [
                                                     const Icon(
@@ -974,10 +974,10 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                         ),
 
                                         // Red Search Buses Button inside slider container
-                                        const SizedBox(height: 8),
+                                        const SizedBox(height: 10),
                                         SizedBox(
                                           width: double.infinity,
-                                          height: 42,
+                                          height: 48,
                                           child: ElevatedButton(
                                             onPressed: () {
                                               _fromFocusNode.unfocus();
@@ -999,18 +999,18 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                                               elevation: 4,
                                               shadowColor: Colors.black45,
                                               shape: RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.circular(22),
+                                                borderRadius: BorderRadius.circular(24),
                                               ),
                                             ),
                                             child: const Row(
                                               mainAxisAlignment: MainAxisAlignment.center,
                                               children: [
-                                                Icon(Icons.search_rounded, size: 17),
-                                                SizedBox(width: 6),
+                                                Icon(Icons.search_rounded, size: 18),
+                                                SizedBox(width: 8),
                                                 Text(
                                                   'Search buses',
                                                   style: TextStyle(
-                                                    fontSize: 14,
+                                                    fontSize: 15,
                                                     fontWeight: FontWeight.bold,
                                                     letterSpacing: 0.2,
                                                   ),
@@ -1819,15 +1819,15 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
     Widget? suffix,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Icon(
             icon,
             color: const Color(0xFF64748B),
-            size: 20,
+            size: 22,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: TextField(
               controller: controller,

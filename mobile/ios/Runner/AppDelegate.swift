@@ -6,6 +6,10 @@ import FirebaseMessaging
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+  /// Retained: a FlutterMethodChannel holding a handler is otherwise
+  /// deallocated as soon as this method returns, and the handler stops firing.
+  private var badgeChannel: FlutterMethodChannel?
+
   /// Posts a line to the backend's diagnostic sink.
   ///
   /// The Dart side cannot report on native plugin registration - by the time a
@@ -70,5 +74,27 @@ import FirebaseMessaging
     AppDelegate.nativeLog("didInitializeImplicitFlutterEngine fired")
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     AppDelegate.nativeLog("GeneratedPluginRegistrant.register returned")
+
+    // The app-icon badge. APNs sets it; only the app can clear it, so Dart needs
+    // a way to reach it on sign-out and whenever the unread count changes.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "SeatyBadge") {
+      let channel = FlutterMethodChannel(
+        name: "lk.seaty.app/badge",
+        binaryMessenger: registrar.messenger())
+      channel.setMethodCallHandler { call, result in
+        guard call.method == "setBadge" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        let count = (call.arguments as? [String: Any])?["count"] as? Int ?? 0
+        if #available(iOS 16.0, *) {
+          UNUserNotificationCenter.current().setBadgeCount(count)
+        } else {
+          UIApplication.shared.applicationIconBadgeNumber = count
+        }
+        result(nil)
+      }
+      self.badgeChannel = channel
+    }
   }
 }

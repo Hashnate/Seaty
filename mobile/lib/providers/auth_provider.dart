@@ -1,4 +1,4 @@
-import 'dart:async' show TimeoutException;
+import 'dart:async' show TimeoutException, unawaited;
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +11,7 @@ import 'package:seaty/providers/fleet_provider.dart';
 import 'package:seaty/providers/gps_tracking_provider.dart';
 import 'package:seaty/providers/notifications_provider.dart';
 import 'package:seaty/providers/trips_provider.dart';
+import 'package:seaty/utils/app_badge.dart';
 
 /// A sign-in failure with a message already fit to show the user — typically
 /// the backend's `detail` for a wrong, expired, or rate-limited OTP.
@@ -609,6 +610,11 @@ class AuthNotifier extends Notifier<AuthState> {
     );
     state = newState;
     clearSessionScopedCaches();
+
+    // The app-icon badge is push-driven and survives sign-out: iOS keeps
+    // whatever APNs last wrote until the app clears it, so one user's unread
+    // count would otherwise greet the next user on the home screen.
+    unawaited(AppBadge.clear());
 
     // Removed rather than overwritten, so a partially applied write cannot
     // leave a key behind that still looks like a session.

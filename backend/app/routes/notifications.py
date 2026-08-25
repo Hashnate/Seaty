@@ -46,8 +46,16 @@ class NotificationManager:
 
 manager = NotificationManager()
 
-def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
-    """Sends native FCM push notification via firebase_admin SDK."""
+def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None,
+                  badge: int = None):
+    """Sends native FCM push notification via firebase_admin SDK.
+
+    `badge` is the recipient's unread count. iOS keeps whatever number APNs
+    last wrote until the app clears it, so a constant here would pin the
+    app-icon badge at that value for good - through reading, sign-out, and
+    into the next user's session. Pass the real count, or None to leave the
+    badge untouched.
+    """
     if not fcm_token:
         print("FCM Push skipped: no FCM token provided")
         return
@@ -89,7 +97,7 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
                 aps=messaging.Aps(
                     alert=messaging.ApsAlert(title=title, body=message),
                     sound="default",
-                    badge=1,
+                    badge=badge,
                 )
             ),
         )
@@ -108,6 +116,16 @@ def send_fcm_push(fcm_token: str, title: str, message: str, data: dict = None):
         print(f"FCM Push sent successfully: {response}")
     except Exception as e:
         print(f"FCM Push notification error: {e}")
+
+def unread_count(db: Session, user_id: UUID) -> int:
+    """How many notifications this user has not read yet.
+
+    Sent as the APNs badge so the app icon shows the recipient's real state.
+    """
+    return db.query(models.Notification).filter(
+        models.Notification.user_id == user_id,
+        models.Notification.is_read.is_(False),
+    ).count()
 
 # =====================================================================
 # Database Saver and Broadcaster Utility
@@ -160,7 +178,10 @@ async def create_and_send_notification(
         # loop serves every WebSocket in this process, so calling it directly
         # from an `async def` stalls every socket and every in-flight request
         # until Firebase answers.
-        await run_in_threadpool(send_fcm_push, user.fcm_token, title, message, fcm_data)
+        await run_in_threadpool(
+            send_fcm_push, user.fcm_token, title, message, fcm_data,
+            unread_count(db, user_id),
+        )
 
     return db_noti
 
@@ -292,6 +313,7 @@ async def broadcast_notification(
                 payload.title,
                 payload.message,
                 {"type": "system", "id": str(db_noti.id)},
+                unread_count(db, db_noti.user_id),
             )
 
     return {"status": "success", "message": f"Notification broadcasted to {len(users)} users"}

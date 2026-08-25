@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:seaty/providers/shared_providers.dart';
 import 'package:seaty/providers/auth_provider.dart';
 import 'package:seaty/providers/bookings_provider.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
+import 'package:seaty/utils/app_badge.dart';
 
 const Set<String> _kBookingAffectingNotificationTypes = {
   'booking',
@@ -75,6 +77,17 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
     );
   }
 
+  /// Sets the notification list and mirrors the unread count onto the app-icon
+  /// badge.
+  ///
+  /// Every list mutation goes through here. The badge is push-driven - APNs
+  /// writes it and iOS keeps that number until the app says otherwise - so
+  /// reading a notification in-app clears it only if we do this.
+  void _publish(List<Map<String, dynamic>> list) {
+    state = state.copyWith(notifications: list);
+    unawaited(AppBadge.set(state.unreadNotificationsCount));
+  }
+
   Future<void> fetchNotifications() async {
     final auth = ref.read(authProvider);
     if (auth.token.isEmpty || auth.token.startsWith('simulated')) return;
@@ -93,7 +106,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        state = state.copyWith(notifications: List<Map<String, dynamic>>.from(data));
+        _publish(List<Map<String, dynamic>>.from(data));
       }
     } catch (e) {
       debugPrint('Error fetching notifications: $e');
@@ -107,7 +120,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
       final notiIndex = list.indexWhere((n) => n['id'].toString() == notificationId);
       if (notiIndex != -1) {
         list[notiIndex] = {...list[notiIndex], 'is_read': true};
-        state = state.copyWith(notifications: list);
+        _publish(list);
       }
       return;
     }
@@ -127,7 +140,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
         final notiIndex = list.indexWhere((n) => n['id'].toString() == notificationId);
         if (notiIndex != -1) {
           list[notiIndex] = {...list[notiIndex], 'is_read': true};
-          state = state.copyWith(notifications: list);
+          _publish(list);
         }
       }
     } catch (e) {
@@ -141,7 +154,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
       final List<Map<String, dynamic>> list = state.notifications.map((n) {
         return {...n, 'is_read': true};
       }).toList();
-      state = state.copyWith(notifications: list);
+      _publish(list);
       return;
     }
 
@@ -159,7 +172,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
         final List<Map<String, dynamic>> list = state.notifications.map((n) {
           return {...n, 'is_read': true};
         }).toList();
-        state = state.copyWith(notifications: list);
+        _publish(list);
       }
     } catch (e) {
       debugPrint('Error marking all notifications as read: $e');
@@ -183,7 +196,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
           try {
             final data = json.decode(message);
             final List<Map<String, dynamic>> list = [data, ...state.notifications];
-            state = state.copyWith(notifications: list);
+            _publish(list);
 
             // Keep the local bookings cache in sync so tapping this
             // notification resolves to the right booking immediately,
