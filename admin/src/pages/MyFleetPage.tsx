@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import CustomSelect from '../components/CustomSelect';
-import { getVehicles, createVehicle, deleteVehicle, updateVehicle, uploadVehicleMainImage, uploadVehicleGallery } from '../api/client';
-import { Plus, ShieldCheck, ShieldAlert, Bus, Wifi, Plug, Tv, Armchair, Users, Briefcase, Snowflake, Settings, Upload, Image as ImageIcon, X } from 'lucide-react';
+import { getVehicles, createVehicle, deleteVehicle, updateVehicle, uploadVehicleMainImage, uploadVehicleGallery, setVehicleBooking } from '../api/client';
+import { Plus, ShieldCheck, ShieldAlert, Bus, Wifi, Plug, Tv, Armchair, Users, Briefcase, Snowflake, Settings, Upload, Image as ImageIcon, X, Power } from 'lucide-react';
 
 interface VehicleRecord {
   id: string;
@@ -11,6 +11,8 @@ interface VehicleRecord {
   type: string;
   total_seats: number;
   is_verified: boolean;
+  booking_enabled?: boolean;
+  suspension_reason?: string | null;
   amenities: string[];
   contact_phone?: string;
   main_image_url?: string;
@@ -290,6 +292,32 @@ export default function MyFleetPage() {
     }
   };
 
+  // Takes the whole bus off sale in one move: every trip on it, current and
+  // future, stops appearing in passenger search. Reversible, and it leaves
+  // existing bookings and each trip's own state untouched.
+  const handleToggleBusBooking = async (v: VehicleRecord) => {
+    if (!token) return;
+    const turningOff = v.booking_enabled !== false;
+    let reason: string | undefined;
+    if (turningOff) {
+      const input = window.prompt(
+        `Take ${v.name} (${v.registration_number}) off sale?\n\n` +
+        'Every trip on this bus stops being offered to passengers until you ' +
+        'switch it back on. Existing bookings are not affected.\n\n' +
+        'Reason shown to passengers (optional):',
+        'Bus under maintenance'
+      );
+      if (input === null) return;
+      reason = input.trim() || undefined;
+    }
+    try {
+      await setVehicleBooking(token, v.id, !turningOff, reason);
+      fetchFleet();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update the booking switch');
+    }
+  };
+
   const toggleAmenity = (ame: string) => {
     setAmenities(prev =>
       prev.includes(ame) ? prev.filter(x => x !== ame) : [...prev, ame]
@@ -355,15 +383,44 @@ export default function MyFleetPage() {
                     </div>
                   </td>
                   <td>
-                    {v.is_verified ? (
-                      <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <ShieldCheck size={12} /> Verified
-                      </span>
-                    ) : (
-                      <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <ShieldAlert size={12} /> Pending verification
-                      </span>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
+                      {v.is_verified ? (
+                        <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldCheck size={12} /> Verified
+                        </span>
+                      ) : (
+                        <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <ShieldAlert size={12} /> Pending verification
+                        </span>
+                      )}
+                      {/* Verification is the admin's document check. This is the
+                          operator's own on/off switch, and they are not the same
+                          thing - a verified bus can still be off the road today. */}
+                      <button
+                        onClick={() => handleToggleBusBooking(v)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11.5px',
+                          fontWeight: 600,
+                          color: v.booking_enabled === false ? '#16a34a' : '#b45309'
+                        }}
+                        title={v.booking_enabled === false
+                          ? 'Put this bus back on sale'
+                          : 'Temporarily take this bus off sale'}
+                      >
+                        <Power size={11} />
+                        {v.booking_enabled === false ? 'Bookings off — turn on' : 'Bookings on — turn off'}
+                      </button>
+                      {v.booking_enabled === false && v.suspension_reason && (
+                        <div style={{ fontSize: '11px', color: '#b45309' }}>{v.suspension_reason}</div>
+                      )}
+                    </div>
                   </td>
                   <td style={{ position: 'relative' }}>
                     <button

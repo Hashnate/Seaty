@@ -5,6 +5,7 @@ from uuid import UUID
 import uuid
 import datetime
 
+from app.services.availability import assert_bookable
 from app.database import get_db
 from app import models, schemas, auth
 from app.routes.seat_holds import get_unavailable_seats
@@ -49,11 +50,12 @@ def create_booking(
     if not trip:
         raise HTTPException(status_code=404, detail="Scheduled trip not found")
 
-    if trip.status in ["completed", "cancelled"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot book seats on a trip that is already {trip.status}."
-        )
+    # Every reason a seat cannot be sold, in one call: the global kill switch,
+    # a suspended company, an unverified bus, the temporary off switch at
+    # vehicle / schedule / trip level, and the trip's own status. Checking
+    # status alone here is what let a trip that had been switched off still
+    # take bookings from anyone holding the seat map open.
+    assert_bookable(db, trip)
 
     # 30-minute pre-departure cutoff validation
     now = now_sl()

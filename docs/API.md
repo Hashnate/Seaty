@@ -59,15 +59,20 @@ They are lost on restart and not shared between workers.
 
 | Method | Path                      | Roles                    | Notes                                        |
 | ------ | ------------------------- | ------------------------ | -------------------------------------------- |
-| POST   | `/vehicles`               | owner, admin, conductor  | Created unverified; notifies all admins      |
+| POST   | `/vehicles`               | owner, admin             | Created unverified; notifies all admins      |
 | GET    | `/vehicles`               | Any                      | Admin: all · owner/conductor: own company · passenger: verified only |
 | GET    | `/vehicles/{id}`          | Any                      | Unverified hidden from non-owners            |
 | POST   | `/vehicles/{id}/approve`  | admin                    | Sets `is_verified`, notifies owner           |
 | POST   | `/vehicles/{id}/reject`   | admin                    | Notifies owner                               |
+| PATCH  | `/vehicles/{id}/booking`  | owner, admin             | `{enabled, reason}` — take the whole bus off sale |
 | PUT    | `/vehicles/{id}`          | owner, admin             | Update                                       |
-| DELETE | `/vehicles/{id}`          | owner, admin             | Delete                                       |
+| DELETE | `/vehicles/{id}`          | owner, admin             | 409 if any trip on it has a paid booking     |
 
 Unverified vehicles cannot have trips scheduled against them.
+
+`is_verified` and `booking_enabled` are different things and both are enforced: the first is the
+admin's document approval, the second is the operator's own reversible off switch. A verified bus
+can still be off the road today.
 
 ## Reviews — `/vehicles/{vehicle_id}/reviews`
 
@@ -89,22 +94,49 @@ Unverified vehicles cannot have trips scheduled against them.
 
 | Method | Path                       | Roles                   | Notes                                              |
 | ------ | -------------------------- | ----------------------- | -------------------------------------------------- |
-| POST   | `/trips`                   | owner, admin, conductor | Vehicle must be verified and in your company        |
+| POST   | `/trips`                   | owner, admin            | Vehicle must be verified and in your company        |
 | GET    | `/trips`                   | Public (optional auth)  | Filters `?origin=&destination=&date=YYYY-MM-DD`     |
 | GET    | `/trips/{id}`              | Public                  | Includes vehicle, route, rating, booked seats       |
-| PUT    | `/trips/{id}`              | owner, admin, conductor | Notifies passengers if departure time changes       |
+| PUT    | `/trips/{id}`              | owner, admin            | Notifies passengers if departure time changes       |
 | PATCH  | `/trips/{id}/status`       | owner, admin, conductor | `?status=scheduled\|ongoing\|completed\|cancelled`  |
-| DELETE | `/trips/{id}`              | owner, admin, conductor | Company-scoped                                      |
+| PATCH  | `/trips/{id}/booking`      | owner, admin            | `{enabled, reason}` — temporary off switch          |
+| DELETE | `/trips/{id}`              | owner, admin            | 409 if any booking on the trip is paid               |
 | GET    | `/trips/{id}/manifest`     | owner, admin, conductor | Per-seat passenger list for the conductor           |
 | POST   | `/trips/{id}/toggle-board` | owner, admin, conductor | `?seat=&action=board\|unboard\|toggle`              |
 
-Two behaviours worth knowing:
+Behaviours worth knowing:
 
 - `GET /trips?date=` **writes to the database.** For any date within the next 5 days it
   materialises missing `trips` rows from active `trip_schedules`, honouring `bus_overrides`.
 - Origin/destination matching is a substring search that also walks intermediate `stops`, and
   requires the origin to sort before the destination along the route.
 - Boarding via `toggle-board` is rejected more than 30 minutes before departure.
+- **A trip that is not on sale is omitted from `GET /trips` for passengers entirely.** Staff
+  still receive it, with `sale_blocked_reason` set to the passenger-facing explanation.
+- Conductors reach `/status` (but not `cancelled` or `scheduled`), `/manifest` and
+  `/toggle-board`, and only for trips they are assigned to. Everything else on this router is
+  owner/admin, company-scoped.
+
+### The temporary off switch
+
+Three levels, all reversible, all `PATCH … /booking` with `{"enabled": bool, "reason": str?}`:
+
+| Path                            | Effect                                                       |
+| ------------------------------- | ------------------------------------------------------------ |
+| `/trips/{id}/booking`           | One instance                                                  |
+| `/schedules/{id}/booking`       | A recurring service **including trips already generated**     |
+| `/vehicles/{id}/booking`        | Every trip on that bus, present and future                    |
+
+While off, the trip vanishes from passenger search, `GET /seat-holds/trip/{id}` returns
+`booking_enabled: false` with an empty `available_seats`, and holds, bookings and payment
+initiation are all refused with 409 and the reason. Existing bookings keep their seats and
+tickets — this is *not* a cancellation. `PATCH /trips/{id}/status?status=cancelled` remains the
+one-way door that voids bookings, notifies passengers, and queues refunds.
+
+`app/services/availability.py` is the single evaluator, checked in this order: the
+`bookings_enabled` platform setting → `bus_companies.is_active` → `vehicles.is_verified` →
+`vehicles.booking_enabled` → `trip_schedules.booking_enabled` → `trips.booking_enabled` →
+`trips.status`. First refusal wins and its message is what the passenger sees.
 
 ## Recurring schedules — `/schedules`
 
@@ -114,8 +146,9 @@ Two behaviours worth knowing:
 | GET    | `/schedules`                           | owner, admin | Company-scoped for owners               |
 | GET    | `/schedules/{id}`                      | owner, admin | Detail                                  |
 | PUT    | `/schedules/{id}`                      | owner, admin | Update                                  |
-| PATCH  | `/schedules/{id}/toggle`               | owner, admin | Activate / pause                        |
-| DELETE | `/schedules/{id}`                      | owner, admin | Cascades to generated trips             |
+| PATCH  | `/schedules/{id}/toggle`               | owner, admin | Activate / pause **future materialisation only** |
+| PATCH  | `/schedules/{id}/booking`              | owner, admin | Temporary off switch, incl. generated trips |
+| DELETE | `/schedules/{id}`                      | owner, admin | 409 if a trip under it has a paid booking |
 | POST   | `/schedules/{id}/overrides`            | owner, admin | Swap vehicle for one date               |
 | GET    | `/schedules/{id}/overrides`            | owner, admin | List                                    |
 | DELETE | `/schedules/overrides/{override_id}`   | owner, admin | Remove                                  |

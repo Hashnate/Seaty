@@ -202,6 +202,39 @@ try:
     except Exception as e:
         print(f"Error adding users.token_version: {e}")
 
+    # 15. The reversible "temporarily off" switch, at all three levels a bus can
+    # be taken out of sale: one trip instance, one recurring schedule, or the
+    # whole vehicle. Defaults to TRUE so every existing row stays on sale.
+    #
+    # This is deliberately not the same thing as trips.status='cancelled'
+    # (irreversible, cancels bookings, triggers refunds/SMS) or
+    # vehicles.is_verified (admin document approval) or trip_schedules.is_active
+    # (stops materialising future trips but leaves generated ones bookable).
+    print("Adding booking_enabled / suspension_reason off switches...")
+    for table, cols in (
+        ("trips", ("booking_enabled BOOLEAN NOT NULL DEFAULT TRUE", "suspension_reason TEXT")),
+        ("trip_schedules", ("booking_enabled BOOLEAN NOT NULL DEFAULT TRUE", "suspension_reason TEXT")),
+        ("vehicles", ("booking_enabled BOOLEAN NOT NULL DEFAULT TRUE", "suspension_reason TEXT")),
+    ):
+        for col_def in cols:
+            try:
+                cur.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col_def}")
+            except Exception as e:
+                print(f"Error adding {col_def.split()[0]} to {table}: {e}")
+
+    # 16. Global sales kill switch, read by app/services/availability.py.
+    # Seeded as 'true' so an existing deployment is unaffected by the upgrade.
+    print("Seeding bookings_enabled platform setting...")
+    try:
+        cur.execute(
+            "INSERT INTO platform_settings (key, value, description) "
+            "VALUES ('bookings_enabled', 'true', "
+            "'Global switch. Set to false to stop all new seat bookings platform-wide.') "
+            "ON CONFLICT (key) DO NOTHING"
+        )
+    except Exception as e:
+        print(f"Error seeding bookings_enabled: {e}")
+
     # NOTE: step 12 (a one-time -5:30 shift of existing trips.departure_time/
     # arrival_time) was removed here. It assumed the Postgres session timezone
     # defaulted to UTC, which was never confirmed against the live database and

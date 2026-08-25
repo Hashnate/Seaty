@@ -13,6 +13,7 @@ import datetime
 from app.config import settings
 from app.database import get_db
 from app import models, schemas, auth
+from app.services.availability import assert_bookable
 from app.services.payment_gateway import (
     PaymentGatewayError,
     PaymentGatewayUnavailable,
@@ -416,6 +417,13 @@ async def initiate_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Online payment for this bus closed 30 minutes prior to departure."
         )
+
+    # Last chokepoint before money moves. A passenger who created their booking
+    # before the trip was switched off would otherwise still be able to pay for
+    # a bus that is no longer being sold - and taking the payment is much harder
+    # to undo than refusing it, since there is no gateway refund call.
+    if trip is not None:
+        assert_bookable(db, trip)
 
     # Calculate platform fee
     platform_fee = _calculate_platform_fee(db, float(booking.total_price))

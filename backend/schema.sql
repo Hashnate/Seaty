@@ -67,6 +67,10 @@ CREATE TABLE public.vehicles (
     total_seats INTEGER NOT NULL,
     amenities TEXT[] NOT NULL DEFAULT '{}', -- e.g. {'AC', 'WiFi', 'Charging Ports', 'Reclining Seats'}
     is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    -- Distinct from is_verified. is_verified means "documents approved"; this is
+    -- the operator's own temporary off switch for the whole bus.
+    booking_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    suspension_reason TEXT,
     document_urls TEXT[] NOT NULL DEFAULT '{}', -- Links to registration certificates, insurance docs
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -104,6 +108,10 @@ CREATE TABLE public.trip_schedules (
     effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
     effective_until DATE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    -- is_active stops the schedule materialising *new* trips; booking_enabled is
+    -- the temporary off switch that also closes sales on trips already generated.
+    booking_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    suspension_reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     conductor_id UUID REFERENCES public.users(id) ON DELETE SET NULL
@@ -137,6 +145,11 @@ CREATE TABLE public.trips (
     arrival_time TIMESTAMPTZ NOT NULL,
     price_per_seat NUMERIC(10, 2) NOT NULL,
     status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'ongoing', 'completed', 'cancelled')),
+    -- Temporary off switch for this one instance. Unlike status='cancelled' it is
+    -- reversible and does not touch existing bookings: the trip simply stops
+    -- being offered to passengers until it is switched back on.
+    booking_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    suspension_reason TEXT,
     boarded_seats TEXT[] NOT NULL DEFAULT '{}',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -218,7 +231,8 @@ INSERT INTO public.platform_settings (key, value, description) VALUES
     ('seat_hold_duration_minutes', '10', 'How long seats are held during payment (minutes)'),
     ('payment_gateway', 'sandbox', 'Active payment gateway: sandbox, payhere, stripe'),
     ('currency', 'LKR', 'Default currency for all transactions'),
-    ('support_phone', '0262237803', 'Customer support contact phone number');
+    ('support_phone', '0262237803', 'Customer support contact phone number'),
+    ('bookings_enabled', 'true', 'Global switch. Set to false to stop all new seat bookings platform-wide.');
 
 -- ==========================================
 -- 10. Vehicle Locations Table (For real-time GPS tracking)

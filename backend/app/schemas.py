@@ -132,6 +132,8 @@ class VehicleResponse(BaseModel):
     total_seats: int
     amenities: List[str]
     is_verified: bool
+    booking_enabled: bool = True
+    suspension_reason: Optional[str] = None
     document_urls: List[str]
     contact_phone: Optional[str] = None
     main_image_url: Optional[str] = None
@@ -194,6 +196,17 @@ class TripCreate(BaseModel):
     price_per_seat: float
     conductor_id: Optional[UUID] = None
 
+
+class BookingToggle(BaseModel):
+    """The reversible on/off switch, shared by trips, schedules and vehicles.
+
+    `reason` is shown to passengers when they hit a blocked booking, so keep it
+    customer-facing ("Bus under maintenance"), not internal shorthand. It is
+    cleared automatically when bookings are switched back on.
+    """
+    enabled: bool
+    reason: Optional[str] = Field(None, max_length=200)
+
 class TripResponse(BaseModel):
     id: UUID
     vehicle_id: UUID
@@ -204,6 +217,12 @@ class TripResponse(BaseModel):
     arrival_time: datetime.datetime
     price_per_seat: float
     status: str
+    booking_enabled: bool = True
+    suspension_reason: Optional[str] = None
+    # Why this trip is not on sale, computed across every level of the off
+    # switch (platform, company, vehicle, schedule, trip) plus status. Only
+    # ever populated for staff - passengers never receive a blocked trip.
+    sale_blocked_reason: Optional[str] = None
     boarded_seats: List[str] = []
     booked_seats: List[str] = []
     created_at: datetime.datetime
@@ -256,6 +275,8 @@ class TripScheduleResponse(BaseModel):
     effective_from: datetime.date
     effective_until: Optional[datetime.date] = None
     is_active: bool
+    booking_enabled: bool = True
+    suspension_reason: Optional[str] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
     vehicle: Optional[VehicleResponse] = None
@@ -295,6 +316,11 @@ class TripSeatsResponse(BaseModel):
     held_seats: List[str]
     available_seats: List[str]
     seat_genders: Optional[dict] = None
+    # False when the trip is off sale for any reason. `available_seats` is
+    # returned empty in that case so a stale client cannot offer seats that
+    # the booking endpoint will refuse.
+    booking_enabled: bool = True
+    sale_blocked_reason: Optional[str] = None
 
 # ==========================================
 # Booking Schemas

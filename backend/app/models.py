@@ -72,6 +72,11 @@ class Vehicle(Base):
     total_seats = Column(Integer, nullable=False)
     amenities = Column(ARRAY(String), default=[])
     is_verified = Column(Boolean, default=False)
+    # Distinct from is_verified. is_verified means "documents approved" and is
+    # admin-only; this is the reversible off switch for the whole bus, available
+    # to the admin and to the owning company.
+    booking_enabled = Column(Boolean, nullable=False, default=True)
+    suspension_reason = Column(Text, nullable=True)
     document_urls = Column(ARRAY(String), default=[])
     contact_phone = Column(String, nullable=True)
     main_image_url = Column(String, nullable=True)
@@ -82,7 +87,7 @@ class Vehicle(Base):
     # Relationships
     owner = relationship("User", back_populates="vehicles")
     company = relationship("BusCompany", back_populates="vehicles")
-    trips = relationship("Trip", back_populates="vehicle")
+    trips = relationship("Trip", back_populates="vehicle", passive_deletes=True)
     location = relationship("VehicleLocation", back_populates="vehicle", uselist=False)
 
 
@@ -131,6 +136,11 @@ class TripSchedule(Base):
     effective_from = Column(Date, nullable=False, default=lambda: datetime.date.today())
     effective_until = Column(Date, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True)
+    # is_active stops the schedule materialising *new* trips. booking_enabled is
+    # the temporary off switch, and it also closes sales on the trips this
+    # schedule has already generated.
+    booking_enabled = Column(Boolean, nullable=False, default=True)
+    suspension_reason = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
 
@@ -170,6 +180,11 @@ class Trip(Base):
     arrival_time = Column(DateTime(timezone=True), nullable=False)
     price_per_seat = Column(Numeric(10, 2), nullable=False)
     status = Column(String, default="scheduled")  # 'scheduled', 'ongoing', 'completed', 'cancelled'
+    # Temporary off switch for this one instance. Unlike status='cancelled' it is
+    # reversible and leaves existing bookings alone - the trip just stops being
+    # offered to passengers until somebody switches it back on.
+    booking_enabled = Column(Boolean, nullable=False, default=True)
+    suspension_reason = Column(Text, nullable=True)
     boarded_seats = Column(ARRAY(String), default=list, nullable=False)
     created_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
     updated_at = Column(DateTime(timezone=True), default=datetime.datetime.utcnow)
@@ -180,8 +195,12 @@ class Trip(Base):
     vehicle = relationship("Vehicle", back_populates="trips")
     route = relationship("Route", back_populates="trips")
     schedule = relationship("TripSchedule", back_populates="trips")
-    bookings = relationship("Booking", back_populates="trip")
-    seat_holds = relationship("SeatHold", back_populates="trip")
+    # passive_deletes lets Postgres' own ON DELETE CASCADE do the work. Without
+    # it SQLAlchemy first issues `UPDATE bookings SET trip_id = NULL`, which the
+    # NOT NULL constraint rejects - so deleting a trip that had any booking at
+    # all failed with a 500 before the cascade could run.
+    bookings = relationship("Booking", back_populates="trip", passive_deletes=True)
+    seat_holds = relationship("SeatHold", back_populates="trip", passive_deletes=True)
     conductor = relationship("User", foreign_keys=[conductor_id])
 
 
@@ -204,7 +223,7 @@ class Booking(Base):
     # Relationships
     trip = relationship("Trip", back_populates="bookings")
     passenger = relationship("User", back_populates="bookings")
-    payments = relationship("Payment", back_populates="booking")
+    payments = relationship("Payment", back_populates="booking", passive_deletes=True)
 
 
 class Payment(Base):

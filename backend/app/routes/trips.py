@@ -10,7 +10,8 @@ import asyncio
 from starlette.concurrency import run_in_threadpool
 
 from app.database import get_db
-from app import models, schemas, auth
+from app import models, schemas, auth, permissions
+from app.services.availability import assert_bookable, is_on_sale, sale_block_reason
 from app.services.sms_service import send_sms
 from app.timezone_utils import SRI_LANKA_TZ, now_sl, to_sl
 
@@ -85,27 +86,18 @@ def notify_seat_change(trip_id: str, event_type: str, seats: list, genders: dict
 
 @router.post("", response_model=schemas.TripResponse, status_code=status.HTTP_201_CREATED)
 def create_trip(
-    trip_in: schemas.TripCreate, 
-    db: Session = Depends(get_db), 
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
+    trip_in: schemas.TripCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    # If owner or conductor, verify the vehicle belongs to their company
-    if current_user.role in ["owner", "conductor"]:
-        vehicle = db.query(models.Vehicle).filter(
-            models.Vehicle.id == trip_in.vehicle_id,
-            models.Vehicle.company_id == current_user.company_id
-        ).first()
-        if not vehicle:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only schedule trips for vehicles you own."
-            )
-        if not vehicle.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You cannot schedule trips for an unverified vehicle."
-            )
-            
+    # Scoping first: an owner may only ever touch their own company's vehicles.
+    vehicle = permissions.require_vehicle(db, current_user, trip_in.vehicle_id)
+    if not vehicle.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot schedule trips for an unverified vehicle."
+        )
+
     # Verify route exists
     route = db.query(models.Route).filter(models.Route.id == trip_in.route_id).first()
     if not route:
@@ -113,13 +105,7 @@ def create_trip(
 
     cond_id = None
     if trip_in.conductor_id:
-        conductor_user = db.query(models.User).filter(
-            models.User.id == trip_in.conductor_id,
-            models.User.role == "conductor"
-        ).first()
-        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
-            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
-        cond_id = trip_in.conductor_id
+        cond_id = permissions.require_conductor(db, current_user, trip_in.conductor_id).id
 
     db_trip = models.Trip(
         id=uuid.uuid4(),
@@ -279,6 +265,16 @@ def list_trips(
             continue
 
         trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+
+        # The temporary off switch, and every other reason a seat cannot be
+        # sold. Passengers must not see the trip at all - showing a bus that
+        # rejects the booking at the last step is worse than not listing it.
+        # Staff keep seeing it, flagged, because switching it back on is done
+        # from this same list.
+        trip.sale_blocked_reason = sale_block_reason(db, trip, vehicle=trip.vehicle)
+        if trip.sale_blocked_reason is not None and not is_staff:
+            continue
+
         if trip.vehicle:
             v_reviews = db.query(models.Review).filter(models.Review.vehicle_id == trip.vehicle.id).all()
             if v_reviews:
@@ -431,28 +427,24 @@ async def update_trip_status(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
 ):
-    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
-        
-    # Verify owner/conductor permissions
-    if current_user.role in ["owner", "conductor"]:
-        vehicle = db.query(models.Vehicle).filter(
-            models.Vehicle.id == trip.vehicle_id,
-            models.Vehicle.company_id == current_user.company_id
-        ).first()
-        if not vehicle:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorized to update trips for this vehicle."
-            )
-            
+    trip = permissions.require_operable_trip(db, current_user, trip_id)
+
     if status not in ["scheduled", "ongoing", "completed", "cancelled"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid status type."
         )
-        
+
+    # A conductor runs the trip they were assigned; they do not cancel it.
+    # Cancelling voids every booking on the bus and puts paid passengers into
+    # the refund queue, so it stays with the people who answer for the money.
+    if current_user.role == "conductor" and status in ("cancelled", "scheduled"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the operator or an administrator can cancel or reopen a trip."
+        )
+
+
     old_status = trip.status
     trip.status = status
     db.commit()
@@ -619,51 +611,84 @@ async def update_trip_status(
     trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
     return trip
 
+
+@router.patch("/{trip_id}/booking", response_model=schemas.TripResponse)
+def set_trip_booking_enabled(
+    trip_id: UUID,
+    body: schemas.BookingToggle,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
+):
+    """Temporarily take this one trip off sale, or put it back on.
+
+    Reversible and non-destructive - the opposite of `PATCH /{trip_id}/status`
+    with `cancelled`. Existing bookings are untouched and the passengers who
+    hold them keep their tickets and their live tracking; the trip simply stops
+    appearing in passenger search and stops accepting new seats until it is
+    switched back on.
+
+    Use this for "the bus is in the garage this morning, we'll know by noon".
+    Use cancel for "this bus is not running, refund everyone".
+    """
+    trip = permissions.require_trip(db, current_user, trip_id)
+
+    if trip.status in ("cancelled", "completed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"This trip is already {trip.status}; the booking switch no longer applies.",
+        )
+
+    trip.booking_enabled = body.enabled
+    trip.suspension_reason = None if body.enabled else (body.reason or None)
+    trip.updated_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(trip)
+
+    # Seats held for a trip that just went off sale would otherwise sit blocked
+    # until they expire, and the hold cannot be converted into a booking any
+    # more anyway. Release them so the seat map is honest when it comes back on.
+    if not body.enabled:
+        db.query(models.SeatHold).filter(
+            models.SeatHold.trip_id == trip.id,
+            models.SeatHold.is_released == False,
+        ).update({"is_released": True})
+        db.commit()
+        notify_seat_change(str(trip.id), "SEAT_RELEASED", [])
+
+    trip.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
+    trip.route = db.query(models.Route).filter(models.Route.id == trip.route_id).first()
+    trip.conductor = db.query(models.User).filter(models.User.id == trip.conductor_id).first()
+    trip.sale_blocked_reason = sale_block_reason(db, trip, vehicle=trip.vehicle)
+    return trip
+
+
 @router.put("/{trip_id}", response_model=schemas.TripResponse)
 async def update_trip(
     trip_id: UUID,
     trip_in: schemas.TripCreate,
     db: Session = Depends(get_db),
-    # Every ownership check below is nested under `if role in ["owner", "conductor"]`,
-    # so with a bare get_current_user a passenger fell through to the mutations and
-    # could rewrite any trip - including price_per_seat, which is what create_booking
-    # then charges. Gated to match create_trip. See docs/SECURITY.md #24.
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
+    # Every ownership check here used to be nested under
+    # `if role in ["owner", "conductor"]`, so with a bare get_current_user a
+    # passenger fell through to the mutations and could rewrite any trip -
+    # including price_per_seat, which is what create_booking then charges.
+    # See docs/SECURITY.md #24.
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
-        
-    # Verify owner/conductor permissions
-    if current_user.role in ["owner", "conductor"]:
-        # Check current vehicle owner
-        current_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
-        if not current_vehicle or current_vehicle.company_id != current_user.company_id:
-            raise HTTPException(status_code=403, detail="Unauthorized to update this trip")
-            
-        # Check new vehicle owner
-        new_vehicle = db.query(models.Vehicle).filter(
-            models.Vehicle.id == trip_in.vehicle_id,
-            models.Vehicle.company_id == current_user.company_id
-        ).first()
-        if not new_vehicle:
-            raise HTTPException(status_code=403, detail="You can only schedule trips for vehicles you own.")
-        if not new_vehicle.is_verified:
-            raise HTTPException(status_code=400, detail="You cannot schedule trips for an unverified vehicle.")
-            
+    # Both the trip being edited and the vehicle it is being moved onto must
+    # belong to the caller - checking only one lets an owner reassign their own
+    # trip onto someone else's bus, or someone else's trip onto their own.
+    trip = permissions.require_trip(db, current_user, trip_id)
+    new_vehicle = permissions.require_vehicle(db, current_user, trip_in.vehicle_id)
+    if not new_vehicle.is_verified:
+        raise HTTPException(status_code=400, detail="You cannot schedule trips for an unverified vehicle.")
+
     # Verify route exists
     route = db.query(models.Route).filter(models.Route.id == trip_in.route_id).first()
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
-        
+
     if trip_in.conductor_id is not None:
-        conductor_user = db.query(models.User).filter(
-            models.User.id == trip_in.conductor_id,
-            models.User.role == "conductor"
-        ).first()
-        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
-            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
-        trip.conductor_id = trip_in.conductor_id
+        trip.conductor_id = permissions.require_conductor(db, current_user, trip_in.conductor_id).id
     else:
         trip.conductor_id = None
 
@@ -709,16 +734,33 @@ async def update_trip(
 def delete_trip(
     trip_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Scheduled trip not found")
-        
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == trip.vehicle_id).first()
-    if current_user.role != "admin" and (current_user.role not in ["owner", "conductor"] or not vehicle or vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to delete this scheduled trip")
-        
+    """Hard-delete a trip. Only for trips nobody has paid for.
+
+    `bookings.trip_id` and `payments.booking_id` both cascade, so deleting a
+    trip with paid bookings destroys the payment rows the money is reconciled
+    against and tells nobody. Cancel it instead: `PATCH /{trip_id}/status` with
+    `cancelled` voids the tickets, notifies every passenger, and queues the
+    refunds.
+    """
+    trip = permissions.require_trip(db, current_user, trip_id)
+
+    paid = db.query(models.Booking).filter(
+        models.Booking.trip_id == trip.id,
+        models.Booking.payment_status == "paid",
+        models.Booking.booking_status.notin_(["cancelled", "expired"]),
+    ).count()
+    if paid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This trip has {paid} paid booking(s) and cannot be deleted. "
+                f"Cancel the trip instead so passengers are notified and refunded."
+            ),
+        )
+
+
     db.delete(trip)
     db.commit()
     return {}
@@ -729,10 +771,13 @@ def get_trip_manifest(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.RoleChecker(["admin", "owner", "conductor"]))
 ):
-    """Get a detailed manifest of passengers for a specific trip, used by conductors."""
-    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
+    """Get a detailed manifest of passengers for a specific trip, used by conductors.
+
+    Scoped, not merely role-gated: the manifest is passenger names, genders and
+    phone numbers. Role gating alone let any conductor on the platform read any
+    other company's passenger list by trip id.
+    """
+    trip = permissions.require_operable_trip(db, current_user, trip_id)
 
     bookings = db.query(models.Booking).filter(
         models.Booking.trip_id == trip_id,
@@ -787,10 +832,8 @@ def toggle_seat_board_status(
     current_user: models.User = Depends(auth.RoleChecker(["admin", "owner", "conductor"]))
 ):
     """Toggle or set the boarding status of a specific seat."""
-    trip = db.query(models.Trip).filter(models.Trip.id == trip_id).first()
-    if not trip:
-        raise HTTPException(status_code=404, detail="Trip not found")
-        
+    trip = permissions.require_operable_trip(db, current_user, trip_id)
+
     boarded = list(trip.boarded_seats)
     
     # Resolve action if not specified

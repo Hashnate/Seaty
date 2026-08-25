@@ -223,6 +223,35 @@ export async function updateTrip(token: string, tripId: string, data: Record<str
   return request(`/trips/${tripId}`, { method: 'PUT', body: data, token });
 }
 
+/**
+ * Change a trip's run status. `cancelled` is the irreversible one: it voids
+ * every booking on the bus, notifies and texts each passenger, and queues the
+ * paid ones for refund. To take a trip off sale temporarily, use
+ * setTripBooking instead.
+ */
+export async function updateTripStatus(
+  token: string,
+  tripId: string,
+  status: 'scheduled' | 'ongoing' | 'completed' | 'cancelled',
+) {
+  return request(`/trips/${tripId}/status?status=${status}`, { method: 'PATCH', token });
+}
+
+/** Temporarily take one trip instance off sale, or put it back on. */
+export async function setTripBooking(token: string, tripId: string, enabled: boolean, reason?: string) {
+  return request(`/trips/${tripId}/booking`, { method: 'PATCH', body: { enabled, reason }, token });
+}
+
+/** Temporarily take a whole bus off sale, across all of its trips. */
+export async function setVehicleBooking(token: string, vehicleId: string, enabled: boolean, reason?: string) {
+  return request(`/vehicles/${vehicleId}/booking`, { method: 'PATCH', body: { enabled, reason }, token });
+}
+
+/** Temporarily take a recurring service off sale, including trips already generated. */
+export async function setScheduleBooking(token: string, scheduleId: string, enabled: boolean, reason?: string) {
+  return request(`/schedules/${scheduleId}/booking`, { method: 'PATCH', body: { enabled, reason }, token });
+}
+
 // Conductor/Staff Management (Owner)
 // ==========================================
 export async function getConductors(token: string) {

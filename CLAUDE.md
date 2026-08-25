@@ -66,8 +66,14 @@ a change is verified by tests — verify by reading the affected paths, or by ru
   `seat_layout.seats` silently reassigns seats under existing bookings.
 - **`UPLOAD_DIR` means two different things** — the served directory in `main.py:28`, the write
   directory in `routes/uploads.py:13`, with defaults one level apart. Leave it unset.
-- **Deleting a trip or a schedule cascades to bookings and payments.** No endpoint warns or
-  checks for paid bookings first.
+- **Deleting a trip, schedule or vehicle cascades to bookings and payments.** All three deletes
+  now refuse with 409 when a paid booking is attached; nothing else guards it, so any new delete
+  path must add the same check.
+- **"Off sale" and "cancelled" are different states and both exist.** `booking_enabled` (on
+  `trips`, `trip_schedules`, `vehicles`) is the reversible switch that hides a trip from
+  passengers and refuses new sales while leaving existing bookings intact.
+  `trips.status='cancelled'` is one-way: it voids bookings, notifies and texts passengers, and
+  queues refunds. Don't collapse them.
 - **Cross-router imports happen inside functions** to avoid circular imports (e.g.
   `from app.routes.notifications import create_and_send_notification`). Keep that pattern.
 - **`mobile/lib/main.dart` re-exports everything** for legacy `import 'main.dart'` call sites.
@@ -95,15 +101,32 @@ account-enumeration oracle.
 phone + OTP, `Literal["passenger"]`. Every role field is a `Literal`, not a `str` — keep it that
 way; a plain string here is what made SECURITY.md #2 an unauthenticated admin factory.
 
+**Scoping goes through `app/permissions.py`, not inline checks.** Role gating answers "may this
+kind of user call this"; it never answers "does this row belong to them". `permissions.require_*`
+(`require_vehicle`, `require_trip`, `require_operable_trip`, `require_schedule`,
+`require_conductor`) load the row and enforce ownership in one call, raising a uniform 404 so an
+endpoint cannot be used to probe for IDs in other companies. `same_company()` treats `None` as
+matching nothing — never hand-roll `a.company_id != b.company_id`, because `None != None` is
+`False` and an admin-created vehicle and a passenger both have a NULL `company_id`.
+
+`MANAGER_ROLES = ("admin", "owner")` is who may manage fleet resources. **Conductors are
+operational only**: their assigned trips' `/status` (not `cancelled`/`scheduled`), `/manifest`,
+`/toggle-board`, and GPS. They create and suspend nothing. `require_operable_trip` is the one
+helper that admits them, and only for trips where `trip.conductor_id` is themselves.
+
 When adding an endpoint:
 
 - Gate it with `auth.RoleChecker([...])` as a dependency, never with an inline role check, and
   never with `get_current_user` plus an `if role in [...]` block — that pattern is exactly how
   `update_trip` ended up open to passengers.
-- Role gating is not enough — also scope by `company_id` for owner/conductor routes. Several
-  existing endpoints forget this; `update_trip_status` in `routes/trips.py:331` shows the pattern.
-- Compare `company_id` in a way that treats `None` as never matching (`None != None` is `False`,
-  which currently grants access in a few places).
+- Then scope it with a `permissions.require_*` helper. Role gating alone is how the trip manifest
+  — passenger names, genders and phone numbers — was readable by any conductor on the platform.
+- If it sells, holds, or charges for a seat, call `availability.assert_bookable(db, trip)`. That
+  is the only place the on/off switches and `trip.status` are evaluated, and every sale path must
+  go through it or the switch leaks.
+- Deletes that cascade into `bookings`/`payments` must refuse when a paid booking exists.
+  Relationships crossing those cascades need `passive_deletes=True`, or SQLAlchemy nulls the FK
+  first and the NOT NULL constraint turns the delete into a 500.
 - Never trust a client-supplied price, role, or total — recompute server-side.
 - Check ownership, not just role, before mutating a booking or payment (`initiate_payment` is the
   cautionary example — its docstring claims it does; it doesn't).

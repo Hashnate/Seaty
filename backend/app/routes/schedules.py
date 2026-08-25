@@ -6,7 +6,7 @@ import uuid
 import datetime
 
 from app.database import get_db
-from app import models, schemas, auth
+from app import models, schemas, auth, permissions
 from app.timezone_utils import now_sl
 
 router = APIRouter(prefix="/schedules", tags=["Schedules"])
@@ -15,24 +15,14 @@ router = APIRouter(prefix="/schedules", tags=["Schedules"])
 def create_schedule(
     schedule_in: schemas.TripScheduleCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    # Enforce vehicle owner/conductor check
-    if current_user.role in ["owner", "conductor"]:
-        vehicle = db.query(models.Vehicle).filter(
-            models.Vehicle.id == schedule_in.vehicle_id,
-            models.Vehicle.company_id == current_user.company_id
-        ).first()
-        if not vehicle:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only schedule trips for vehicles you own."
-            )
-        if not vehicle.is_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You cannot schedule trips for an unverified vehicle."
-            )
+    vehicle = permissions.require_vehicle(db, current_user, schedule_in.vehicle_id)
+    if not vehicle.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot schedule trips for an unverified vehicle."
+        )
 
     # Verify route exists
     route = db.query(models.Route).filter(models.Route.id == schedule_in.route_id).first()
@@ -41,13 +31,7 @@ def create_schedule(
 
     cond_id = None
     if schedule_in.conductor_id:
-        conductor_user = db.query(models.User).filter(
-            models.User.id == schedule_in.conductor_id,
-            models.User.role == "conductor"
-        ).first()
-        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
-            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
-        cond_id = schedule_in.conductor_id
+        cond_id = permissions.require_conductor(db, current_user, schedule_in.conductor_id).id
 
     db_schedule = models.TripSchedule(
         id=uuid.uuid4(),
@@ -79,12 +63,16 @@ def list_schedules(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     query = db.query(models.TripSchedule).join(models.Vehicle)
-    
+
     if current_user.role == "owner":
-        query = query.filter(models.Vehicle.company_id == current_user.company_id)
+        query = permissions.scope_vehicles(query, current_user)
     elif current_user.role == "conductor":
         query = query.filter(models.TripSchedule.conductor_id == current_user.id)
-    
+    elif current_user.role != "admin":
+        # Schedules are operator planning data, not a passenger-facing resource.
+        query = query.filter(False)
+
+
     schedules = query.all()
     
     for s in schedules:
@@ -98,16 +86,11 @@ def list_schedules(
 def get_schedule(
     schedule_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == schedule_id).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-        
+    schedule = permissions.require_schedule(db, current_user, schedule_id)
     vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
-    if current_user.role != "admin" and (not vehicle or vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized access to this schedule")
-        
+
     schedule.vehicle = vehicle
     schedule.route = db.query(models.Route).filter(models.Route.id == schedule.route_id).first()
     schedule.conductor = db.query(models.User).filter(models.User.id == schedule.conductor_id).first()
@@ -118,26 +101,14 @@ def update_schedule(
     schedule_id: UUID,
     schedule_in: schemas.TripScheduleUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == schedule_id).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-        
-    current_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
-    if current_user.role != "admin" and (not current_vehicle or current_vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to modify this schedule")
+    schedule = permissions.require_schedule(db, current_user, schedule_id)
 
     if schedule_in.vehicle_id is not None:
-        if current_user.role in ["owner", "conductor"]:
-            new_vehicle = db.query(models.Vehicle).filter(
-                models.Vehicle.id == schedule_in.vehicle_id,
-                models.Vehicle.company_id == current_user.company_id
-            ).first()
-            if not new_vehicle:
-                raise HTTPException(status_code=403, detail="You do not own this vehicle")
-            if not new_vehicle.is_verified:
-                raise HTTPException(status_code=400, detail="Cannot schedule trips for an unverified vehicle")
+        new_vehicle = permissions.require_vehicle(db, current_user, schedule_in.vehicle_id)
+        if not new_vehicle.is_verified:
+            raise HTTPException(status_code=400, detail="Cannot schedule trips for an unverified vehicle")
         schedule.vehicle_id = schedule_in.vehicle_id
 
     if schedule_in.route_id is not None:
@@ -163,13 +134,9 @@ def update_schedule(
     if schedule_in.is_active is not None:
         schedule.is_active = schedule_in.is_active
     if schedule_in.conductor_id is not None:
-        conductor_user = db.query(models.User).filter(
-            models.User.id == schedule_in.conductor_id,
-            models.User.role == "conductor"
-        ).first()
-        if not conductor_user or (current_user.role != "admin" and conductor_user.company_id != current_user.company_id):
-            raise HTTPException(status_code=400, detail="Invalid conductor ID or conductor belongs to another company")
-        schedule.conductor_id = schedule_in.conductor_id
+        schedule.conductor_id = permissions.require_conductor(
+            db, current_user, schedule_in.conductor_id
+        ).id
     elif "conductor_id" in schedule_in.model_dump(exclude_unset=True):
         # Allow removing the assigned conductor if sent explicitly as None
         schedule.conductor_id = None
@@ -194,39 +161,100 @@ def update_schedule(
 def toggle_schedule(
     schedule_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == schedule_id).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-        
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
-    if current_user.role != "admin" and (not vehicle or vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized")
-        
+    """Flip `is_active` - whether this schedule keeps materialising new trips.
+
+    Note this is *not* the temporary off switch: trips already generated from
+    this schedule (up to 5 days ahead) stay on sale. Use
+    `PATCH /{schedule_id}/booking` to take the service off sale immediately.
+    """
+    schedule = permissions.require_schedule(db, current_user, schedule_id)
+
     schedule.is_active = not schedule.is_active
     schedule.updated_at = datetime.datetime.utcnow()
     db.commit()
     db.refresh(schedule)
-    
-    schedule.vehicle = vehicle
+
+    schedule.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
     schedule.route = db.query(models.Route).filter(models.Route.id == schedule.route_id).first()
     return schedule
+
+
+@router.patch("/{schedule_id}/booking", response_model=schemas.TripScheduleResponse)
+def set_schedule_booking_enabled(
+    schedule_id: UUID,
+    body: schemas.BookingToggle,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
+):
+    """Temporarily take a recurring service off sale, or put it back on.
+
+    Covers the gap `toggle` leaves: turning a schedule inactive stops *future*
+    materialisation but leaves the trips it already generated for the next few
+    days fully bookable. This closes those too, in one call, and reopens them
+    the same way.
+    """
+    schedule = permissions.require_schedule(db, current_user, schedule_id)
+
+    schedule.booking_enabled = body.enabled
+    schedule.suspension_reason = None if body.enabled else (body.reason or None)
+    schedule.updated_at = datetime.datetime.utcnow()
+    db.commit()
+
+    if not body.enabled:
+        # Free seats held on this service's live trips - those holds can no
+        # longer turn into bookings.
+        trip_ids = [
+            t.id for t in db.query(models.Trip.id).filter(
+                models.Trip.schedule_id == schedule.id,
+                models.Trip.departure_time >= now_sl(),
+            ).all()
+        ]
+        if trip_ids:
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id.in_(trip_ids),
+                models.SeatHold.is_released == False,
+            ).update({"is_released": True}, synchronize_session=False)
+            db.commit()
+
+    db.refresh(schedule)
+    schedule.vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
+    schedule.route = db.query(models.Route).filter(models.Route.id == schedule.route_id).first()
+    schedule.conductor = db.query(models.User).filter(models.User.id == schedule.conductor_id).first()
+    return schedule
+
 
 @router.delete("/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_schedule(
     schedule_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == schedule_id).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-        
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
-    if current_user.role != "admin" and (not vehicle or vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to delete this schedule")
-        
+    """Hard-delete a schedule. Refused while a paid booking rides on its trips.
+
+    `trips.schedule_id` is ON DELETE SET NULL, but the admin UI's own warning
+    ("this will delete all generated trips") reflects what operators expect, so
+    guard the money the same way the trip and vehicle deletes do.
+    """
+    schedule = permissions.require_schedule(db, current_user, schedule_id)
+
+    paid = db.query(models.Booking).join(
+        models.Trip, models.Booking.trip_id == models.Trip.id
+    ).filter(
+        models.Trip.schedule_id == schedule.id,
+        models.Booking.payment_status == "paid",
+        models.Booking.booking_status.notin_(["cancelled", "expired"]),
+    ).count()
+    if paid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This schedule has {paid} paid booking(s) on its trips and cannot be "
+                f"deleted. Switch off bookings for it instead, or cancel those trips."
+            ),
+        )
+
     db.delete(schedule)
     db.commit()
     return {}
@@ -240,27 +268,13 @@ def create_override(
     schedule_id: UUID,
     override_in: schemas.BusOverrideCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == schedule_id).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-        
-    # Check permissions (must own the schedule's vehicle company)
-    sched_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
-    if current_user.role != "admin" and (not sched_vehicle or sched_vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to override this schedule")
-        
-    # Check replacement vehicle exists, is verified, and belongs to company
-    rep_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == override_in.replacement_vehicle_id).first()
-    if not rep_vehicle:
-        raise HTTPException(status_code=404, detail="Replacement vehicle not found")
-        
-    if current_user.role in ["owner", "conductor"]:
-        if rep_vehicle.company_id != current_user.company_id:
-            raise HTTPException(status_code=403, detail="Replacement vehicle does not belong to your company")
-        if not rep_vehicle.is_verified:
-            raise HTTPException(status_code=400, detail="Replacement vehicle is not verified")
+    # Both the schedule and the bus being swapped in must belong to the caller.
+    permissions.require_schedule(db, current_user, schedule_id)
+    rep_vehicle = permissions.require_vehicle(db, current_user, override_in.replacement_vehicle_id)
+    if not rep_vehicle.is_verified:
+        raise HTTPException(status_code=400, detail="Replacement vehicle is not verified")
 
     # If there is already an override for this date, delete or update it
     existing = db.query(models.BusOverride).filter(
@@ -300,16 +314,10 @@ def create_override(
 def get_overrides(
     schedule_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == schedule_id).first()
-    if not schedule:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-        
-    sched_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == schedule.vehicle_id).first()
-    if current_user.role != "admin" and (not sched_vehicle or sched_vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to view overrides")
-        
+    permissions.require_schedule(db, current_user, schedule_id)
+
     overrides = db.query(models.BusOverride).filter(models.BusOverride.schedule_id == schedule_id).all()
     for o in overrides:
         o.replacement_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == o.replacement_vehicle_id).first()
@@ -320,17 +328,18 @@ def get_overrides(
 def delete_override(
     override_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
     override = db.query(models.BusOverride).filter(models.BusOverride.id == override_id).first()
     if not override:
         raise HTTPException(status_code=404, detail="Override not found")
-        
-    # Check permissions
-    rep_vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == override.replacement_vehicle_id).first()
-    if current_user.role != "admin" and (not rep_vehicle or rep_vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized")
-        
+
+    # Scope on the schedule that owns the override, not on the replacement
+    # vehicle: the replacement can legitimately be another company's bus, and
+    # checking that one instead let its owner delete a swap they do not own.
+    permissions.require_schedule(db, current_user, override.schedule_id)
+
+
     # Revert the generated trip vehicle if it exists
     schedule = db.query(models.TripSchedule).filter(models.TripSchedule.id == override.schedule_id).first()
     if schedule:

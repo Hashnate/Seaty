@@ -7,6 +7,7 @@ import datetime
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.services.availability import assert_bookable, sale_block_reason
 from app.timezone_utils import now_sl, to_sl
 
 router = APIRouter(prefix="/seat-holds", tags=["Seat Holds"])
@@ -73,8 +74,7 @@ def create_seat_hold(
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
 
-    if trip.status in ["completed", "cancelled"]:
-        raise HTTPException(status_code=400, detail=f"Cannot hold seats on a {trip.status} trip")
+    assert_bookable(db, trip)
 
     # 30-minute pre-departure cutoff validation
     now = now_sl()
@@ -181,13 +181,21 @@ def get_trip_seat_availability(
     valid_booked = [s for s in unavailable["booked"] if s in all_seats]
     valid_held = [s for s in unavailable["held"] if s in all_seats]
 
+    # A passenger already deep in the seat-selection screen when the trip is
+    # switched off keeps polling this endpoint. Telling them here - rather than
+    # letting them pick seats and fail at checkout - is the difference between
+    # a clear message and a payment that mysteriously refuses.
+    blocked_reason = sale_block_reason(db, trip, vehicle=vehicle)
+
     return schemas.TripSeatsResponse(
         trip_id=trip_id,
         total_seats=vehicle.total_seats,
         booked_seats=valid_booked,
         held_seats=valid_held,
-        available_seats=available,
-        seat_genders=seat_genders
+        available_seats=[] if blocked_reason else available,
+        seat_genders=seat_genders,
+        booking_enabled=blocked_reason is None,
+        sale_blocked_reason=blocked_reason,
     )
 
 

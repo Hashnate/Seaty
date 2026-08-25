@@ -15,16 +15,21 @@ import {
   getScheduleOverrides,
   createScheduleOverride,
   deleteScheduleOverride,
-  getConductors
+  getConductors,
+  updateTripStatus,
+  setTripBooking,
+  setScheduleBooking
 } from '../api/client';
-import { 
-  Plus, 
-  Trash2, 
-  Calendar, 
-  MapPin, 
-  Settings, 
-  Clock, 
-  AlertCircle
+import {
+  Plus,
+  Trash2,
+  Calendar,
+  MapPin,
+  Settings,
+  Clock,
+  AlertCircle,
+  Ban,
+  Power
 } from 'lucide-react';
 
 interface TripRecord {
@@ -35,6 +40,9 @@ interface TripRecord {
   arrival_time: string;
   price_per_seat: number;
   status: string;
+  booking_enabled?: boolean;
+  suspension_reason?: string | null;
+  sale_blocked_reason?: string | null;
   vehicle?: { name: string; registration_number: string };
   route?: { origin: string; destination: string };
 }
@@ -51,6 +59,8 @@ interface ScheduleRecord {
   effective_from: string; // YYYY-MM-DD
   effective_until: string | null;
   is_active: boolean;
+  booking_enabled?: boolean;
+  suspension_reason?: string | null;
   vehicle?: { name: string; registration_number: string };
   route?: { origin: string; destination: string };
 }
@@ -382,13 +392,87 @@ export default function MyTripsPage() {
     }
   };
 
-  const handleCancelTrip = async (id: string) => {
-    if (!token || !window.confirm('Are you sure you want to cancel this specific trip instance? All confirmed bookings will receive cancellation notifications.')) return;
+  // Cancel is a real cancellation, not a delete. It voids every booking on the
+  // bus, notifies and texts each passenger, and queues the paid ones for
+  // refund. This button used to call deleteTrip, which destroyed the bookings
+  // and payment records outright and told nobody.
+  const handleCancelTrip = async (t: TripRecord) => {
+    if (!token) return;
+    const where = t.route ? `${t.route.origin} to ${t.route.destination}` : 'this trip';
+    if (!window.confirm(
+      `Cancel ${where} on ${new Date(t.departure_time).toLocaleString()}?\n\n` +
+      `Every booking on this trip will be cancelled, all passengers notified by ` +
+      `app and SMS, and paid bookings queued for refund. This cannot be undone.\n\n` +
+      `To take the trip off sale temporarily instead, use the on/off switch.`
+    )) return;
     try {
-      await deleteTrip(token, id);
+      await updateTripStatus(token, t.id, 'cancelled');
       fetchTripsForDate();
     } catch (err: any) {
-      alert(err.message || 'Failed to cancel trip instance');
+      alert(err.message || 'Failed to cancel trip');
+    }
+  };
+
+  // The reversible switch. Off hides the trip from passenger search and stops
+  // new bookings; existing bookings and tickets are untouched.
+  const handleToggleTripBooking = async (t: TripRecord) => {
+    if (!token) return;
+    const turningOff = t.booking_enabled !== false;
+    let reason: string | undefined;
+    if (turningOff) {
+      const input = window.prompt(
+        'Take this trip off sale?\n\n' +
+        'It disappears from passenger search and stops accepting new bookings. ' +
+        'Existing bookings keep their seats and tickets.\n\n' +
+        'Reason shown to passengers (optional):',
+        'Temporarily unavailable'
+      );
+      if (input === null) return;
+      reason = input.trim() || undefined;
+    }
+    try {
+      await setTripBooking(token, t.id, !turningOff, reason);
+      fetchTripsForDate();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update the booking switch');
+    }
+  };
+
+  const handleToggleScheduleBooking = async (s: ScheduleRecord) => {
+    if (!token) return;
+    const turningOff = s.booking_enabled !== false;
+    let reason: string | undefined;
+    if (turningOff) {
+      const input = window.prompt(
+        'Take this whole service off sale?\n\n' +
+        'Every trip generated from this schedule stops being offered to ' +
+        'passengers, including the ones already created for the next few days.\n\n' +
+        'Reason shown to passengers (optional):',
+        'Service temporarily suspended'
+      );
+      if (input === null) return;
+      reason = input.trim() || undefined;
+    }
+    try {
+      await setScheduleBooking(token, s.id, !turningOff, reason);
+      fetchSchedules();
+      fetchTripsForDate();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update the booking switch');
+    }
+  };
+
+  const handleDeleteTrip = async (t: TripRecord) => {
+    if (!token || !window.confirm(
+      'Permanently delete this trip instance?\n\n' +
+      'This removes the trip and its booking records entirely. It is refused if ' +
+      'anyone has paid. Prefer Cancel, which notifies passengers and queues refunds.'
+    )) return;
+    try {
+      await deleteTrip(token, t.id);
+      fetchTripsForDate();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete trip instance');
     }
   };
 
@@ -562,22 +646,51 @@ export default function MyTripsPage() {
                         </div>
                       </td>
                       <td>
-                        <button
-                          onClick={() => handleToggleSchedule(s.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            display: 'inline-flex',
-                            alignItems: 'center'
-                          }}
-                          title={s.is_active ? "Click to Pause" : "Click to Resume"}
-                        >
-                          <span className={`badge ${s.is_active ? 'badge-success' : 'badge-danger'}`}>
-                            {s.is_active ? 'Active' : 'Paused'}
-                          </span>
-                        </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '5px' }}>
+                          <button
+                            onClick={() => handleToggleSchedule(s.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '4px',
+                              display: 'inline-flex',
+                              alignItems: 'center'
+                            }}
+                            title={s.is_active
+                              ? 'Stop generating new trips from this schedule'
+                              : 'Resume generating trips from this schedule'}
+                          >
+                            <span className={`badge ${s.is_active ? 'badge-success' : 'badge-danger'}`}>
+                              {s.is_active ? 'Active' : 'Paused'}
+                            </span>
+                          </button>
+                          {/* Separate from Active/Paused on purpose: pausing a schedule
+                              only stops *future* trips being generated, while the trips
+                              already created for the next few days stay on sale. This
+                              switch takes those off sale too. */}
+                          <button
+                            onClick={() => handleToggleScheduleBooking(s)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: '0 4px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11.5px',
+                              fontWeight: 600,
+                              color: s.booking_enabled === false ? '#16a34a' : '#b45309'
+                            }}
+                            title={s.booking_enabled === false
+                              ? 'Put this service back on sale'
+                              : 'Take this service off sale, including trips already generated'}
+                          >
+                            <Power size={11} />
+                            {s.booking_enabled === false ? 'Bookings off' : 'Bookings on'}
+                          </button>
+                        </div>
                       </td>
                       <td style={{ position: 'relative' }}>
                         <button
@@ -763,27 +876,75 @@ export default function MyTripsPage() {
                         <div style={{ fontWeight: 'bold', color: '#2563eb' }}>Rs. {t.price_per_seat.toLocaleString()}</div>
                       </td>
                       <td>
-                        <span className={`badge ${t.status === 'scheduled' ? 'badge-success' : 'badge-warning'}`}>
+                        <span className={`badge ${t.status === 'cancelled' ? 'badge-danger' : t.status === 'scheduled' ? 'badge-success' : 'badge-warning'}`}>
                           {t.status}
                         </span>
+                        {t.sale_blocked_reason && t.status !== 'cancelled' && (
+                          <div style={{ fontSize: '11px', color: '#b45309', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <Ban size={11} /> Off sale: {t.sale_blocked_reason}
+                          </div>
+                        )}
                       </td>
                       <td>
-                        <button
-                          onClick={() => handleCancelTrip(t.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: '#ef4444',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontWeight: '600',
-                            fontSize: '12.5px'
-                          }}
-                        >
-                          <Trash2 size={13} /> Cancel Instance
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          {t.status !== 'cancelled' && t.status !== 'completed' && (
+                            <button
+                              onClick={() => handleToggleTripBooking(t)}
+                              title={t.booking_enabled === false
+                                ? 'Put this trip back on sale'
+                                : 'Temporarily take this trip off sale'}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: t.booking_enabled === false ? '#16a34a' : '#b45309',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontWeight: '600',
+                                fontSize: '12.5px'
+                              }}
+                            >
+                              <Power size={13} /> {t.booking_enabled === false ? 'Turn On' : 'Turn Off'}
+                            </button>
+                          )}
+                          {t.status !== 'cancelled' && (
+                            <button
+                              onClick={() => handleCancelTrip(t)}
+                              title="Cancel the trip: voids all bookings, notifies passengers, queues refunds"
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontWeight: '600',
+                                fontSize: '12.5px'
+                              }}
+                            >
+                              <AlertCircle size={13} /> Cancel
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteTrip(t)}
+                            title="Permanently delete this trip instance"
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#9ca3af',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontWeight: '600',
+                              fontSize: '12.5px'
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

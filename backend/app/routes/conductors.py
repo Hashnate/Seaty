@@ -5,7 +5,7 @@ from uuid import UUID
 import uuid
 
 from app.database import get_db
-from app import models, schemas, auth
+from app import models, schemas, auth, permissions
 
 router = APIRouter(prefix="/conductors", tags=["Conductors"])
 
@@ -15,13 +15,14 @@ def list_conductors(
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
 ):
     """List all conductors/staff registered under the current owner's company."""
+    query = db.query(models.User).filter(models.User.role == "conductor")
     if current_user.role == "admin":
-        return db.query(models.User).filter(models.User.role == "conductor").all()
-        
-    return db.query(models.User).filter(
-        models.User.role == "conductor",
-        models.User.company_id == current_user.company_id
-    ).all()
+        return query.all()
+    if current_user.company_id is None:
+        # Without this an owner with no company would match every conductor
+        # whose company_id is also NULL.
+        return []
+    return query.filter(models.User.company_id == current_user.company_id).all()
 
 @router.post("", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
 def create_conductor(
@@ -80,18 +81,8 @@ def delete_conductor(
     current_user: models.User = Depends(auth.RoleChecker(["owner", "admin"]))
 ):
     """Delete a conductor staff member."""
-    conductor = db.query(models.User).filter(
-        models.User.id == conductor_id,
-        models.User.role == "conductor"
-    ).first()
-    
-    if not conductor:
-        raise HTTPException(status_code=404, detail="Conductor record not found")
-        
-    # Enforce company RBAC
-    if current_user.role != "admin" and conductor.company_id != current_user.company_id:
-        raise HTTPException(status_code=403, detail="Unauthorized to remove this staff member")
-        
+    conductor = permissions.require_conductor(db, current_user, conductor_id)
+
     db.delete(conductor)
     db.commit()
     return {}

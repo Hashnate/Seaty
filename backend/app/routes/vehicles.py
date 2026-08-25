@@ -2,19 +2,25 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
+import datetime
 import uuid
 
 from app.database import get_db
-from app import models, schemas, auth
+from app import models, schemas, auth, permissions
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 
 @router.post("", response_model=schemas.VehicleResponse, status_code=status.HTTP_201_CREATED)
 async def create_vehicle(
-    vehicle_in: schemas.VehicleCreate, 
-    db: Session = Depends(get_db), 
-    current_user: models.User = Depends(auth.RoleChecker(["owner", "admin", "conductor"]))
+    vehicle_in: schemas.VehicleCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
+    # `company_id` comes from the caller's own account, never from the request
+    # body - a vehicle can only ever be registered into the registrant's
+    # company. An admin has no company, so an admin-registered vehicle is
+    # unassigned until an owner claims it; permissions.same_company() makes
+    # sure that unassigned state grants nobody access.
     db_vehicle = models.Vehicle(
         id=uuid.uuid4(),
         owner_id=current_user.id,
@@ -58,15 +64,14 @@ def list_vehicles(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    if current_user.role == "admin":
-        # Admins see everything
-        return db.query(models.Vehicle).all()
-    elif current_user.role in ["owner", "conductor"]:
-        # Owners and conductors see vehicles belonging to their company
-        return db.query(models.Vehicle).filter(models.Vehicle.company_id == current_user.company_id).all()
-    else:
-        # Passengers only see verified vehicles
-        return db.query(models.Vehicle).filter(models.Vehicle.is_verified == True).all()
+    if current_user.role in ("admin", "owner", "conductor"):
+        # Staff see their own company's fleet; admins see every company.
+        # scope_vehicles() refuses to match on a NULL company_id, so a staff
+        # account with no company sees nothing rather than everything
+        # unassigned.
+        return permissions.scope_vehicles(db.query(models.Vehicle), current_user).all()
+    # Passengers only see verified vehicles
+    return db.query(models.Vehicle).filter(models.Vehicle.is_verified == True).all()
 
 @router.get("/{vehicle_id}", response_model=schemas.VehicleResponse)
 def get_vehicle(
@@ -90,10 +95,8 @@ async def approve_vehicle(
     db: Session = Depends(get_db), 
     current_user: models.User = Depends(auth.RoleChecker(["admin"]))
 ):
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-    
+    vehicle = permissions.require_vehicle(db, current_user, vehicle_id)
+
     vehicle.is_verified = True
     db.commit()
     db.refresh(vehicle)
@@ -121,10 +124,8 @@ async def reject_vehicle(
     current_user: models.User = Depends(auth.RoleChecker(["admin"]))
 ):
     """Reject/unverify a vehicle (admin only)."""
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-    
+    vehicle = permissions.require_vehicle(db, current_user, vehicle_id)
+
     vehicle.is_verified = False
     db.commit()
     db.refresh(vehicle)
@@ -145,19 +146,81 @@ async def reject_vehicle(
 
     return vehicle
 
+@router.patch("/{vehicle_id}/booking", response_model=schemas.VehicleResponse)
+def set_vehicle_booking_enabled(
+    vehicle_id: UUID,
+    body: schemas.BookingToggle,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
+):
+    """Temporarily take a whole bus off sale, or put it back on.
+
+    Every trip on this vehicle - already generated or generated later - stops
+    being offered to passengers while the switch is off, without touching any
+    trip's own state. Turning it back on restores all of them at once.
+
+    Deliberately separate from `is_verified`, which is admin-only document
+    approval and is not the operator's to flip.
+    """
+    vehicle = permissions.require_vehicle(db, current_user, vehicle_id)
+
+    vehicle.booking_enabled = body.enabled
+    vehicle.suspension_reason = None if body.enabled else (body.reason or None)
+    vehicle.updated_at = datetime.datetime.utcnow()
+    db.commit()
+
+    # Holds on this bus cannot become bookings while it is off sale, so free
+    # the seats instead of leaving them blocked until they expire.
+    if not body.enabled:
+        trip_ids = [
+            t.id for t in db.query(models.Trip.id).filter(
+                models.Trip.vehicle_id == vehicle.id,
+                models.Trip.status.in_(["scheduled", "ongoing"]),
+            ).all()
+        ]
+        if trip_ids:
+            db.query(models.SeatHold).filter(
+                models.SeatHold.trip_id.in_(trip_ids),
+                models.SeatHold.is_released == False,
+            ).update({"is_released": True}, synchronize_session=False)
+            db.commit()
+
+    db.refresh(vehicle)
+    return vehicle
+
+
 @router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_vehicle(
     vehicle_id: UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-        
-    if current_user.role != "admin" and (current_user.role not in ["owner", "conductor"] or vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to delete this vehicle")
-        
+    """Hard-delete a bus. Refused while any paid booking rides on it.
+
+    Deleting a vehicle cascades through its trips into bookings and payments,
+    so this would silently destroy the records that paid passengers and the
+    money are reconciled against. Take the bus off sale instead
+    (`PATCH /{vehicle_id}/booking`), or cancel the affected trips first so
+    passengers are notified and refunds are queued.
+    """
+    vehicle = permissions.require_vehicle(db, current_user, vehicle_id)
+
+    paid = db.query(models.Booking).join(
+        models.Trip, models.Booking.trip_id == models.Trip.id
+    ).filter(
+        models.Trip.vehicle_id == vehicle.id,
+        models.Booking.payment_status == "paid",
+        models.Booking.booking_status.notin_(["cancelled", "expired"]),
+    ).count()
+    if paid:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"This bus has {paid} paid booking(s) across its trips and cannot be "
+                f"deleted. Switch off bookings for it, or cancel those trips first."
+            ),
+        )
+
     db.delete(vehicle)
     db.commit()
     return {}
@@ -167,15 +230,10 @@ def update_vehicle(
     vehicle_id: UUID,
     vehicle_in: schemas.VehicleCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.RoleChecker(list(permissions.MANAGER_ROLES)))
 ):
-    vehicle = db.query(models.Vehicle).filter(models.Vehicle.id == vehicle_id).first()
-    if not vehicle:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-        
-    if current_user.role != "admin" and (current_user.role not in ["owner", "conductor"] or vehicle.company_id != current_user.company_id):
-        raise HTTPException(status_code=403, detail="Unauthorized to update this vehicle")
-        
+    vehicle = permissions.require_vehicle(db, current_user, vehicle_id)
+
     vehicle.name = vehicle_in.name
     vehicle.registration_number = vehicle_in.registration_number
     vehicle.type = vehicle_in.type
