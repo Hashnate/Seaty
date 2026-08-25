@@ -77,6 +77,14 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
     await firebaseReady;
     final settings = ref.read(settingsProvider);
 
+    try {
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (_) {}
+
     for (int attempt = 0; attempt < 5; attempt++) {
       try {
         // On iOS, poll briefly for APNs token readiness before requesting FCM token
@@ -91,7 +99,7 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
             await Future.delayed(const Duration(seconds: 1));
           }
           if (apnsToken == null) {
-            debugPrint('FCM registration notice: APNs token still null on attempt ${attempt + 1}, attempting getToken fallback');
+            debugPrint('FCM registration notice: APNs token still null on attempt ${attempt + 1}');
           }
         }
 
@@ -112,6 +120,13 @@ class NotificationsNotifier extends Notifier<NotificationsState> {
         }
       } catch (e) {
         debugPrint('Error registering FCM token (attempt ${attempt + 1}): $e');
+        try {
+          await http.post(
+            Uri.parse('${settings.apiBaseUrl}/public/log'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'message': '[fcm-register-error] attempt ${attempt + 1}: $e'}),
+          );
+        } catch (_) {}
       }
       await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
     }

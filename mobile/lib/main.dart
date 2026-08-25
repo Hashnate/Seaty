@@ -43,14 +43,10 @@ void main() async {
   // finish before the first build.
   globalPrefs = await SharedPreferences.getInstance();
 
-  runApp(const ProviderScope(child: SeatyApp()));
+  // Initialize Firebase and notification services before UI starts
+  await initFirebaseMessaging();
 
-  // Deliberately started after runApp and never awaited. Firebase.initializeApp()
-  // plus the background-handler registration — which boots a second, headless
-  // FlutterEngine and registers every plugin into it — used to run before the
-  // first frame existed, delaying every cold start. Nothing the splash paints
-  // needs Firebase; callers that do await `firebaseReady`.
-  unawaited(initFirebaseMessaging());
+  runApp(const ProviderScope(child: SeatyApp()));
 }
 
 class SeatyApp extends StatelessWidget {

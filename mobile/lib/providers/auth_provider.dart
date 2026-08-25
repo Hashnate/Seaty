@@ -369,9 +369,18 @@ class AuthNotifier extends Notifier<AuthState> {
 
   Future<void> syncFcmToken() async {
     if (state.token.isEmpty || state.token.startsWith('simulated')) return;
-    // main() starts Firebase after runApp, so this can be reached first.
     await firebaseReady;
     final settings = ref.read(settingsProvider);
+
+    try {
+      await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+    } catch (permErr) {
+      debugPrint('Notification permission error: $permErr');
+    }
 
     for (int attempt = 0; attempt < 5; attempt++) {
       try {
@@ -384,7 +393,7 @@ class AuthNotifier extends Notifier<AuthState> {
             await Future.delayed(const Duration(seconds: 1));
           }
           if (apnsToken == null) {
-            debugPrint('syncFcmToken: APNs token still null on attempt ${attempt + 1}, attempting getToken fallback');
+            debugPrint('syncFcmToken: APNs token still null on attempt ${attempt + 1}');
           }
         }
 
@@ -405,6 +414,14 @@ class AuthNotifier extends Notifier<AuthState> {
         }
       } catch (e) {
         debugPrint('FCM token sync attempt ${attempt + 1} failed: $e');
+        // Report native diagnostic error to backend
+        try {
+          await http.post(
+            Uri.parse('${settings.apiBaseUrl}/public/log'),
+            headers: {'Content-Type': 'application/json'},
+            body: json.encode({'message': '[fcm-sync-error] attempt ${attempt + 1}: $e'}),
+          );
+        } catch (_) {}
       }
       await Future.delayed(Duration(seconds: 2 * (attempt + 1)));
     }
