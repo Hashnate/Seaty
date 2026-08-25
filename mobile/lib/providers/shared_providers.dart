@@ -87,14 +87,17 @@ const String _defaultApiBaseUrl = 'https://api.seaty.hashnate.com/api/v1';
 /// no other way to reach us. A dead Firebase went unnoticed in production for
 /// weeks precisely because its exception was only ever debugPrinted.
 Future<void> reportDiagnostic(String message) async {
-  debugPrint(message);
+  // Every line carries the build marker: an old build and a new one otherwise
+  // report identically, and there is no way to tell whether a fix shipped.
+  final stamped = '$message [$kDiagnosticsRevision/$_platformLabel]';
+  debugPrint(stamped);
   try {
     final prefs = await SharedPreferences.getInstance();
     final base = prefs.getString('apiBaseUrl') ?? _defaultApiBaseUrl;
     await http.post(
       Uri.parse('$base/public/log'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'message': message}),
+      body: json.encode({'message': stamped}),
     );
   } catch (_) {
     // Diagnostics must never break the app.
@@ -221,11 +224,9 @@ Future<bool> registerFcmToken({
 }) async {
   if (authToken.isEmpty || authToken.startsWith('simulated')) return false;
 
-  if (!await firebaseReady) {
-    // initFirebaseMessaging has already reported why. Without Firebase there
-    // is nothing to register and retrying here cannot help.
-    return false;
-  }
+  // Not `firebaseReady`: that only reports what startup managed. The channel
+  // can come up afterwards, and this is the moment someone actually needs push.
+  if (!await ensureFirebase()) return false;
 
   if (!await ensureNotificationPermission()) return false;
 
@@ -307,14 +308,24 @@ Future<void> setupPushNotifications() async {
   }));
 }
 
+/// Bumped whenever these diagnostics change, so a log line identifies which
+/// build produced it. Without it an old build and a new one report
+/// identically, and there is no way to tell whether a fix actually shipped.
+const String kDiagnosticsRevision = 'diag-3';
+
+String get _platformLabel => kIsWeb ? 'web' : Platform.operatingSystem;
+
 final Completer<bool> _firebaseInitCompleter = Completer<bool>();
 
-/// Completes with true once Firebase is up, false if it could not be started.
+/// Completes with true once Firebase is up, false if the startup attempt
+/// failed.
 ///
 /// It never reports success for a failed initialisation. The previous version
 /// completed from a `finally`, so every caller was told "ready" and then walked
 /// straight into `[core/no-app]` - silently, because the only record of the
 /// real exception was a release-mode `debugPrint`.
+///
+/// A false here is not final: see [ensureFirebase].
 Future<bool> get firebaseReady => _firebaseInitCompleter.future;
 
 /// Ground truth for code that cannot await.
@@ -330,6 +341,30 @@ Future<void> initFirebaseMessaging() async {
   }
 }
 
+Future<bool>? _pendingFirebaseRetry;
+
+/// Brings Firebase up on demand when the startup attempt failed.
+///
+/// On iOS the firebase_core channel can start answering after `main()` has
+/// stopped waiting for it. Someone who signs in a minute later should still get
+/// push, rather than being stuck with whatever the first few seconds decided.
+Future<bool> ensureFirebase() async {
+  if (firebaseAvailable) return true;
+  if (await firebaseReady) return true;
+
+  final pending = _pendingFirebaseRetry;
+  if (pending != null) return pending;
+  final retry = _retryFirebaseInit();
+  _pendingFirebaseRetry = retry;
+  return retry.whenComplete(() => _pendingFirebaseRetry = null);
+}
+
+Future<bool> _retryFirebaseInit() async {
+  final ok = await _bringUpFirebase('retry');
+  if (ok) unawaited(setupPushNotifications());
+  return ok;
+}
+
 Future<bool> _initFirebaseMessaging() async {
   // Only Android, iOS, web and macOS have native FCM.
   if (!kIsWeb && (Platform.isWindows || Platform.isLinux)) {
@@ -338,35 +373,7 @@ Future<bool> _initFirebaseMessaging() async {
     return false;
   }
 
-  // Retried because initialisation can lose the race with native plugin
-  // registration on a cold start - `PlatformException(channel-error)` means the
-  // firebase_core channel has no handler yet, not that Firebase is unusable. A
-  // single failure used to disable push for the entire install because nothing
-  // ever tried again. The window spans ~6.75s: the channel was observed coming
-  // up around 4s on iOS.
-  const List<int> backoffMs = <int>[250, 500, 1000, 2000, 3000];
-  Object? lastError;
-  for (int attempt = 0; attempt <= backoffMs.length; attempt++) {
-    try {
-      await Firebase.initializeApp();
-      lastError = null;
-      break;
-    } catch (e) {
-      lastError = e;
-      debugPrint('Firebase.initializeApp failed '
-          '(attempt ${attempt + 1}/${backoffMs.length + 1}): $e');
-      if (attempt < backoffMs.length) {
-        await Future.delayed(Duration(milliseconds: backoffMs[attempt]));
-      }
-    }
-  }
-
-  if (lastError != null || !firebaseAvailable) {
-    // Every push path is dead from here. Say so somewhere readable.
-    await reportDiagnostic('[firebase-init-failed] '
-        '${lastError ?? 'no default app after initializeApp()'}');
-    return false;
-  }
+  if (!await _bringUpFirebase('startup')) return false;
 
   try {
     await CrashReporting.enableCrashReporting();
@@ -377,4 +384,52 @@ Future<bool> _initFirebaseMessaging() async {
 
   unawaited(setupPushNotifications());
   return true;
+}
+
+/// Calls `Firebase.initializeApp()`, retrying while the native channel is not
+/// yet answering.
+///
+/// `PlatformException(channel-error)` means the firebase_core channel has no
+/// handler registered yet - the plugins have not finished registering - not
+/// that Firebase is unusable. A single failure used to disable push for the
+/// whole install because nothing ever tried again.
+Future<bool> _bringUpFirebase(String phase) async {
+  const List<int> backoffMs = <int>[250, 500, 1000, 2000, 3000, 5000];
+  final Stopwatch clock = Stopwatch()..start();
+  Object? lastError;
+  int attempts = 0;
+
+  for (int i = 0; i <= backoffMs.length; i++) {
+    attempts = i + 1;
+    try {
+      await Firebase.initializeApp();
+      lastError = null;
+      break;
+    } catch (e) {
+      lastError = e;
+      debugPrint('Firebase.initializeApp failed '
+          '($phase attempt $attempts/${backoffMs.length + 1}): $e');
+      if (i < backoffMs.length) {
+        await Future.delayed(Duration(milliseconds: backoffMs[i]));
+      }
+    }
+  }
+  clock.stop();
+
+  if (lastError == null && firebaseAvailable) {
+    // Reported even on success when it took more than one go: knowing how long
+    // the channel actually takes is what tells us whether the retry window is
+    // the right size.
+    if (attempts > 1) {
+      await reportDiagnostic('[firebase-init-recovered] phase=$phase '
+          'attempts=$attempts elapsedMs=${clock.elapsedMilliseconds}');
+    }
+    return true;
+  }
+
+  // Every push path is dead from here. Say so somewhere readable.
+  await reportDiagnostic('[firebase-init-failed] phase=$phase '
+      'attempts=$attempts elapsedMs=${clock.elapsedMilliseconds} '
+      'error=${lastError ?? 'no default app after initializeApp()'}');
+  return false;
 }
