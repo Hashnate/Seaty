@@ -43,12 +43,15 @@ void main() async {
   // finish before the first build.
   globalPrefs = await SharedPreferences.getInstance();
 
-  // Awaited so no provider can build against a half-initialised Firebase.
-  // Never throws: a failed init resolves `firebaseReady` to false and reports
-  // the reason to the backend, rather than leaving push silently dead.
-  await initFirebaseMessaging();
-
   runApp(const ProviderScope(child: SeatyApp()));
+
+  // Must come *after* runApp. On iOS the Firebase plugins are registered from
+  // `didInitializeImplicitFlutterEngine`, which has not run when main() starts:
+  // initialising here instead made `Firebase.initializeApp()` fail with
+  // PlatformException(channel-error) and took the whole push stack down with
+  // it. Not awaited - callers await `firebaseReady`, which now reports the
+  // real outcome rather than completing unconditionally.
+  unawaited(initFirebaseMessaging());
 }
 
 class SeatyApp extends StatelessWidget {

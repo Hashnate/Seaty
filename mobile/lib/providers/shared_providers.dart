@@ -338,20 +338,25 @@ Future<bool> _initFirebaseMessaging() async {
     return false;
   }
 
-  // Retried because initialisation can lose a race with plugin registration on
-  // a cold start, and a single failure used to disable push for the entire
-  // install - nothing ever tried again.
+  // Retried because initialisation can lose the race with native plugin
+  // registration on a cold start - `PlatformException(channel-error)` means the
+  // firebase_core channel has no handler yet, not that Firebase is unusable. A
+  // single failure used to disable push for the entire install because nothing
+  // ever tried again. The window spans ~6.75s: the channel was observed coming
+  // up around 4s on iOS.
+  const List<int> backoffMs = <int>[250, 500, 1000, 2000, 3000];
   Object? lastError;
-  for (int attempt = 1; attempt <= 3; attempt++) {
+  for (int attempt = 0; attempt <= backoffMs.length; attempt++) {
     try {
       await Firebase.initializeApp();
       lastError = null;
       break;
     } catch (e) {
       lastError = e;
-      debugPrint('Firebase.initializeApp failed (attempt $attempt/3): $e');
-      if (attempt < 3) {
-        await Future.delayed(Duration(milliseconds: 500 * attempt));
+      debugPrint('Firebase.initializeApp failed '
+          '(attempt ${attempt + 1}/${backoffMs.length + 1}): $e');
+      if (attempt < backoffMs.length) {
+        await Future.delayed(Duration(milliseconds: backoffMs[attempt]));
       }
     }
   }
