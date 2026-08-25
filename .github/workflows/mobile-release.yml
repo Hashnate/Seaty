@@ -150,8 +150,32 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/
 
+      # firebase_core ships a Package.swift, firebase_messaging does not. If the
+      # toolchain resolves firebase_core via SPM and the rest via CocoaPods, the
+      # Firebase plugins never reach GeneratedPluginRegistrant and every
+      # Firebase channel answers with `channel-error` at runtime while every
+      # other plugin works. pubspec.yaml opts out; this enforces it on the
+      # runner, whose Flutter version is not pinned.
+      - name: Pin plugin resolution to CocoaPods
+        run: |
+          flutter --version
+          flutter config --no-enable-swift-package-manager
+
       - name: Install Dependencies
         run: flutter pub get
+
+      # Proves whether the Firebase plugins are actually registered with the
+      # engine. `channel-error` from Firebase.initializeApp() means they are not,
+      # and that is invisible at build time - the app compiles and runs fine.
+      - name: Verify Firebase plugins are registered
+        run: |
+          echo "--- GeneratedPluginRegistrant (iOS) ---"
+          grep -i firebase ios/Runner/GeneratedPluginRegistrant.m \
+            || echo "!! NO FIREBASE PLUGIN IN REGISTRANT - THIS IS THE BUG !!"
+          echo "--- iOS plugins resolved ---"
+          grep -o '"name":"firebase[^"]*"' .flutter-plugins-dependencies || true
+          echo "--- swift package manager state ---"
+          grep -o '"swift_package_manager_enabled":[^,}]*' .flutter-plugins-dependencies || true
 
       - name: Build and export signed IPA
         run: |
