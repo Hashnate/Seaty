@@ -1071,44 +1071,53 @@ class _PassengerTripsTabState extends ConsumerState<PassengerTripsTab>
                   else if (filteredTrips.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 100,
-                              height: 100,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.02),
-                                    blurRadius: 20,
-                                  ),
-                                ],
+                      // The scaffold sets extendBody: true, so this sliver runs
+                      // behind the floating bottom nav (64pt + 20pt margin).
+                      // Centring inside the full extent put the message half a
+                      // nav bar below the middle of the white area you can
+                      // actually see. Reserving the same 100pt the trip list
+                      // uses for nav clearance centres it in the visible region.
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 100),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.02),
+                                      blurRadius: 20,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.search_off_rounded,
+                                  size: 40,
+                                  color: Color(0xFFCBD5E1),
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.search_off_rounded,
-                                size: 40,
-                                color: Color(0xFFCBD5E1),
+                              const SizedBox(height: 24),
+                              const Text(
+                                'No rides found',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 24),
-                            const Text(
-                              'No rides found',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Try adjusting your search criteria',
+                                style: TextStyle(color: Color(0xFF64748B)),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Try adjusting your search criteria',
-                              style: TextStyle(color: Color(0xFF64748B)),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     )
