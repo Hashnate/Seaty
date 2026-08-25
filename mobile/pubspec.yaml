@@ -47,9 +47,19 @@ dependencies:
   web_socket_channel: ^3.0.3
   flutter_riverpod: ^2.5.1
   shared_preferences: ^2.5.5
-  firebase_core: ^3.4.0
-  firebase_messaging: ^15.1.0
-  firebase_crashlytics: ^4.1.3
+  # FlutterFire ships as a matched set - the plugins share
+  # firebase_core_platform_interface and _flutterfire_internals, and their
+  # Pigeon channels are generated per release. Keep these three in step.
+  #
+  # They drifted apart once before: adding Crashlytics (8b1fbe8) forced
+  # web_socket_channel to 3.x, which lifted the <3.5 ceiling that had been
+  # holding firebase_core down, so core jumped 3.4.0 -> 3.15.0 while messaging
+  # stayed on 15.1.0 - nine months apart. The result was a plugin that
+  # compiled, linked and registered, whose channel then answered every call
+  # with PlatformException(channel-error). Push was dead for two weeks.
+  firebase_core: ^4.0.0
+  firebase_messaging: ^16.0.0
+  firebase_crashlytics: ^5.0.0
   mobile_scanner: ^7.2.1
   qr_flutter: ^4.1.0
   video_player: ^2.11.1

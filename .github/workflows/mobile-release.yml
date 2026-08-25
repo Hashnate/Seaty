@@ -185,6 +185,11 @@ jobs:
           echo "--- swift package manager state ---"
           grep -o '"swift_package_manager_enabled":[^,}]*' .flutter-plugins-dependencies || true
 
+      # Runs before the 15-minute archive so a Dart breakage - a plugin major
+      # bump changing an API, say - fails in seconds rather than after a build.
+      - name: Analyze
+        run: flutter analyze
+
       - name: Build and export signed IPA
         run: |
           flutter build ipa --release --build-number=${{ env.BUILD_NUMBER }} --export-options-plist=ios/ExportOptions.plist
