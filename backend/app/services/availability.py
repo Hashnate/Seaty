@@ -112,9 +112,12 @@ def assert_bookable(
 ) -> None:
     """Raise 409 with the passenger-facing reason if this trip is not on sale.
 
-    409 rather than 400: the request is well-formed, the resource state is what
-    refuses it, and the mobile app already treats 409 on the booking path as
-    "show this message and refresh the seat map".
+    409 rather than 400: the request is well-formed; the resource state is what
+    refuses it. The mobile app has no 409-specific branch - both
+    `initiateBooking` and `initiatePayment` funnel any non-201 through
+    `_extractErrorDetail` into `lastErrorMessage`, which
+    booking_overview_screen shows as an error toast. So `detail` here is read
+    verbatim by the passenger: write it for them, not for a log.
     """
     reason = sale_block_reason(db, trip, vehicle, schedule)
     if reason is not None:
