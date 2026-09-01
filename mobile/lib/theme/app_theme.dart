@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart'; // ignore: unnecessary_import
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
@@ -39,6 +40,7 @@ class AppTheme {
         error: AppColors.error,
       ),
       appBarTheme: const AppBarTheme(
+        systemOverlayStyle: SystemUiOverlayStyle.dark,
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,

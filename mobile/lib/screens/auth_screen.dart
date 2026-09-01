@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:seaty/main.dart';
 import 'package:seaty/widgets/seaty_notifications.dart';
@@ -261,40 +262,44 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: _authState == PhoneAuthState.enterPhone
-          ? null
-          : AppBar(
-              automaticallyImplyLeading: false,
-              leading: IconButton(
-                icon: const Icon(
-                  Icons.chevron_left_rounded,
-                  color: Color(0xFF0A2540),
-                  size: 36,
-                ),
-                onPressed: () {
-                  FocusScope.of(context).unfocus();
-                  if (_authState == PhoneAuthState.register) {
-                    setState(() => _authState = PhoneAuthState.enterPhone);
-                  } else if (_authState == PhoneAuthState.verifyOtp) {
-                    if (_isNewUser) {
-                      setState(() => _authState = PhoneAuthState.register);
-                    } else {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.dark,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: _authState == PhoneAuthState.enterPhone
+            ? null
+            : AppBar(
+                systemOverlayStyle: SystemUiOverlayStyle.dark,
+                automaticallyImplyLeading: false,
+                leading: IconButton(
+                  icon: const Icon(
+                    Icons.chevron_left_rounded,
+                    color: Color(0xFF0A2540),
+                    size: 36,
+                  ),
+                  onPressed: () {
+                    FocusScope.of(context).unfocus();
+                    if (_authState == PhoneAuthState.register) {
                       setState(() => _authState = PhoneAuthState.enterPhone);
+                    } else if (_authState == PhoneAuthState.verifyOtp) {
+                      if (_isNewUser) {
+                        setState(() => _authState = PhoneAuthState.register);
+                      } else {
+                        setState(() => _authState = PhoneAuthState.enterPhone);
+                      }
                     }
-                  }
-                },
+                  },
+                ),
+                backgroundColor: Colors.transparent,
+                elevation: 0,
               ),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(28.0),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: _buildStateContent(),
             ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(28.0),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 400),
-            child: _buildStateContent(),
           ),
         ),
       ),
